@@ -231,6 +231,79 @@ static void testSongV2() {
   expect(!songNeedsV2(song), "a built-in song stays version 1");
   n = songEncode(song, buf, kSongFileBytesMax);
   expect(n == kSongFileBytes && buf[4] == kSongVersion, "plain song is still a MothOS v1 file");
+  expect(songDecode(buf, n, &loaded), "plain song still decodes");
+  expect(!trackFxActive(loaded.fx[0]) && !trackFxActive(loaded.fx[1]), "version 1 leaves inserts off");
+}
+
+static void testSongV3() {
+  SongData song;
+  std::memset(&song, 0, sizeof(song));
+  song.patternLength = 32;
+  song.bpms[0] = 120;
+  song.bpms[1] = 120;
+  song.bpms[2] = 120;
+  song.bpms[3] = 120;
+  song.currentVoice = 2;
+  song.selectedTrack = 1;
+  song.voices[0].volume = 2;
+  song.voices[1].volume = 6;
+  song.fx[1].filter = 2;
+  song.fx[1].cutoff = 40;
+  song.fx[1].res = 16;
+  song.fx[1].delayDiv = 2;
+  song.fx[1].delayFb = 30;
+  song.fx[1].delayMix = 40;
+  song.fx[1].reverb = 20;
+  song.fx[1].crush = 1;
+  song.fx[1].drive = 10;
+  song.fx[1].chorus = 20;
+  song.fx[1].tremolo = 30;
+
+  expect(songNeedsV3(song), "an insert effect requires version 3");
+  expect(songNeedsV2(song), "version 3 still carries the version 2 tail");
+  int plain = 0;
+  {
+    SongData bare = song;
+    std::memset(bare.fx, 0, sizeof(bare.fx));
+    plain = songEncodedSize(bare);
+    expect(plain == kSongFileBytes && !songNeedsV2(bare), "clearing inserts returns to version 1");
+  }
+  int need = songEncodedSize(song);
+  expect(need == plain + 1 + kSongTracks * (2 + kPluginNameLen * 2) + kSongTracks * kSongFxBytes, "version 3 is the empty plugin tail plus 48 effect bytes");
+  expect(need <= kSongFileBytesMax, "version 3 stays inside the slot buffer");
+  uint8_t buf[kSongFileBytesMax];
+  int n = songEncode(song, buf, kSongFileBytesMax);
+  expect(n == need && buf[4] == kSongVersionV3, "version 3 encode");
+  SongData loaded;
+  std::memset(&loaded, 0x5A, sizeof(loaded));
+  expect(songDecode(buf, n, &loaded), "version 3 decodes");
+  expect(loaded.voices[1].volume == 6 && loaded.voices[0].volume == 2, "volumes survive the effect tail");
+  expect(!trackFxActive(loaded.fx[0]) && !trackFxActive(loaded.fx[2]) && !trackFxActive(loaded.fx[3]), "other tracks stay dry");
+  expect(loaded.fx[1].filter == 2 && loaded.fx[1].cutoff == 40 && loaded.fx[1].delayDiv == 2, "track 2 filter and delay restored");
+  expect(loaded.fx[1].reverb == 20 && loaded.fx[1].crush == 1 && loaded.fx[1].tremolo == 30, "track 2 send and crush restored");
+  expect(loaded.fx[1].drive == 10 && loaded.fx[1].chorus == 20 && loaded.fx[1].delayMix == 40, "track 2 drive and chorus restored");
+
+  buf[n / 2] ^= 0x11;
+  expect(!songDecode(buf, n, &loaded), "corrupt version 3 song is rejected");
+
+  n = songEncode(song, buf, kSongFileBytesMax);
+  song.fx[1].cutoff = 200;
+  song.fx[1].delayFb = 90;
+  n = songEncode(song, buf, kSongFileBytesMax);
+  expect(songDecode(buf, n, &loaded), "out-of-range insert bytes still decode");
+  expect(loaded.fx[1].cutoff == 127 && loaded.fx[1].delayFb == 70, "decode clamps insert ranges");
+
+  std::memset(&song, 0, sizeof(song));
+  song.patternLength = 32;
+  song.bpms[0] = 100;
+  song.currentVoice = 14;
+  song.pluginCount = 1;
+  song.plugins[0].id = 14;
+  std::memcpy(song.plugins[0].name, "soft-saw", 9);
+  int v2 = songEncodedSize(song);
+  expect(!songNeedsV3(song) && v2 > kSongFileBytes, "a plugin song without inserts stays version 2");
+  song.fx[3].chorus = 10;
+  expect(songEncodedSize(song) == v2 + kSongTracks * kSongFxBytes, "inserts add 48 bytes to a version 2 song");
 }
 
 static void testDevLogDefault() {
@@ -247,6 +320,7 @@ int main() {
   testMapping();
   testSongFile();
   testSongV2();
+  testSongV3();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

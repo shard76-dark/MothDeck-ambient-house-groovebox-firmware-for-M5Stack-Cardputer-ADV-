@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="786" viewBox="0 0 1600 786">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="846" viewBox="0 0 1600 846">
 <style>text { font-family: 'DejaVu Sans', 'Liberation Sans', sans-serif; }</style>
 <rect width="100%" height="100%" fill="#121418"/>
-<text x="28" y="40" fill="#f2efe8" font-size="28" font-weight="700">MothDeck  Mixer</text>
+<text x="28" y="40" fill="#f2efe8" font-size="28" font-weight="700">MothDeck  FX</text>
 <text x="28" y="66" fill="#9aa3ad" font-size="15">Cardputer ADV  4×14  TCA8418 order from M5Cardputer Keyboard.h</text>
 <rect x="28.0" y="78.0" width="103.8" height="112.0" rx="8" fill="#3a78d4"/>
 <text x="36.0" y="96.0" fill="#f4f8ff" font-size="13" opacity="0.72">`</text>
@@ -102,9 +102,9 @@
 <rect x="249.6" y="316.0" width="103.8" height="112.0" rx="8" fill="#262b32"/>
 <text x="257.6" y="334.0" fill="#8b939c" font-size="13" opacity="0.72">A</text>
 <text x="257.6" y="362.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
-<rect x="360.4" y="316.0" width="103.8" height="112.0" rx="8" fill="#c44784"/>
-<text x="368.4" y="334.0" fill="#fff5fa" font-size="13" opacity="0.72">S</text>
-<text x="368.4" y="362.0" fill="#fff5fa" font-size="14" font-weight="700">Solo</text>
+<rect x="360.4" y="316.0" width="103.8" height="112.0" rx="8" fill="#262b32"/>
+<text x="368.4" y="334.0" fill="#8b939c" font-size="13" opacity="0.72">S</text>
+<text x="368.4" y="362.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
 <rect x="471.1" y="316.0" width="103.8" height="112.0" rx="8" fill="#262b32"/>
 <text x="479.1" y="334.0" fill="#8b939c" font-size="13" opacity="0.72">D</text>
 <text x="479.1" y="362.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
@@ -128,14 +128,14 @@
 <text x="1143.9" y="362.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
 <rect x="1246.6" y="316.0" width="103.8" height="112.0" rx="8" fill="#1a6a82"/>
 <text x="1254.6" y="334.0" fill="#e8f7fb" font-size="13" opacity="0.72">;</text>
-<text x="1254.6" y="362.0" fill="#e8f7fb" font-size="14" font-weight="700">Fn: vol +</text>
+<text x="1254.6" y="362.0" fill="#e8f7fb" font-size="14" font-weight="700">Fn: row −</text>
 <text x="1254.6" y="418.0" fill="#e8f7fb" font-size="11" opacity="0.9">hold Fn</text>
 <rect x="1357.4" y="316.0" width="103.8" height="112.0" rx="8" fill="#262b32"/>
 <text x="1365.4" y="334.0" fill="#8b939c" font-size="13" opacity="0.72">'</text>
 <text x="1365.4" y="362.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
-<rect x="1468.2" y="316.0" width="103.8" height="112.0" rx="8" fill="#262b32"/>
-<text x="1476.2" y="334.0" fill="#8b939c" font-size="13" opacity="0.72">Enter</text>
-<text x="1476.2" y="362.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
+<rect x="1468.2" y="316.0" width="103.8" height="112.0" rx="8" fill="#c44784"/>
+<text x="1476.2" y="334.0" fill="#fff5fa" font-size="13" opacity="0.72">Enter</text>
+<text x="1476.2" y="362.0" fill="#fff5fa" font-size="14" font-weight="700">Value +</text>
 <rect x="28.0" y="435.0" width="103.8" height="112.0" rx="8" fill="#4c5562"/>
 <text x="36.0" y="453.0" fill="#eef2f6" font-size="13" opacity="0.72">Ctrl</text>
 <text x="36.0" y="481.0" fill="#eef2f6" font-size="14" font-weight="700">Ctrl</text>
@@ -164,20 +164,20 @@
 <rect x="914.3" y="435.0" width="103.8" height="112.0" rx="8" fill="#262b32"/>
 <text x="922.3" y="453.0" fill="#8b939c" font-size="13" opacity="0.72">N</text>
 <text x="922.3" y="481.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
-<rect x="1025.1" y="435.0" width="103.8" height="112.0" rx="8" fill="#c44784"/>
-<text x="1033.1" y="453.0" fill="#fff5fa" font-size="13" opacity="0.72">M</text>
-<text x="1033.1" y="481.0" fill="#fff5fa" font-size="14" font-weight="700">Mute</text>
+<rect x="1025.1" y="435.0" width="103.8" height="112.0" rx="8" fill="#262b32"/>
+<text x="1033.1" y="453.0" fill="#8b939c" font-size="13" opacity="0.72">M</text>
+<text x="1033.1" y="481.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
 <rect x="1135.9" y="435.0" width="103.8" height="112.0" rx="8" fill="#1a6a82"/>
 <text x="1143.9" y="453.0" fill="#e8f7fb" font-size="13" opacity="0.72">,</text>
-<text x="1143.9" y="481.0" fill="#e8f7fb" font-size="14" font-weight="700">Fn: track −</text>
+<text x="1143.9" y="481.0" fill="#e8f7fb" font-size="14" font-weight="700">Fn: value −</text>
 <text x="1143.9" y="537.0" fill="#e8f7fb" font-size="11" opacity="0.9">hold Fn</text>
 <rect x="1246.6" y="435.0" width="103.8" height="112.0" rx="8" fill="#1a6a82"/>
 <text x="1254.6" y="453.0" fill="#e8f7fb" font-size="13" opacity="0.72">.</text>
-<text x="1254.6" y="481.0" fill="#e8f7fb" font-size="14" font-weight="700">Fn: vol −</text>
+<text x="1254.6" y="481.0" fill="#e8f7fb" font-size="14" font-weight="700">Fn: row +</text>
 <text x="1254.6" y="537.0" fill="#e8f7fb" font-size="11" opacity="0.9">hold Fn</text>
 <rect x="1357.4" y="435.0" width="103.8" height="112.0" rx="8" fill="#1a6a82"/>
 <text x="1365.4" y="453.0" fill="#e8f7fb" font-size="13" opacity="0.72">/</text>
-<text x="1365.4" y="481.0" fill="#e8f7fb" font-size="14" font-weight="700">Fn: track +</text>
+<text x="1365.4" y="481.0" fill="#e8f7fb" font-size="14" font-weight="700">Fn: value +</text>
 <text x="1365.4" y="537.0" fill="#e8f7fb" font-size="11" opacity="0.9">hold Fn</text>
 <rect x="1468.2" y="435.0" width="103.8" height="112.0" rx="8" fill="#2b9d55"/>
 <text x="1476.2" y="453.0" fill="#f3fff7" font-size="13" opacity="0.72">Space</text>
@@ -209,8 +209,11 @@
 <text x="966" y="605" fill="#eef2f6" font-size="12">Modifier</text>
 <rect x="1040" y="588" width="81" height="26" rx="5" fill="#262b32"/>
 <text x="1048" y="605" fill="#8b939c" font-size="12">No action</text>
-<text x="28" y="630" fill="#c5ccd3" font-size="13">Four vertical faders, one per track, with the instrument name. The selected track is highlighted.</text>
-<text x="28" y="650" fill="#c5ccd3" font-size="13">Fn+; raises that track's volume. Fn+. lowers it. Volume is 0–8 and is saved with the song.</text>
-<text x="28" y="670" fill="#c5ccd3" font-size="13">Fn+, selects the previous track. Fn+/ selects the next. 1–4 still select a track directly.</text>
-<text x="28" y="690" fill="#c5ccd3" font-size="13">M mutes the selected track. S solos it. ` or Backspace returns to Play.</text>
+<text x="28" y="630" fill="#c5ccd3" font-size="13">Inserts on the selected track only: Filter, Cutoff, Res, Delay, Feedback, Mix, Reverb, Crush, Drive, Chorus,</text>
+<text x="28" y="650" fill="#c5ccd3" font-size="13">Tremolo.</text>
+<text x="28" y="670" fill="#c5ccd3" font-size="13">Fn+; and Fn+. move the row. Fn+, lowers the value. Fn+/ and Enter raise it. 1–4 select the track.</text>
+<text x="28" y="690" fill="#c5ccd3" font-size="13">Filter cycles off, low pass, high pass. Delay is off, 1/32, 1/16, or 1/8, and the time follows the BPM. A 1/8</text>
+<text x="28" y="710" fill="#c5ccd3" font-size="13">note is shortened when it would be longer than the history buffer.</text>
+<text x="28" y="730" fill="#c5ccd3" font-size="13">Each track keeps its own settings. They are stored in the song. Play-page A, F, K, and L still cycle the older</text>
+<text x="28" y="750" fill="#c5ccd3" font-size="13">0–2 effects.</text>
 </svg>

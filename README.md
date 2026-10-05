@@ -62,6 +62,8 @@ The drawings follow `src/Ui.cpp` and the 4×14 matrix in M5Cardputer `Keyboard.h
 
 ![Instrument](docs/keymap-inst.png)
 
+![FX](docs/keymap-fx.png)
+
 ![Mixer](docs/keymap-mixer.png)
 
 ![Song](docs/keymap-song.png)
@@ -116,9 +118,13 @@ While the page list is open it takes every key. Fn+`;` and Fn+`.` move the highl
 
 `9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track only, and that instrument stays on the track. Selecting another track recalls the instrument already stored there. The four names across the top of the page are tracks 1–4. `R` rescans instruments, drum kits, and loops. Fn+`,` and Fn+`/` change the drum kit (built-in Ambient House, then each folder under `/moth/drums`). The row after Pad is Loops: notes on that track start an SD loop lined up to the bar. 1–4 still select the track and 5–8 the pattern.
 
+### FX
+
+Eleven insert rows for the selected track: filter (off, low pass, high pass), cutoff, resonance, delay, feedback, mix, reverb send, bitcrush, drive, chorus, and tremolo. Fn+`;` and Fn+`.` move the row. Fn+`,`, Fn+`/`, and Enter change the value. Delay time follows the BPM as 1/32, 1/16, or 1/8, and a division that would be longer than the history buffer is shortened. Tremolo is a mono level wobble. Each track keeps its own inserts. They are saved in the song (version 3). Tracks with no insert stay a version 1 or 2 file. The Play-page keys A, F, K, and L still cycle the older 0–2 effects on the selected track.
+
 ### Mixer
 
-Thirteen rows for the selected track: volume, mute, solo, drive, low pass, retrig, wobble, echo, arp, whoosh, pitch, envelope, note length. Fn+`;` and Fn+`.` move the row. Fn+`,`, Fn+`/`, and Enter change the value. Effect rows cycle 0–2; a downward step sends the command twice so the value wraps backward. Note length sends `L` as shown-length minus 1, clamped to 1–4.
+All four tracks are vertical volume faders, with the instrument name on each and the selected track highlighted. Fn+`;` raises the selected track's volume and Fn+`.` lowers it (0–8). Fn+`,` selects the previous track and Fn+`/` the next. `1`–`4` still jump to a track. `M` mutes the selected track and `S` solos it. `` ` `` or Backspace returns to Play, the same as the other pages. Volume is stored with the song in every file version.
 
 ### Song
 
@@ -186,7 +192,7 @@ python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \
     card/moth/loops/house kick.wav hats.wav
 ```
 
-The instrument and loop manifests, the version 2 song tail, and the pattern file are specified in [docs/FORMATS.md](docs/FORMATS.md).
+The instrument and loop manifests, the version 2 and version 3 song tails, and the pattern file are specified in [docs/FORMATS.md](docs/FORMATS.md).
 
 Plugins get ids 12–62. Id 63 is the Loops instrument. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. Loop PCM is not evicted while a track holds it (six slots). Instrument PCM may recycle the oldest slot. Samples are capped (48k frames with PSRAM, 8k without; loops 120k / 16k; a drum kit is 18000 frames, 6000 per pad) and prefer PSRAM. A corrupt manifest or WAV is reported on the page and skipped.
 
@@ -199,7 +205,7 @@ Loops resample to the project BPM by advancing the source faster when the projec
 ```
 include/     headers, including the codecs the host tests compile
 src/         firmware
-test/        host tests (MIDI, song v1/v2, manifests, WAV, synth render)
+test/        host tests (MIDI, song v1/v2/v3, per-track FX, manifests, WAV, synth render)
 tools/       sample generator, WAV converters, test runner, build helper
 docs/        file formats
 sd-card-example/

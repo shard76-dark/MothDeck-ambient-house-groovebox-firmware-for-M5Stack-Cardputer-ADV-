@@ -77,6 +77,11 @@ Voice::Voice() {
   extBaseStep = 1000;
   isDelay = false;
   envelopeNum = 0;
+  filtLp = 0;
+  crushHold = 0;
+  crushCount = 0;
+  chorusPhase = 0;
+  tremPhase = 0;
   SetEnvelopeLength(1);
   ResetEffects();
 }
@@ -112,7 +117,7 @@ int Voice::UpdateVoice() {
     sample = (sample + GetHistorySample(phaserOffset)) / 2;
   }
 
-  if (delayMult > 0) {
+  if (delayMult > 0 && fx.delayDiv == 0) {
     sample += GetHistorySample(delaySamples) / 5;
   }
 
@@ -128,7 +133,97 @@ int Voice::UpdateVoice() {
     sample /= whoosh + 1;
   }
 
-  if (lowPassMult > 0) {
+  if (!fx.filter && !fx.drive && !fx.crush && !fx.chorus && !fx.delayDiv && !fx.tremolo && !fx.reverb) {
+    if (lowPassMult > 0) {
+      int taps = 4 * lowPassMult;
+      for (int i = 1; i < taps; i++) {
+        sample += GetHistorySample(i);
+      }
+      sample /= taps;
+    }
+
+    UpdateHistory(sample);
+
+    if (reverbMult > 0) {
+      int rSample = 0;
+      for (int i = 2; i < 7; i++) {
+        rSample += GetHistorySample(i * 450 * reverbMult);
+      }
+      sample = rSample / 2;
+    }
+
+    if (overdrive) {
+      sample = sample * 10 / 7;
+      if (sample > 5000) {
+        sample = 5000;
+      } else if (sample < -5000) {
+        sample = -5000;
+      }
+    }
+    return sample;
+  }
+
+  return ApplyInserts(sample);
+}
+
+int Voice::FxDelayBack() const {
+  static const int kDiv[4] = {8, 8, 4, 2};
+  int div = kDiv[fx.delayDiv > 3 ? 0 : fx.delayDiv];
+  float rate = bps;
+  if (rate < 0.4f) {
+    rate = 0.4f;
+  } else if (rate > 6.0f) {
+    rate = 6.0f;
+  }
+  int perBeat = (int)(44100.0f / rate);
+  int n = perBeat / div;
+  if (n > 7000) {
+    n = 7000;
+  } else if (n < 2) {
+    n = 2;
+  }
+  return n;
+}
+
+int Voice::ApplyInserts(int sample) {
+  if (fx.drive > 0) {
+    int gain = 256 + (int)fx.drive * 6;
+    sample = (int)(((int64_t)sample * gain) >> 8);
+    int mag = sample < 0 ? -sample : sample;
+    if (mag > 4000) {
+      int over = mag - 4000;
+      int denom = 64 + (int)fx.drive + (over >> 6);
+      int shaped = 4000 + (over * 48) / denom;
+      if (shaped > 20000) {
+        shaped = 20000;
+      }
+      sample = sample < 0 ? -shaped : shaped;
+    }
+  }
+
+  if (fx.filter == 1 || fx.filter == 2) {
+    int coef = 180 + (int)fx.cutoff * 220;
+    if (coef > 28000) {
+      coef = 28000;
+    }
+    int x = sample;
+    if (fx.res > 0) {
+      int band = x - filtLp;
+      x += (int)(((int64_t)band * fx.res) / 220);
+      if (x > 26000) {
+        x = 26000;
+      } else if (x < -26000) {
+        x = -26000;
+      }
+    }
+    filtLp += (int)(((int64_t)(x - filtLp) * coef) >> 15);
+    if (filtLp > 30000) {
+      filtLp = 30000;
+    } else if (filtLp < -30000) {
+      filtLp = -30000;
+    }
+    sample = (fx.filter == 2) ? (x - filtLp) : filtLp;
+  } else if (lowPassMult > 0) {
     int taps = 4 * lowPassMult;
     for (int i = 1; i < taps; i++) {
       sample += GetHistorySample(i);
@@ -136,9 +231,78 @@ int Voice::UpdateVoice() {
     sample /= taps;
   }
 
-  UpdateHistory(sample);
+  if (fx.crush > 0 && fx.crush <= 4) {
+    if (crushCount <= 0) {
+      int shift = (int)fx.crush * 2;
+      crushHold = (sample >> shift) << shift;
+      crushCount = 1 << fx.crush;
+    }
+    sample = crushHold;
+    crushCount--;
+  }
 
-  if (reverbMult > 0) {
+  if (fx.chorus > 0) {
+    chorusPhase += 6 + (int)bps;
+    if (chorusPhase >= 2048) {
+      chorusPhase -= 2048;
+    }
+    int tri = chorusPhase < 1024 ? chorusPhase : 2048 - chorusPhase;
+    int back = 220 + (tri >> 1);
+    if (back > 700) {
+      back = 700;
+    }
+    int wet = GetHistorySample(back);
+    int mix = (int)fx.chorus / 2;
+    if (mix > 50) {
+      mix = 50;
+    }
+    sample = sample * (100 - mix) / 100 + wet * mix / 100;
+  }
+
+  int stored = sample;
+  if (fx.delayDiv > 0 && fx.delayDiv <= 3) {
+    int delayed = GetHistorySample(FxDelayBack());
+    int fed = (int)(((int64_t)delayed * fx.delayFb) / 100);
+    stored = sample + fed;
+    if (stored > 24000) {
+      stored = 24000;
+    } else if (stored < -24000) {
+      stored = -24000;
+    }
+    int mix = fx.delayMix;
+    if (mix > 100) {
+      mix = 100;
+    }
+    sample = sample * (100 - mix) / 100 + delayed * mix / 100;
+  }
+
+  UpdateHistory(stored);
+
+  if (fx.tremolo > 0) {
+    tremPhase += 10 + (int)(bps * 28);
+    if (tremPhase >= 2048) {
+      tremPhase -= 2048;
+    }
+    int tri = tremPhase < 1024 ? tremPhase : 2048 - tremPhase;
+    int dip = ((1024 - tri) * (int)fx.tremolo) / 1024;
+    int gain = 100 - dip;
+    if (gain < 12) {
+      gain = 12;
+    }
+    sample = sample * gain / 100;
+  }
+
+  if (fx.reverb > 0) {
+    int wet = GetHistorySample(640) / 2;
+    wet += GetHistorySample(1480) / 3;
+    wet += GetHistorySample(2680) / 4;
+    sample += (int)(((int64_t)wet * fx.reverb) / 120);
+    if (sample > 26000) {
+      sample = 26000;
+    } else if (sample < -26000) {
+      sample = -26000;
+    }
+  } else if (reverbMult > 0) {
     int rSample = 0;
     for (int i = 2; i < 7; i++) {
       rSample += GetHistorySample(i * 450 * reverbMult);
@@ -146,7 +310,7 @@ int Voice::UpdateVoice() {
     sample = rSample / 2;
   }
 
-  if (overdrive) {
+  if (fx.drive == 0 && overdrive) {
     sample = sample * 10 / 7;
     if (sample > 5000) {
       sample = 5000;
@@ -502,6 +666,20 @@ void Voice::ResetEffects() {
   whooshMult = 0;
   pitchMult = 0;
   delaySamples = 0;
+  fx = TrackFx();
+  filtLp = 0;
+  crushHold = 0;
+  crushCount = 0;
+  chorusPhase = 0;
+  tremPhase = 0;
+}
+
+void Voice::CopyFx(const TrackFx &in) {
+  fx = in;
+  trackFxClamp(&fx);
+  filtLp = 0;
+  crushHold = 0;
+  crushCount = 0;
 }
 
 void Voice::UpdateDelayOffset() {

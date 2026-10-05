@@ -2,6 +2,7 @@
 #define Voice_h
 #include <stdint.h>
 #include "ToneSynth.h"
+#include "SongFile.h"
 
 class Voice {
 public:
@@ -21,6 +22,7 @@ public:
   uint8_t whooshMult;
   uint16_t bend14;
   float bps;
+  TrackFx fx;
 
   Voice();
   int UpdateVoice();
@@ -32,6 +34,7 @@ public:
   void SetEnvelopeLength(int val);
   void SetEffectNum(int val);
   void ResetEffects();
+  void CopyFx(const TrackFx &in);
   void UpdateDelayOffset();
   uint8_t EnvelopeNum() const { return envelopeNum; }
   uint8_t EnvelopeLength() const { return envelopeLength; }
@@ -76,8 +79,16 @@ private:
 
   ToneVoice tone;
   int GetBaseFreq(int val, int ioctave);
+  int filtLp;
+  int crushHold;
+  int crushCount;
+  int chorusPhase;
+  int tremPhase;
+
   void UpdateHistory(int sample);
   int GetHistorySample(int backOffset);
+  int ApplyInserts(int sample);
+  int FxDelayBack() const;
 };
 
 #endif

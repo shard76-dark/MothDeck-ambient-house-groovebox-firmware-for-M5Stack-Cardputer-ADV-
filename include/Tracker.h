@@ -105,6 +105,7 @@ private:
   void SetEnvelopeLength(int val);
   void SetOctave(int val);
   void SetVolume(int val);
+  void AdjustFx(int packed);
   void SetTrackNum(int val);
   void ClearTrackNum(int val);
   void SetPatternNum(int val);

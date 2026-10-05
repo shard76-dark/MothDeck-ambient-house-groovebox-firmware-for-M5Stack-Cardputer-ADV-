@@ -28,9 +28,21 @@ echo "Modal input"
   "$ROOT/src/Tracker.cpp" \
   "$ROOT/src/Voice.cpp" \
   "$ROOT/src/ToneSynth.cpp" \
+  "$ROOT/src/SongFile.cpp" \
   "$ROOT/src/default_samples.cpp" \
   -o /tmp/mothdeck_test_modal
 /tmp/mothdeck_test_modal
+
+echo "Per-track FX and mixer volume"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_fx.cpp" \
+  "$ROOT/src/Tracker.cpp" \
+  "$ROOT/src/Voice.cpp" \
+  "$ROOT/src/ToneSynth.cpp" \
+  "$ROOT/src/SongFile.cpp" \
+  "$ROOT/src/default_samples.cpp" \
+  -o /tmp/mothdeck_test_fx
+/tmp/mothdeck_test_fx
 
 echo "Per-track instruments"
 "$CXX" "${FLAGS[@]}" \
@@ -38,6 +50,7 @@ echo "Per-track instruments"
   "$ROOT/src/Tracker.cpp" \
   "$ROOT/src/Voice.cpp" \
   "$ROOT/src/ToneSynth.cpp" \
+  "$ROOT/src/SongFile.cpp" \
   "$ROOT/src/default_samples.cpp" \
   -o /tmp/mothdeck_test_tracks
 /tmp/mothdeck_test_tracks

@@ -222,6 +222,9 @@ void Tracker::SetCommand(char command, int val) {
       QueueVolumeMidi();
       SetHintF("Volume: %d", val);
       break;
+    case 'f':
+      AdjustFx(val);
+      break;
     case '_':
       if (trackIndex >= 0 && trackIndex < kMaxSteps) {
         tracks[selectedTrack][trackIndex] = 0;
@@ -246,6 +249,91 @@ void Tracker::SetCommand(char command, int val) {
         voices[selectedTrack].SetEnvelopeNum(2);
         SetHintF("Samp Mode: %d", voices[selectedTrack].samplerMode);
       }
+      break;
+  }
+}
+
+static int clampStep(int cur, int dir, int step, int hi) {
+  int v = cur + dir * step;
+  if (v < 0) {
+    v = 0;
+  } else if (v > hi) {
+    v = hi;
+  }
+  return v;
+}
+
+void Tracker::AdjustFx(int packed) {
+  int row = packed & 0xFF;
+  int dir = (int)(int8_t)((packed >> 8) & 0xFF);
+  if (dir > 0) {
+    dir = 1;
+  } else if (dir < 0) {
+    dir = -1;
+  } else {
+    dir = 1;
+  }
+  TrackFx &fx = voices[selectedTrack].fx;
+  switch (row) {
+    case 0: {
+      int mode = (int)fx.filter + dir;
+      if (mode > 2) {
+        mode = 0;
+      } else if (mode < 0) {
+        mode = 2;
+      }
+      fx.filter = (uint8_t)mode;
+      SetHint(mode == 1 ? "Low pass" : (mode == 2 ? "High pass" : "Filter off"));
+      break;
+    }
+    case 1:
+      fx.cutoff = (uint8_t)clampStep(fx.cutoff, dir, 8, 127);
+      SetHintF("Cutoff: %d", fx.cutoff);
+      break;
+    case 2:
+      fx.res = (uint8_t)clampStep(fx.res, dir, 8, 80);
+      SetHintF("Res: %d", fx.res);
+      break;
+    case 3: {
+      int div = (int)fx.delayDiv + dir;
+      if (div > 3) {
+        div = 0;
+      } else if (div < 0) {
+        div = 3;
+      }
+      fx.delayDiv = (uint8_t)div;
+      SetHint(div == 1 ? "Delay 1/32" : (div == 2 ? "Delay 1/16" : (div == 3 ? "Delay 1/8" : "Delay off")));
+      break;
+    }
+    case 4:
+      fx.delayFb = (uint8_t)clampStep(fx.delayFb, dir, 10, 70);
+      SetHintF("Feedback: %d", fx.delayFb);
+      break;
+    case 5:
+      fx.delayMix = (uint8_t)clampStep(fx.delayMix, dir, 10, 100);
+      SetHintF("Dly mix: %d", fx.delayMix);
+      break;
+    case 6:
+      fx.reverb = (uint8_t)clampStep(fx.reverb, dir, 10, 100);
+      SetHintF("Reverb: %d", fx.reverb);
+      break;
+    case 7:
+      fx.crush = (uint8_t)clampStep(fx.crush, dir, 1, 4);
+      SetHintF("Crush: %d", fx.crush);
+      break;
+    case 8:
+      fx.drive = (uint8_t)clampStep(fx.drive, dir, 10, 100);
+      SetHintF("Drive: %d", fx.drive);
+      break;
+    case 9:
+      fx.chorus = (uint8_t)clampStep(fx.chorus, dir, 10, 100);
+      SetHintF("Chorus: %d", fx.chorus);
+      break;
+    case 10:
+      fx.tremolo = (uint8_t)clampStep(fx.tremolo, dir, 10, 100);
+      SetHintF("Tremolo: %d", fx.tremolo);
+      break;
+    default:
       break;
   }
 }
@@ -645,6 +733,7 @@ void Tracker::CaptureSong(SongData *song) const {
     out.delayMult = voice.delayMult;
     out.whooshMult = voice.whooshMult;
     out.bend14 = voice.bend14;
+    song->fx[t] = voice.fx;
     song->loops[t].enabled = (loopPlay[t].enabled || loopPlay[t].pending) ? 1 : 0;
     song->loops[t].quantize = loopPlay[t].quantize;
     memcpy(song->loops[t].library, loopPlay[t].library, 24);
@@ -686,6 +775,7 @@ void Tracker::ApplySong(const SongData &song) {
     voice.delayMult = in.delayMult;
     voice.whooshMult = in.whooshMult;
     voice.bend14 = in.bend14;
+    voice.CopyFx(song.fx[t]);
     voice.soloMute = false;
   }
   SyncTrackVoicesFromSteps();
@@ -980,6 +1070,20 @@ void Tracker::FillSnap(Snap *snap) const {
     snap->whoosh[t] = voices[t].whooshMult;
     snap->pitchFx[t] = voices[t].pitchMult;
     snap->loopOn[t] = loopPlay[t].enabled || loopPlay[t].pending ? 1 : 0;
+    if (t == selectedTrack) {
+      const TrackFx &fx = voices[t].fx;
+      snap->fxFilter = fx.filter;
+      snap->fxCutoff = fx.cutoff;
+      snap->fxRes = fx.res;
+      snap->fxDelay = fx.delayDiv;
+      snap->fxFb = fx.delayFb;
+      snap->fxMix = fx.delayMix;
+      snap->fxRev = fx.reverb;
+      snap->fxCrush = fx.crush;
+      snap->fxDrive = fx.drive;
+      snap->fxChorus = fx.chorus;
+      snap->fxTrem = fx.tremolo;
+    }
     for (int s = 0; s < 16; s++) {
       int idx = origin + s;
       snap->notes[t][s] = (idx >= 0 && idx < kMaxSteps) ? tracks[t][idx] : 0;

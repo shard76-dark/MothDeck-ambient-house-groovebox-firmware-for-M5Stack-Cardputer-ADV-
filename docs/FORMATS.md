@@ -39,7 +39,9 @@ Version 2 is written only when a plugin id (12..63) or a loop assignment is in u
 | four loop records | enabled, quantize, library[24], name[24] |
 | checksum | uint16 over every byte before it |
 
-Quantize is 0 immediate, 1 next beat, 2 next bar. Maximum file size is 3556 bytes. MothOS rejects version 2, which is why plain songs stay version 1.
+Quantize is 0 immediate, 1 next beat, 2 next bar. A version 2 file is at most 3556 bytes. MothOS rejects version 2, which is why plain songs stay version 1.
+
+Version 3 is version 2 plus 48 bytes, 12 per track, written only when an insert effect is in use. The largest file is 3604 bytes. Each track's 12 bytes are: filter (0 off, 1 low pass, 2 high pass), cutoff 0..127, resonance 0..80, delay division (0 off, 1 = 1/32, 2 = 1/16, 3 = 1/8), delay feedback 0..70, delay mix 0..100, reverb send 0..100, bitcrush 0..4, drive 0..100, chorus 0..100, tremolo 0..100, and one reserved byte. Values above those ranges are clamped on load. A version 1 or 2 file loads with every insert off. Per-track volume is the first byte of the 16-byte voice and is stored in every version.
 
 ## Instrument folder
 

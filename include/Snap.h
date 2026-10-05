@@ -38,6 +38,17 @@ struct Snap {
   uint8_t notes[4][16];
   uint8_t loopOn[4];
   uint16_t barOrigin;
+  uint8_t fxFilter;
+  uint8_t fxCutoff;
+  uint8_t fxRes;
+  uint8_t fxDelay;
+  uint8_t fxFb;
+  uint8_t fxMix;
+  uint8_t fxRev;
+  uint8_t fxCrush;
+  uint8_t fxDrive;
+  uint8_t fxChorus;
+  uint8_t fxTrem;
 };
 
 struct LoopArm {

@@ -24,13 +24,18 @@ static const uint16_t COL_PLAY = 0x07E0;
 static const uint16_t COL_WARN = 0xFBE0;
 static const uint16_t COL_TRACK[4] = {0xFD20, 0x2D7F, 0xF81F, 0x07E0};
 
-static const char *kPageName[] = {"Play", "Instrument", "Mixer", "Song", "Loops", "MIDI", "Settings", "Exit"};
-static const int kPageCount = 8;
-static const int kExitPage = 7;
+static const char *kPageName[] = {"Play", "Instrument", "FX", "Mixer", "Song", "Loops", "MIDI", "Settings", "Exit"};
+static const int kPageCount = 9;
+static const int kExitPage = 8;
+static const int kFxPage = 2;
+static const int kMixerPage = 3;
+static const int kSongPage = 4;
+static const int kLoopsPage = 5;
+static const int kMidiPage = 6;
+static const int kSettingsPage = 7;
 static bool launcherOk = false;
 
 static const char *kNoteName[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-static const char *kEnvName[] = {"Fade out", "Fade in", "No fade", "Loop"};
 
 struct PianoKey {
   char key;
@@ -395,72 +400,57 @@ static void drawInst() {
   legend("Ent assign  R scan  Fn ,/ kit");
 }
 
-static const char *kMixLabel[] = {"Volume", "Mute", "Solo", "Drive", "Low pass", "Retrig", "Wobble", "Echo", "Arp", "Whoosh", "Pitch", "Envelope", "Note len"};
-static const int kMixRows = 13;
+static const char *kFxLabel[] = {
+  "Filter", "Cutoff", "Res", "Delay", "Feedback", "Mix", "Reverb", "Crush", "Drive", "Chorus", "Tremolo"
+};
+static const int kFxRows = 11;
 
-static int mixValue(int row) {
-  int t = snap.track;
+static int packFx(int row, int dir) {
+  return (row & 0xFF) | ((dir & 0xFF) << 8);
+}
+
+static int fxValue(int row) {
   switch (row) {
-    case 0: return snap.vol[t];
-    case 1: return snap.mute[t];
-    case 2: return snap.solo;
-    case 3: return snap.drive[t];
-    case 4: return snap.lp[t];
-    case 5: return snap.rev[t];
-    case 6: return snap.pha[t];
-    case 7: return snap.dly[t];
-    case 8: return snap.arp[t];
-    case 9: return snap.whoosh[t];
-    case 10: return snap.pitchFx[t];
-    case 11: return snap.envNum;
-    default: return snap.envLen;
+    case 0: return snap.fxFilter;
+    case 1: return snap.fxCutoff;
+    case 2: return snap.fxRes;
+    case 3: return snap.fxDelay;
+    case 4: return snap.fxFb;
+    case 5: return snap.fxMix;
+    case 6: return snap.fxRev;
+    case 7: return snap.fxCrush;
+    case 8: return snap.fxDrive;
+    case 9: return snap.fxChorus;
+    default: return snap.fxTrem;
   }
 }
 
-static void tweakMix(int dir) {
-  int row = mixRow;
-  int v = mixValue(row);
+static void tweakFx(int dir) {
+  audioCommand('f', packFx(mixRow, dir));
+}
+
+static void fxText(int row, char *dst, int n) {
+  int v = fxValue(row);
   if (row == 0) {
-    audioCommand('v', clampi(v + dir, 0, 8));
-  } else if (row == 1) {
-    audioCommand('V', 0);
-  } else if (row == 2) {
-    audioCommand('V', 3);
+    snprintf(dst, n, "%s", v == 1 ? "low pass" : (v == 2 ? "high pass" : "off"));
   } else if (row == 3) {
-    audioCommand('V', 2);
-  } else if (row == 11) {
-    audioCommand('E', clampi(v + dir, 0, 3));
-  } else if (row == 12) {
-    int len = clampi((int)snap.envLen + dir, 1, 4);
-    audioCommand('L', len - 1);
-  } else if (dir > 0) {
-    if (row >= 4 && row <= 6) {
-      audioCommand('A', row - 3);
-    } else if (row >= 7 && row <= 10) {
-      audioCommand('D', row - 7);
-    }
+    snprintf(dst, n, "%s", v == 1 ? "1/32" : (v == 2 ? "1/16" : (v == 3 ? "1/8" : "off")));
   } else {
-    for (int i = 0; i < 2; i++) {
-      if (row >= 4 && row <= 6) {
-        audioCommand('A', row - 3);
-      } else if (row >= 7 && row <= 10) {
-        audioCommand('D', row - 7);
-      }
-    }
+    snprintf(dst, n, "%d", v);
   }
 }
 
-static void drawMix() {
+static void drawFx() {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
-  canvas->printf("Mixer  track %d  %s", snap.track + 1, snap.inst);
+  canvas->printf("FX  track %d  %s", snap.track + 1, snap.inst);
   int top = mixRow - 2;
   if (top < 0) {
     top = 0;
   }
   for (int row = 0; row < 7; row++) {
     int idx = top + row;
-    if (idx >= kMixRows) {
+    if (idx >= kFxRows) {
       break;
     }
     int y = 30 + row * 12;
@@ -471,17 +461,54 @@ static void drawMix() {
       canvas->setTextColor(COL_TEXT);
     }
     canvas->setCursor(4, y);
-    canvas->print(kMixLabel[idx]);
+    canvas->print(kFxLabel[idx]);
+    char value[12];
+    fxText(idx, value, (int)sizeof(value));
     canvas->setCursor(120, y);
-    if (idx == 11) {
-      canvas->print(kEnvName[clampi(mixValue(idx), 0, 3)]);
-    } else if (idx == 1 || idx == 2 || idx == 3) {
-      canvas->print(mixValue(idx) ? "on" : "off");
-    } else {
-      canvas->printf("%d", mixValue(idx));
+    canvas->print(value);
+  }
+  legend("1-4 track  Fn ,/ value  Ent +");
+}
+
+static void drawMixer() {
+  canvas->setTextColor(COL_AMBER);
+  canvas->setCursor(2, 16);
+  canvas->print("Mixer");
+  if (snap.solo) {
+    canvas->print("  solo");
+  }
+  for (int t = 0; t < 4; t++) {
+    int x = 6 + t * 58;
+    bool sel = t == (int)snap.track;
+    if (sel) {
+      canvas->fillRect(x, 28, 56, 90, COL_BAR);
+      canvas->drawRect(x, 28, 56, 90, COL_TRACK[t]);
+    }
+    char name[10];
+    voiceName(snap.trackVoice[t], name, (int)sizeof(name));
+    canvas->setTextColor(sel ? COL_TRACK[t] : COL_TEXT);
+    canvas->setCursor(x + 4, 32);
+    canvas->printf("%d %.5s", t + 1, name);
+    int fy = 46;
+    int fh = 52;
+    canvas->drawRect(x + 22, fy, 12, fh, COL_DIM);
+    int vol = snap.vol[t];
+    if (vol < 0) {
+      vol = 0;
+    } else if (vol > 8) {
+      vol = 8;
+    }
+    int h = vol * (fh - 2) / 8;
+    canvas->fillRect(x + 23, fy + fh - 1 - h, 10, h, sel ? COL_AMBER : COL_TRACK[t]);
+    canvas->setTextColor(COL_TEXT);
+    canvas->setCursor(x + 4, 104);
+    canvas->printf("vol %d", vol);
+    if (snap.mute[t]) {
+      canvas->setTextColor(COL_WARN);
+      canvas->print(" M");
     }
   }
-  legend("1-4 track  Lf/Rt value  Ent same");
+  legend("Fn ;/. vol   Fn ,/ track   M S");
 }
 
 static void drawSong() {
@@ -670,10 +697,10 @@ static void drawExit() {
 static void drawOverlay() {
   canvas->fillRect(40, 18, 160, 100, COL_BAR);
   canvas->drawRect(40, 18, 160, 100, COL_AMBER);
-  int rowH = launcherOk ? 11 : 10;
+  int rowH = launcherOk ? 10 : 9;
   for (int i = 0; i < kPageCount; i++) {
     bool grey = (i == kExitPage && !launcherOk);
-    canvas->setCursor(50, 22 + i * rowH);
+    canvas->setCursor(48, 21 + i * rowH);
     if (grey) {
       canvas->setTextColor(COL_DIM);
       canvas->print("  ");
@@ -691,7 +718,7 @@ static void drawOverlay() {
   }
   if (!launcherOk) {
     canvas->setTextColor(COL_DIM);
-    canvas->setCursor(48, 104);
+    canvas->setCursor(48, 21 + kPageCount * rowH);
     canvas->print("Launcher not found");
   }
 }
@@ -706,11 +733,12 @@ void uiDraw(BleMidi &ble) {
   switch (page) {
     case 0: drawPlay(); break;
     case 1: drawInst(); break;
-    case 2: drawMix(); break;
-    case 3: drawSong(); break;
-    case 4: drawLoops(); break;
-    case 5: drawMidi(ble); break;
-    case 6: drawSettings(); break;
+    case kFxPage: drawFx(); break;
+    case kMixerPage: drawMixer(); break;
+    case kSongPage: drawSong(); break;
+    case kLoopsPage: drawLoops(); break;
+    case kMidiPage: drawMidi(ble); break;
+    case kSettingsPage: drawSettings(); break;
     default: drawExit(); break;
   }
   drawToast();
@@ -825,11 +853,13 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     if (c == ';') {
       if (page == 1) {
         cursor = clampi(cursor - 1, 0, instCount() - 1);
-      } else if (page == 2) {
-        mixRow = clampi(mixRow - 1, 0, kMixRows - 1);
-      } else if (page == 4) {
+      } else if (page == kFxPage) {
+        mixRow = clampi(mixRow - 1, 0, kFxRows - 1);
+      } else if (page == kMixerPage) {
+        audioCommand('v', clampi((int)snap.vol[snap.track] + 1, 0, 8));
+      } else if (page == kLoopsPage) {
         loopRow = clampi(loopRow - 1, 0, 7);
-      } else if (page == 6) {
+      } else if (page == kSettingsPage) {
         cursor = clampi(cursor - 1, 0, 5);
       }
       return;
@@ -837,15 +867,17 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     if (c == '.') {
       if (page == 1) {
         cursor = clampi(cursor + 1, 0, instCount() - 1);
-      } else if (page == 2) {
-        mixRow = clampi(mixRow + 1, 0, kMixRows - 1);
-      } else if (page == 4) {
+      } else if (page == kFxPage) {
+        mixRow = clampi(mixRow + 1, 0, kFxRows - 1);
+      } else if (page == kMixerPage) {
+        audioCommand('v', clampi((int)snap.vol[snap.track] - 1, 0, 8));
+      } else if (page == kLoopsPage) {
         int n = 0;
         if (loopLibrary.Count() > 0) {
           n = loopLibrary.At(loopLib).entryCount - 1;
         }
         loopRow = clampi(loopRow + 1, 0, n < 0 ? 0 : n);
-      } else if (page == 6) {
+      } else if (page == kSettingsPage) {
         cursor = clampi(cursor + 1, 0, 5);
       }
       return;
@@ -864,16 +896,18 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         } else {
           toastSet(drumKit.Name(s));
         }
-      } else if (page == 2) {
-        tweakMix(-1);
-      } else if (page == 4 && loopLibrary.Count() > 0) {
+      } else if (page == kFxPage) {
+        tweakFx(-1);
+      } else if (page == kMixerPage) {
+        audioCommand('T', (snap.track + 3) & 3);
+      } else if (page == kLoopsPage && loopLibrary.Count() > 0) {
         loopLib = (loopLib + loopLibrary.Count() - 1) % loopLibrary.Count();
         loopRow = 0;
-      } else if (page == 6 && cursor == 0) {
+      } else if (page == kSettingsPage && cursor == 0) {
         outVol = (uint8_t)clampi((int)outVol - 8, 0, 255);
         audioSetSpeakerVolume(outVol);
         savePrefs();
-      } else if (page == 6 && cursor == 1) {
+      } else if (page == kSettingsPage && cursor == 1) {
         bright = (uint8_t)clampi((int)bright - 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
@@ -894,16 +928,18 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         } else {
           toastSet(drumKit.Name(s));
         }
-      } else if (page == 2) {
-        tweakMix(1);
-      } else if (page == 4 && loopLibrary.Count() > 0) {
+      } else if (page == kFxPage) {
+        tweakFx(1);
+      } else if (page == kMixerPage) {
+        audioCommand('T', (snap.track + 1) & 3);
+      } else if (page == kLoopsPage && loopLibrary.Count() > 0) {
         loopLib = (loopLib + 1) % loopLibrary.Count();
         loopRow = 0;
-      } else if (page == 6 && cursor == 0) {
+      } else if (page == kSettingsPage && cursor == 0) {
         outVol = (uint8_t)clampi((int)outVol + 8, 0, 255);
         audioSetSpeakerVolume(outVol);
         savePrefs();
-      } else if (page == 6 && cursor == 1) {
+      } else if (page == kSettingsPage && cursor == 1) {
         bright = (uint8_t)clampi((int)bright + 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
@@ -935,7 +971,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
   }
 
   if (c >= '1' && c <= '4') {
-    if (page == 3) {
+    if (page == kSongPage) {
       songSlot = c - '1';
       audioCommand('Z', 0);
       bool has = false;
@@ -946,7 +982,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     }
     return;
   }
-  if (c >= '5' && c <= '8' && page != 3) {
+  if (c >= '5' && c <= '8' && page != kSongPage) {
     audioCommand('$', c - '5');
     return;
   }
@@ -1007,7 +1043,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     }
     return;
   }
-  if (page == 3) {
+  if (page == kSongPage) {
     if (c == 's') doSave();
     else if (c == 'l') doLoad();
     else if (c == 'x') toastSet(SdStorage::ResultText(storage.Delete(songSlot), songSlot));
@@ -1031,7 +1067,12 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     else if (c == 'b') audioCommand('B', (snap.bpmSlot + 1) & 3);
     return;
   }
-  if (page == 4) {
+  if (page == kMixerPage) {
+    if (c == 'm') audioCommand('V', 0);
+    else if (c == 's') audioCommand('V', 3);
+    return;
+  }
+  if (page == kLoopsPage) {
     if (c == 'a') launchLoop(true);
     else if (c == 'q') {
       quantize = (quantize + 1) % 3;
@@ -1043,8 +1084,8 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     }
     return;
   }
-  if (page == 5 && c == 'e') {
-    page = 6;
+  if (page == kMidiPage && c == 'e') {
+    page = kSettingsPage;
     cursor = 2;
     naming = true;
     snprintf(edit, sizeof(edit), "%s", bleName);
@@ -1124,10 +1165,10 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
   }
   if (st.enter) {
     if (page == 1) assignInstrument();
-    else if (page == 2) tweakMix(1);
-    else if (page == 3) doLoad();
-    else if (page == 4) launchLoop(false);
-    else if (page == 6 && cursor == 2) {
+    else if (page == kFxPage) tweakFx(1);
+    else if (page == kSongPage) doLoad();
+    else if (page == kLoopsPage) launchLoop(false);
+    else if (page == kSettingsPage && cursor == 2) {
       naming = true;
       snprintf(edit, sizeof(edit), "%s", bleName);
     }

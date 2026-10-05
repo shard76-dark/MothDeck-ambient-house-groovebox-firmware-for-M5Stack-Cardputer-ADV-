@@ -163,12 +163,21 @@ def paint_inst(g):
     put(g, 3, 11, "Fn: cursor +", "fn", "hold Fn")
 
 
-def paint_mixer(g):
+def paint_fx(g):
     put(g, 2, 11, "Fn: row −", "fn", "hold Fn")
     put(g, 2, 13, "Value +", "act")
     put(g, 3, 10, "Fn: value −", "fn", "hold Fn")
     put(g, 3, 11, "Fn: row +", "fn", "hold Fn")
     put(g, 3, 12, "Fn: value +", "fn", "hold Fn")
+
+
+def paint_mixer(g):
+    put(g, 2, 3, "Solo", "act")
+    put(g, 2, 11, "Fn: vol +", "fn", "hold Fn")
+    put(g, 3, 9, "Mute", "act")
+    put(g, 3, 10, "Fn: track −", "fn", "hold Fn")
+    put(g, 3, 11, "Fn: vol −", "fn", "hold Fn")
+    put(g, 3, 12, "Fn: track +", "fn", "hold Fn")
 
 
 def paint_song(g):
@@ -240,13 +249,25 @@ PAGES = [
         ],
     ),
     (
+        "fx",
+        "FX",
+        paint_fx,
+        [
+            "Inserts on the selected track only: Filter, Cutoff, Res, Delay, Feedback, Mix, Reverb, Crush, Drive, Chorus, Tremolo.",
+            "Fn+; and Fn+. move the row. Fn+, lowers the value. Fn+/ and Enter raise it. 1–4 select the track.",
+            "Filter cycles off, low pass, high pass. Delay is off, 1/32, 1/16, or 1/8, and the time follows the BPM. A 1/8 note is shortened when it would be longer than the history buffer.",
+            "Each track keeps its own settings. They are stored in the song. Play-page A, F, K, and L still cycle the older 0–2 effects.",
+        ],
+    ),
+    (
         "mixer",
         "Mixer",
         paint_mixer,
         [
-            "Rows: Volume, Mute, Solo, Drive, Low pass, Retrig, Wobble, Echo, Arp, Whoosh, Pitch, Envelope, Note len.",
-            "Fn+; and Fn+. move the row. Fn+, lowers the value. Fn+/ and Enter raise it.",
-            "Effect rows cycle 0–2. A downward step sends the command twice so the value wraps backward. Note len sends L as (shown length − 1), clamped to 1–4.",
+            "Four vertical faders, one per track, with the instrument name. The selected track is highlighted.",
+            "Fn+; raises that track's volume. Fn+. lowers it. Volume is 0–8 and is saved with the song.",
+            "Fn+, selects the previous track. Fn+/ selects the next. 1–4 still select a track directly.",
+            "M mutes the selected track. S solos it. ` or Backspace returns to Play.",
         ],
     ),
     (

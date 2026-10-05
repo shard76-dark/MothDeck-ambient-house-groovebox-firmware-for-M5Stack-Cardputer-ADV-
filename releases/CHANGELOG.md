@@ -1,5 +1,7 @@
 ## 2026-10-05
 
+The Mixer page is now FX: filter, BPM-synced delay, reverb send, bitcrush, drive, chorus, and tremolo, each stored on the selected track and saved in a version 3 song. A new Mixer page shows all four tracks as volume faders. Fn+`;` and Fn+`.` change the selected track's volume, Fn+`,` and Fn+`/` select the track, and `` ` `` returns to Play. Per-track volume was already in the song file. Songs with no insert effect stay version 1 or 2.
+
 The built-in drum kit is Ambient House: a deep kick with a pitch drop, a soft snare, a clap, closed and open hats, and the rest of a small kit, each with a short room in the sample. Sound effects are twelve different one-shots (riser, zap, impact, siren, and the rest), one per key. Sine stays a sine. Square, saw, triangle, organ, pluck, bell, flute, bass, and pad are voiced in real time from those names: the pad attacks slowly, stays detuned and dark, and holds. The Instrument page can load an SD drum kit into Drums (Fn comma and slash) and a Loops instrument that triggers card loops in time with the BPM. Kits and loops live in mothdeck-sd-pack.zip, not in the firmware image. otadata is still erased only after a Launcher image is verified.
 
 Exit to Launcher is enabled only when the APP_TEST slot contains a valid ESP32-S3 app image (magic E9). A full-flash layout, an empty slot, or a corrupt header greys the menu entry and shows "Launcher not found". Holding Esc does not restart, and otadata is erased only after that check passes.

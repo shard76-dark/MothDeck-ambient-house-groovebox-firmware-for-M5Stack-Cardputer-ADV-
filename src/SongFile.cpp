@@ -2,6 +2,8 @@
 #include <string.h>
 #include <ctype.h>
 
+static_assert(sizeof(TrackFx) == kSongFxBytes, "insert block is 12 bytes");
+
 static void writeU16(uint8_t *dst, int &i, uint16_t value) {
   dst[i++] = (uint8_t)(value & 0xFF);
   dst[i++] = (uint8_t)((value >> 8) & 0xFF);
@@ -93,8 +95,44 @@ static bool nameOk(const char *s) {
   return true;
 }
 
+bool trackFxActive(const TrackFx &fx) {
+  const uint8_t *bytes = (const uint8_t *)&fx;
+  for (int i = 0; i < kSongFxBytes; i++) {
+    if (bytes[i] != 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void trackFxClamp(TrackFx *fx) {
+  if (!fx) {
+    return;
+  }
+  if (fx->filter > 2) fx->filter = 2;
+  if (fx->cutoff > 127) fx->cutoff = 127;
+  if (fx->res > 80) fx->res = 80;
+  if (fx->delayDiv > 3) fx->delayDiv = 3;
+  if (fx->delayFb > 70) fx->delayFb = 70;
+  if (fx->delayMix > 100) fx->delayMix = 100;
+  if (fx->reverb > 100) fx->reverb = 100;
+  if (fx->crush > 4) fx->crush = 4;
+  if (fx->drive > 100) fx->drive = 100;
+  if (fx->chorus > 100) fx->chorus = 100;
+  if (fx->tremolo > 100) fx->tremolo = 100;
+}
+
+bool songNeedsV3(const SongData &song) {
+  for (int t = 0; t < kSongTracks; t++) {
+    if (trackFxActive(song.fx[t])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool songNeedsV2(const SongData &song) {
-  if (song.pluginCount > 0 || song.currentVoice > 11) {
+  if (songNeedsV3(song) || song.pluginCount > 0 || song.currentVoice > 11) {
     return true;
   }
   for (int t = 0; t < kSongTracks; t++) {
@@ -125,7 +163,66 @@ int songEncodedSize(const SongData &song) {
   if (!songNeedsV2(song)) {
     return kSongFileBytes;
   }
-  return v2Payload(song) + 2;
+  int n = v2Payload(song) + 2;
+  if (songNeedsV3(song)) {
+    n += kSongTracks * kSongFxBytes;
+  }
+  return n;
+}
+
+static bool refsOk(const SongData &song, int count) {
+  for (int p = 0; p < count; p++) {
+    if (song.plugins[p].id != 0 && (song.plugins[p].id < 12 || song.plugins[p].id > 63)) {
+      return false;
+    }
+    if (!nameOk(song.plugins[p].name)) {
+      return false;
+    }
+  }
+  for (int t = 0; t < kSongTracks; t++) {
+    if (song.loops[t].quantize > 2) {
+      return false;
+    }
+    if (!nameOk(song.loops[t].library) || !nameOk(song.loops[t].name)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void writeRefs(const SongData &song, uint8_t *dst, int &i, int count) {
+  dst[i++] = (uint8_t)count;
+  for (int p = 0; p < count; p++) {
+    dst[i++] = song.plugins[p].id;
+    memcpy(dst + i, song.plugins[p].name, kPluginNameLen);
+    i += kPluginNameLen;
+  }
+  for (int t = 0; t < kSongTracks; t++) {
+    dst[i++] = song.loops[t].enabled ? 1 : 0;
+    dst[i++] = song.loops[t].quantize;
+    memcpy(dst + i, song.loops[t].library, kPluginNameLen);
+    i += kPluginNameLen;
+    memcpy(dst + i, song.loops[t].name, kPluginNameLen);
+    i += kPluginNameLen;
+  }
+}
+
+static void writeFx(const SongData &song, uint8_t *dst, int &i) {
+  for (int t = 0; t < kSongTracks; t++) {
+    const TrackFx &fx = song.fx[t];
+    dst[i++] = fx.filter;
+    dst[i++] = fx.cutoff;
+    dst[i++] = fx.res;
+    dst[i++] = fx.delayDiv;
+    dst[i++] = fx.delayFb;
+    dst[i++] = fx.delayMix;
+    dst[i++] = fx.reverb;
+    dst[i++] = fx.crush;
+    dst[i++] = fx.drive;
+    dst[i++] = fx.chorus;
+    dst[i++] = fx.tremolo;
+    dst[i++] = fx.reserved;
+  }
 }
 
 static int writeBody(const SongData &song, uint8_t *dst, uint8_t version) {
@@ -170,12 +267,14 @@ int songEncode(const SongData &song, uint8_t *dst, int dstLen) {
   if (!dst) {
     return 0;
   }
+  bool v3 = songNeedsV3(song);
   bool v2 = songNeedsV2(song);
-  int need = v2 ? songEncodedSize(song) : kSongFileBytes;
+  int need = songEncodedSize(song);
   if (dstLen < need) {
     return 0;
   }
-  int i = writeBody(song, dst, v2 ? kSongVersionV2 : kSongVersion);
+  uint8_t version = v3 ? kSongVersionV3 : (v2 ? kSongVersionV2 : kSongVersion);
+  int i = writeBody(song, dst, version);
   if (!v2) {
     if (i != kSongFileBytes - 2) {
       return 0;
@@ -187,31 +286,12 @@ int songEncode(const SongData &song, uint8_t *dst, int dstLen) {
   if (count > kSongPluginSlots) {
     count = kSongPluginSlots;
   }
-  dst[i++] = (uint8_t)count;
-  for (int p = 0; p < count; p++) {
-    if (song.plugins[p].id != 0 && (song.plugins[p].id < 12 || song.plugins[p].id > 63)) {
-      return 0;
-    }
-    if (!nameOk(song.plugins[p].name)) {
-      return 0;
-    }
-    dst[i++] = song.plugins[p].id;
-    memcpy(dst + i, song.plugins[p].name, kPluginNameLen);
-    i += kPluginNameLen;
+  if (!refsOk(song, count)) {
+    return 0;
   }
-  for (int t = 0; t < kSongTracks; t++) {
-    if (song.loops[t].quantize > 2) {
-      return 0;
-    }
-    if (!nameOk(song.loops[t].library) || !nameOk(song.loops[t].name)) {
-      return 0;
-    }
-    dst[i++] = song.loops[t].enabled ? 1 : 0;
-    dst[i++] = song.loops[t].quantize;
-    memcpy(dst + i, song.loops[t].library, kPluginNameLen);
-    i += kPluginNameLen;
-    memcpy(dst + i, song.loops[t].name, kPluginNameLen);
-    i += kPluginNameLen;
+  writeRefs(song, dst, i, count);
+  if (v3) {
+    writeFx(song, dst, i);
   }
   if (i != need - 2) {
     return 0;
@@ -263,7 +343,7 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
     return false;
   }
   uint8_t version = src[4];
-  if (version != kSongVersion && version != kSongVersionV2) {
+  if (version != kSongVersion && version != kSongVersionV2 && version != kSongVersionV3) {
     return false;
   }
   memset(song, 0, sizeof(*song));
@@ -314,6 +394,9 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
     return false;
   }
   int expect = kSongV1Payload + 1 + (int)count * (1 + kPluginNameLen) + kSongTracks * (2 + kPluginNameLen * 2);
+  if (version == kSongVersionV3) {
+    expect += kSongTracks * kSongFxBytes;
+  }
   if (expect != payload) {
     return false;
   }
@@ -341,6 +424,24 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
     i += kPluginNameLen;
     if (!nameOk(song->loops[t].library) || !nameOk(song->loops[t].name)) {
       return false;
+    }
+  }
+  if (version == kSongVersionV3) {
+    for (int t = 0; t < kSongTracks; t++) {
+      TrackFx &fx = song->fx[t];
+      fx.filter = src[i++];
+      fx.cutoff = src[i++];
+      fx.res = src[i++];
+      fx.delayDiv = src[i++];
+      fx.delayFb = src[i++];
+      fx.delayMix = src[i++];
+      fx.reverb = src[i++];
+      fx.crush = src[i++];
+      fx.drive = src[i++];
+      fx.chorus = src[i++];
+      fx.tremolo = src[i++];
+      fx.reserved = src[i++];
+      trackFxClamp(&fx);
     }
   }
   if (i != payload) {
