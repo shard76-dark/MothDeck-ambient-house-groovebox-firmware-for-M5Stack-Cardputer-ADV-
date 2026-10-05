@@ -1,5 +1,7 @@
 ## 2026-10-05
 
+The README, the Pages landing page, and `releases/INSTALL.md` say to use earphones or headphones. The Cardputer ADV internal speaker does not play with this firmware. The codec and I2S pins already match M5Unified's ADV speaker profile, and the NS4150B enable is the jack switch on the board rather than a GPIO this image can turn on. No speaker-path change is in this note.
+
 The README, `docs/FORMATS.md`, and `releases/INSTALL.md` now describe this ADV image end to end: boot and splash, drums and kit loading, Mixer and FX, streamed loops, the 8-bit 22050 Hz sample format, the free/total memory row, the SD pack, and the hardware limits of the Stamp-S3A. This tree builds one target, `cardputer-adv`.
 
 The moth splash was blue because `pushImage` sends a `uint16_t` buffer as already byte-swapped RGB565. Amber `0xFD20` left the chip as `0x20FD`, which this panel draws as blue, while the grey background still looks grey. The splash now marks the buffer as logical RGB565, so the moth is amber on grey.

@@ -9,6 +9,10 @@ Two images are produced by `./build.sh`:
 
 Checksums are in `SHA256SUMS` next to the images. The application image starts with the byte `E9`.
 
+## Listening
+
+Use earphones or headphones in the 3.5 mm jack. The Cardputer ADV internal speaker does not work with this firmware. Unplugging the earphones does not move the sound to the speaker.
+
 ## From M5Stack Launcher
 
 Launcher is [bmorcelli/Launcher](https://github.com/bmorcelli/Launcher), installed first with [Launcher Flasher](https://bmorcelli.github.io/Launcher/) or M5Burner as the Cardputer image. Use a Cardputer ADV build of Launcher (the current Cardputer target covers the ADV keyboard).

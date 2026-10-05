@@ -133,6 +133,14 @@
       border-radius: 999px;
     }
     .links a:hover { background: var(--amber); color: #1a1204; }
+    .note {
+      background: var(--panel);
+      border: 1px solid var(--amber);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 18px 0 0;
+    }
+    .note strong { color: var(--amber); }
     footer { color: var(--muted); font-size: 0.9rem; padding: 28px 0 48px; }
     @media (max-width: 720px) {
       .hero { grid-template-columns: 1fr; }
@@ -152,6 +160,7 @@
         <p class="lead">Ambient-house groovebox firmware for the M5Stack Cardputer ADV. Drums, FX, a mixer, SD kits and loops, and BLE MIDI, on the board you already have.</p>
       </div>
     </div>
+    <p class="note"><strong>Use earphones or headphones.</strong> Plug them into the 3.5 mm jack. This firmware does not play through the Cardputer ADV internal speaker. Unplugging the earphones does not switch the sound to the speaker.</p>
     <p class="links">
       <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-">Source on GitHub</a>
       <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md">Flash / install</a>
@@ -170,6 +179,7 @@
     </ul>
 
     <h2>Flash it</h2>
+    <p class="note"><strong>Earphones or headphones required.</strong> The internal speaker on the Cardputer ADV does not work with this firmware. Listen on the 3.5 mm jack.</p>
     <p>Install <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/raw/main/releases/mothdeck-cardputer-adv.bin">mothdeck-cardputer-adv.bin</a> from <a href="https://github.com/bmorcelli/Launcher">Launcher</a>. The full button sequence is in <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md">releases/INSTALL.md</a>.</p>
     <ol class="steps">
       <li>Copy the application image (the file that starts with <code>E9</code>) to a FAT32 microSD card. Do not install the full-flash image from Launcher.</li>
