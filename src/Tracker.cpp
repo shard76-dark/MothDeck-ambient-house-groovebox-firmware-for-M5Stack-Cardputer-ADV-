@@ -76,7 +76,7 @@ int Tracker::UpdateTracker() {
   int mix = 0;
   for (int i = 0; i < 4; i++) {
     int samp;
-    if (loopPlay[i].enabled && loopPlay[i].pcm && loopPlay[i].frames > 1) {
+    if (loopPlay[i].enabled && loopPlay[i].frames > 1 && (loopPlay[i].pcm || loopPlay[i].hold > 0)) {
       samp = ReadLoop(&loopPlay[i]) / div;
     } else {
       samp = voices[i].UpdateVoice() / div;
@@ -84,7 +84,7 @@ int Tracker::UpdateTracker() {
     lastSamples[i] = samp;
     mix += samp;
   }
-  if (audition.enabled && audition.pcm && audition.frames > 1) {
+  if (audition.enabled && audition.frames > 1 && (audition.pcm || audition.hold > 0)) {
     mix += ReadLoop(&audition) / (div + 2);
   }
   if (mix > 32767) {

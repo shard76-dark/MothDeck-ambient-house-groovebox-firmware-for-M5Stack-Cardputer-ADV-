@@ -3,18 +3,23 @@
 #include "WavPcm.h"
 #include <Arduino.h>
 #include <SD.h>
+#include <esp_heap_caps.h>
 #include <string.h>
 #include <stdio.h>
 
 static const int kWin = 1024;
 
 struct PcmWin {
-  int16_t sample[kWin];
+  int16_t *sample;
   int base;
   int count;
 };
 
 struct PcmSlot {
+  // Both windows live in one heap block, allocated when the stream opens.
+  // Keeping them in BSS stole about 21KB before BLE started and the boot
+  // that used to stay on Play reset instead.
+  int16_t *buf;
   PcmWin win[2];
   File file;
   char path[96];
@@ -63,7 +68,32 @@ static int decodeFrames(const uint8_t *p, int n, int channels, int bits, int16_t
   return n;
 }
 
+static void freeBuf(PcmSlot &slot) {
+  if (slot.buf) {
+    heap_caps_free(slot.buf);
+    slot.buf = nullptr;
+  }
+  slot.win[0].sample = nullptr;
+  slot.win[1].sample = nullptr;
+}
+
+static bool allocBuf(PcmSlot &slot) {
+  if (slot.buf) {
+    return true;
+  }
+  slot.buf = (int16_t *)heap_caps_malloc((size_t)kWin * 2 * sizeof(int16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (!slot.buf) {
+    return false;
+  }
+  slot.win[0].sample = slot.buf;
+  slot.win[1].sample = slot.buf + kWin;
+  return true;
+}
+
 static bool fillWin(PcmSlot &slot, PcmWin &win, int start) {
+  if (!win.sample) {
+    return false;
+  }
   if (start < 0) {
     start = 0;
   }
@@ -143,7 +173,10 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
     return 0;
   }
   PcmSlot &slot = slots[slotIndex];
-  memset(&slot.win, 0, sizeof(slot.win));
+  slot.win[0].base = 0;
+  slot.win[0].count = 0;
+  slot.win[1].base = 0;
+  slot.win[1].count = 0;
   slot.seq = 0;
   slot.active = 0;
   slot.want = 0;
@@ -168,7 +201,8 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
   slot.dataOffset = info.dataOffset;
   slot.channels = info.channels;
   slot.bits = info.bits;
-  if (!fillWin(slot, slot.win[0], 0)) {
+  if (!allocBuf(slot) || !fillWin(slot, slot.win[0], 0)) {
+    freeBuf(slot);
     slot.file.close();
     setErr(err, errLen, "Loop read failed");
     return 0;
@@ -196,6 +230,7 @@ void pcmHoldClose(int id) {
   if (slot.file) {
     slot.file.close();
   }
+  freeBuf(slot);
   slot.path[0] = 0;
   slot.frames = 0;
 }
@@ -224,16 +259,17 @@ int16_t pcmHoldAt(int id, int frame) {
   if (active < 0 || active > 1) {
     return 0;
   }
+  int16_t *sample = slot.win[active].sample;
   int base = slot.win[active].base;
   int count = slot.win[active].count;
   uint32_t s2 = slot.seq;
-  if (s1 != s2 || count < 1) {
+  if (s1 != s2 || !sample || count < 1) {
     return 0;
   }
   if (frame < base || frame >= base + count) {
     return 0;
   }
-  return slot.win[active].sample[frame - base];
+  return sample[frame - base];
 }
 
 void pcmHoldService() {

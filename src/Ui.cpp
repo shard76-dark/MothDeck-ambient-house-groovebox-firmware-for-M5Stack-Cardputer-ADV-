@@ -166,9 +166,10 @@ const char *uiBleName() {
 
 void uiBegin() {
   canvas = new M5Canvas(&M5Cardputer.Display);
-  // 8-bit sprite is half the RAM of RGB565 (32KB instead of 64KB). The UI
-  // is flat color, and that heap is what sample loads have to fit in.
-  canvas->setColorDepth(8);
+  // Stay on RGB565. An 8-bit sprite has to be expanded to the panel on every
+  // push, and that path reset the ADV once I2S DMA started after the first
+  // Play frame. The extra 32KB is the cost of a boot that stays up.
+  canvas->setColorDepth(16);
   canvas->createSprite(240, 135);
   canvas->setTextSize(1);
   canvas->setTextColor(COL_TEXT);

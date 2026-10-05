@@ -110,6 +110,11 @@ static void showSplash() {
   const uint16_t bg = 0x1082;
   const uint16_t ink = 0xFD20;
   const int rowBytes = kSplashW / 8;
+  // pushImage of a uint16_t buffer is treated as already byte-swapped unless
+  // this is set. Amber 0xFD20 then leaves the chip as 0x20FD, which this
+  // panel shows as blue. The grey background barely changes when swapped.
+  bool prevSwap = M5Cardputer.Display.getSwapBytes();
+  M5Cardputer.Display.setSwapBytes(true);
   for (int y = 0; y < kSplashH; y++) {
     const uint8_t *row = kSplashMoth + y * rowBytes;
     for (int x = 0; x < kSplashW; x++) {
@@ -118,6 +123,7 @@ static void showSplash() {
     }
     M5Cardputer.Display.pushImage(0, y, kSplashW, 1, line);
   }
+  M5Cardputer.Display.setSwapBytes(prevSwap);
   uint32_t start = millis();
   while ((uint32_t)(millis() - start) < 1000) {
     delay(20);
