@@ -2,18 +2,256 @@
 
 MothDeck is a 4-track sampler and tracker for the [M5Stack Cardputer ADV](https://docs.m5stack.com/en/core/Cardputer-Adv). It is a sibling of [MothOS](https://github.com/MothSynths): same song file, same BLE MIDI map, same voice and effect model, redrawn for the ADV's 240×135 colour screen and 56-key keyboard.
 
-Everything it uses is on the board. There is no wiring. The speaker, headphone jack, display, keyboard, and microSD are brought up by M5Unified. A card is optional; the built-in drums, sound effects, and instruments are synthesized at build time and are not recordings of anyone else's samples.
+This repository is the Cardputer ADV firmware. The PlatformIO target is `cardputer-adv`. `cardputer-adv-dev` is that same firmware with SD and speaker logs on USB serial. The board id in `platformio.ini` is `esp32-s3-devkitc-1` because PlatformIO has no Stamp-S3A entry; the pins in `include/BoardConfig.h` are the ADV. There is no second ADV build.
 
-## Features
+Everything it uses is on the board. There is no wiring. The speaker, headphone jack, display, keyboard, and microSD are brought up by M5Unified. A card is optional. The built-in drums, sound effects, and tonal instruments are synthesized when the firmware is built. They are not recordings of anyone else's samples.
 
-- 4 tracks, 4 patterns, up to 256 steps (16th notes). Step timing matches MothOS: 44100 Hz, one step is `11025 / beats-per-second` samples.
-- 12 built-in instruments plus Loops: drums (kick, snare, hats, and the rest of a kit), sound effects, sine, square, saw, triangle, organ, pluck, bell, flute, bass, pad. Sine through pad are synthesized per sample. Drums and effects are baked one-shots, unsigned 8-bit mono at 22050 Hz, played at their recorded pitch. SD kits replace the drum bank. Loops streams card loops in time with the BPM.
-- Per-track delay, low pass, phaser, retrig, overdrive, pitch, whoosh, and chord.
-- BLE MIDI peripheral, default name `MothSynth` (change it on the Settings page). The name is stored in NVS.
-- Song slots `/moth/slot1.mos` … `slot4.mos`. A song that stays on the built-in instruments is a 3155-byte MothOS version 1 file. Plugins and loops bump the file to version 2.
-- Instrument folders and loop libraries loaded from the card, assigned per track, remembered in the song, and ignored cleanly when the file is missing or bad.
-- Audio runs on its own FreeRTOS task on core 1. The UI never writes the tracker. The speaker is fed 256-frame blocks only while fewer than two blocks are queued.
-- Battery percent and speaker volume on the status line. The ADV reads the pack on GPIO10.
+## Flash it
+
+See [releases/INSTALL.md](releases/INSTALL.md) for the button sequence. Short version:
+
+1. Copy `releases/mothdeck-cardputer-adv.bin` (the file that starts with `E9`) to a FAT32 card.
+2. Boot [Launcher](https://github.com/bmorcelli/Launcher), press Enter on its splash, and install that file from the SD browser.
+3. The next boot that follows the boot selection starts MothDeck.
+
+`mothdeck-cardputer-adv-full.bin` is a USB flash of the whole chip. It replaces Launcher. Checksums for both images and for `mothdeck-sd-pack.zip` are in `releases/SHA256SUMS`.
+
+Unzip `releases/mothdeck-sd-pack.zip` onto the card root when you want the extra kits, loops, and plugin instruments. You should end up with a `moth` folder at the top of the card. The built-in kit does not need the card.
+
+## Boot
+
+Power-on turns the backlight on, draws an amber moth on a grey panel for about one second, then draws the Play page. The splash does not wait for a key. After Play is on screen, the firmware scans the card, starts the ES8311 speaker, and starts BLE. That order is what keeps the panel lit and the speaker clocked: the codec is not started inside `M5.begin`, and GPIO42 is the codec data line, not an amplifier pin to drive high.
+
+The moth is amber (`0xFD20`) on grey (`0x1082`). An earlier image sent that amber buffer as already byte-swapped RGB565, so the panel showed blue. The splash now marks the buffer as logical RGB565 before `pushImage`. The UI sprite stays RGB565 as well. An 8-bit sprite had to be expanded through the SPI DMA path on every frame, and the loop windows used to sit in static RAM before the speaker and BLE started. Together those reset the ADV a moment after Play. The windows are allocated only when a loop opens. The image that stays on Play is the one in `releases/`.
+
+Hold Esc (the `` ` `` key) or the front button for about 0.7 seconds to leave for Launcher, including during that boot. Exit is offered only when the `APP_TEST` slot holds a real ESP32-S3 app image (header magic `E9`). Otherwise the menu entry is grey, the page says "Launcher not found", and the hold does not erase `otadata`. Details are in [releases/INSTALL.md](releases/INSTALL.md).
+
+## What a session looks like
+
+Tab moves between pages: Play, Instrument, FX, Mixer, Song, Loops, MIDI, Settings, and Exit when Launcher is present. `` ` `` on any page other than Play returns to Play. On Play, a tap of `` ` `` opens the page list. Space is play and stop, except while a menu is open.
+
+There are 4 tracks and 4 patterns, up to 256 steps of 16th notes. Step timing matches MothOS: the mix is 44100 Hz, and one step is `11025 / beats-per-second` samples. Each track keeps its own instrument. Selecting another track recalls that track's instrument. It does not copy the previous one across.
+
+Audio runs on its own task on core 1. The UI reads a snapshot. It does not write the tracker from the draw path. The speaker is fed 256-frame blocks while fewer than two blocks are queued.
+
+## Drums, kits, and the other instruments
+
+The twelve built-in instruments are Drums, SFX, Sine, Square, Saw, Tri, Organ, Pluck, Bell, Flute, Bass, and Pad. The row after Pad is Loops. Plugin folders from the card appear under those.
+
+Drums are twelve different hits, one per pad, played at the recorded pitch. Changing octave plays the same piece again. It does not speed the sample up. The upper row and the lower row of the same key are the same pad.
+
+| Key | Pad | What you hear |
+| --- | --- | --- |
+| C | Kick | Sub with a click |
+| C# | Rim | Short stick |
+| D | Snare | Noise snare |
+| D# | Clap | Layered clap |
+| E | Closed hat | Bright short noise |
+| F | Open hat | Longer hat |
+| F# | Low tom | Pitched tom |
+| G | Tom | Higher tom |
+| G# | Shaker | Soft noise |
+| A | Ride | Long metallic noise |
+| A# | Snap | Short transient |
+| B | Crash | Soft cymbal |
+
+On the Instrument page, `,` and `/` load the previous or next kit onto Drums. Fn+`,` and Fn+`/` do the same. The line under the list is the kit name. Index 0 is always the built-in Ambient House kit in flash. Further kits are folders under `/moth/drums`. If the card has none, the toast says "No SD kits". `R` rescans instruments, kits, and loops. Enter assigns the highlighted row to the selected track only.
+
+SFX is twelve different one-shots (riser, downlifter, zap, sweep, impact, noise, blip, siren, reverse, drop, bubbles, whoosh), one per key. Those do follow the octave. Sine through Pad are synthesized per sample: sine is a sine, square is rounded, saw is a detuned lead, triangle is a triangle, organ is drawbar sines, pluck closes a filter and decays, bell is decaying FM, flute is a slow sine with breath, bass is a sub plus detuned saws, and pad attacks slowly, stays detuned, and holds.
+
+## Mixer and FX
+
+These are different pages.
+
+FX is the insert on the selected track: filter (off, low pass, high pass), cutoff, resonance, delay, feedback, mix, reverb send, bitcrush, drive, chorus, and tremolo. Fn+`;` and Fn+`.` move the row. Fn+`,`, Fn+`/`, and Enter change the value. Delay follows the BPM as 1/32, 1/16, or 1/8. Each track keeps its own insert. Inserts are saved only when one is in use, which makes the song file version 3. The Play-page keys A, F, K, and L still cycle the older 0–2 low pass, retrig, wobble, and echo on the selected track.
+
+Mixer shows all four tracks as volume faders, with the instrument name on each and the selected track highlighted. Fn+`;` raises the selected track and Fn+`.` lowers it (0–8). Fn+`,` and Fn+`/` move between tracks. `1`–`4` jump to a track. `M` mutes the selected track and `S` solos it. Volume is stored in every song version.
+
+## Loops
+
+Two ways to use card audio, both reading the same `/moth/loops` libraries.
+
+The Loops page lists libraries and entries. Enter launches the row onto the selected track. `A` auditions. `Q` cycles quantize: now, beat, or bar. `S` stops the loop on the track. `R` rescans. Fn+`,` and Fn+`/` change library.
+
+The Loops instrument (the row after Pad, id 63) is assigned like any other instrument. Notes on that track start one of the audio loops, wrapping if there are fewer loops than keys, lined up with the current bar. Playback follows the project BPM, so a faster song advances the file faster.
+
+A loop is not copied into the heap. Playback reads a short window from the card (1024 frames, double buffered, up to four streams, five hold slots). The window is allocated when the loop opens and freed when it closes. Launch can wait for the next beat or the next bar.
+
+## Memory
+
+Settings prints Free RAM as free heap over the heap size, for example `86/312k`. That is internal SRAM still unused, over the heap the allocator knows about. It is not flash, and it is not a measurement of the whole chip. The legend on that row is the largest contiguous block a load can take. BLE, the screen buffer, and the audio DMA already sit in that heap, so the free number is small on a healthy boot. A `P` suffix would be free PSRAM. This Stamp-S3A has none, so the suffix stays off.
+
+Loads that do not fit say how many kilobytes they need and how many are free (`Need Nk, Mk free`). The previous kit or plugin stays selected. Without PSRAM the caps are:
+
+| What | Limit |
+| --- | --- |
+| Plugin sample | 4096 frames, 4 loaded at once |
+| Drum kit | 8000 frames total, 1800 per pad, one kit cache |
+| Loop streams | 4 open, each a small window, not the whole file |
+
+An allocation also leaves about 8KB of internal heap for the rest of the system. A corrupt manifest or WAV is reported on the page and skipped.
+
+## Sample format
+
+Built-in drums, built-in sound effects, the SD pack, and the default output of `tools/wav_to_instrument.py` and `tools/wav_to_loop.py` are unsigned 8-bit mono PCM at 22050 Hz. 128 is silence. That is about 22 KB/s. A 44.1 kHz stereo 16-bit file is about 176 KB/s. The mix stays 44100 Hz and stretches 22050 up to it. Prefer mono. A 16-bit WAV still loads, and stereo is folded to mono. `--raw` on the instrument converter writes little-endian int16 at the source rate.
+
+Regenerate the flash tables with `python3 tools/gen_samples.py` and the card pack with `python3 tools/make_sd_pack.py`.
+
+## Card layout
+
+```
+/moth/slot1.mos … slot4.mos
+/moth/instruments/<folder>/manifest.txt
+/moth/instruments/<folder>/sample.wav    (or sample.raw)
+/moth/drums/<kit>/manifest.txt
+/moth/drums/<kit>/*.wav
+/moth/loops/<library>/manifest.txt
+/moth/loops/<library>/*.wav              (or raw, or .pat)
+```
+
+The pack in `releases/mothdeck-sd-pack.zip` contains:
+
+| Path | What it is |
+| --- | --- |
+| `moth/drums/808` | 808-style kit |
+| `moth/drums/dusty` | Ambient kit, dulled |
+| `moth/loops/house` | Four one-bar loops at 120 BPM (kick, hats, chord, sub), 44100 frames, about 44 KB each |
+| `moth/instruments/ep` | Electric piano, one-shot |
+| `moth/instruments/reese` | Detuned saw bass, looping |
+| `moth/instruments/saw-lead` | Two detuned saws, looping |
+| `moth/instruments/soft-pad` | Slow detuned sines, looping |
+| `moth/instruments/house-pluck` | Short pluck, one-shot |
+| `moth/instruments/air-bell` | FM bell, one-shot |
+
+Kit pad order is kick, rim, snare, clap, hat, openhat, perc, tom, shaker, ride, snap, crash. `perc.wav` is the low tom. Each pad file is already inside the 1800-frame and 8000-frame cache. Plugin samples in the pack are 3600 frames at 22050 Hz, under the 4096-frame cap. A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines.
+
+```bash
+python3 tools/wav_to_instrument.py take.wav card/moth/instruments/take --name take --root 60
+python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \
+    card/moth/loops/house kick.wav hats.wav
+```
+
+Those two commands resample to 22050 Hz and write 8-bit mono WAV. Song, instrument, loop, kit, and pattern bytes are specified in [docs/FORMATS.md](docs/FORMATS.md).
+
+Plugins get ids 12–62. Id 63 is Loops. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. A song that stays on the built-in instruments is a 3155-byte MothOS version 1 file. Plugins and loops make version 2. An insert effect makes version 3.
+
+## Keyboard
+
+The drawings follow `src/Ui.cpp` and the 4×14 matrix in M5Cardputer `Keyboard.h`. Regenerate them with `python3 tools/make_keymap.py`. Each key shows the unshifted action. A caption on the key is the Fn action where that differs.
+
+![Play / Tracker](docs/keymap-play.png)
+
+![Instrument](docs/keymap-inst.png)
+
+![FX](docs/keymap-fx.png)
+
+![Mixer](docs/keymap-mixer.png)
+
+![Song](docs/keymap-song.png)
+
+![Loops](docs/keymap-loops.png)
+
+![MIDI](docs/keymap-midi.png)
+
+![Settings](docs/keymap-settings.png)
+
+![Exit](docs/keymap-exit.png)
+
+Esc is the grave key. The arrow legends are `;` up, `,` left, `.` down, `/` right, and they only move something while Fn is held, except on the Instrument page where `,` and `/` load kits by themselves. Fn+`-` and Fn+`=` change speaker volume by 12 on every page. Fn plus any other key still does that key's normal action.
+
+Ctrl or Shift substitutes the key's shifted glyph before the UI lowercases it. Letter commands still match. Digit and punctuation commands do not: Ctrl+1–8 is `!@#$%^&*` and does not clear a track or pattern, and Shift+`,` is `<` rather than the high C. Ctrl+N still starts a new song.
+
+| Keys | Action |
+| --- | --- |
+| Tab | Next page. Shift+Tab or Ctrl+Tab goes to the previous page. While the page list is open, Tab moves the highlight and leaves the list up |
+| Space | Play / stop. While a menu is open, Space does nothing |
+| `` ` `` tap | On Play, toggle the page list. On any other page, return to Play. While the page list, name editor, or Exit confirm is open, `` ` `` cancels that menu |
+| `` ` `` or the front button, held ~0.7s | Exit to Launcher, including during boot |
+| 1–4 | Select track. On Song, select a slot and report full or empty |
+| 5–8 | Select pattern. On Song, these keys do nothing |
+| 9 / 0 | On Instrument, previous / next instrument. Elsewhere, previous / next BPM slot |
+| `-` / `=` | Nudge the current BPM slot by 1 (40–240). With Fn, speaker volume ±12 |
+| Backspace | On Play, clear the step under the cursor. In the name editor, delete one character. On the page list or Exit confirm, cancel back to Play. On any other page, return to Play |
+| Ctrl+N | New song at the current length, without advancing that length |
+
+### Play
+
+`Z X C V B N M ,` are C D E F G A B C for the current octave. Comma is the C above that octave. `S D G H J` are C# D# F# G# A#. `Q` through `]` is the next octave, chromatic. Shift adds an octave on letter notes, Alt adds another, Opt subtracts one. They stack and clamp to four octaves, MIDI C2–B5. On drums, both octaves of a key play the same pad at the recorded pitch.
+
+| Key | Action |
+| --- | --- |
+| A | Low pass, cycles 0–2 |
+| F | Retrig, cycles 0–2 |
+| K | Wobble, cycles 0–2 |
+| L | Echo, cycles 0–2 |
+| `;` | Sends note-length `L` with the stored length. It does not step. The voice stores 4 minus that value. Fn+`;` moves the page list up when the list is open |
+| `'` | Toggle sampler mode |
+| `\` | Cycle the octave |
+| `.` | Copy pattern. Fn+`.` moves the page list down when the list is open |
+| `/` | Paste pattern. Fn+`/` does nothing on Play |
+| Enter | No action |
+
+Played keys are also sent as BLE MIDI note-on on the selected track's channel.
+
+While the page list is open it takes every key. Fn+`;` and Fn+`.` move the highlight, Tab does the same, Enter stays on the highlighted page, and `` ` `` or Backspace returns to Play. Notes, space, track, pattern, and BPM keys do nothing until the list closes.
+
+### Instrument
+
+`9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track only. The four names across the top of the page are tracks 1–4. `R` rescans. `,` and `/` load drum kits, as described above. 1–4 still select the track and 5–8 the pattern.
+
+### FX
+
+Described above. `` ` `` or Backspace returns to Play.
+
+### Mixer
+
+Described above. `` ` `` or Backspace returns to Play.
+
+### Song
+
+| Key | Action |
+| --- | --- |
+| 1–4 | Select the slot |
+| 5–8 | No action |
+| S / L / X / T | Save, load, delete, slot status |
+| N | Advance the length (32, 64, 96, 128) and start a new song. From boot the first press is 64 steps |
+| C / V / G | Copy pattern, paste pattern, paste all patterns |
+| M | Toggle song mode and pattern mode |
+| H | Toggle master volume |
+| B | Next BPM slot |
+| Enter | Load the selected slot |
+
+`9` and `0` still move the BPM slot. Ctrl+N starts a new song at the current length and does not advance it.
+
+### Loops
+
+Described above. Fn+`;` moves the row up and will not pass row 8. Fn+`.` moves down to the last entry.
+
+### MIDI
+
+The page shows connection, the advertised name, and the channel map. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
+
+### Settings
+
+Rows: speaker, brightness, BLE name, battery, free RAM, card. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising. On any other row, Enter does nothing. While the name editor is open it takes every key: glyphs are lowercased and appended, up to 16, Backspace deletes one character, and `` ` `` cancels. Space does not play and is not typed.
+
+### Exit
+
+The Exit page is a confirm, and it is in the page list only when a Launcher image is detected. Enter clears the OTA boot selection and restarts toward Launcher. `` ` `` or Backspace returns to Play. Notes, space, track, pattern, and BPM keys do nothing on this page.
+
+## MIDI
+
+Advertised as a BLE MIDI peripheral. The default name is `MothSynth`. Change it on Settings. The name is stored in NVS. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
+
+| Message | Map |
+| --- | --- |
+| Note on/off, channel 1–4 | Tracks 1–4. Notes 36–83 are C2–B5 |
+| CC 0 / CC 32 bank | Instrument. MSB 0–11 built-in, 12–62 plugin id, 63 Loops. A non-zero LSB still spreads the 14-bit value across the 12 built-ins, as MothOS does |
+| CC 1 mod | Low pass |
+| CC 7 / CC 39 volume | 14-bit, mapped to voice volume 0–8 |
+| Pitch bend | Per channel, ± the voice pitch ratio |
+
+Keypad notes are sent back out as note-on on the track channel. Bank and volume are sent when the matching control changes.
 
 ## Build
 
@@ -36,175 +274,17 @@ Host tests alone:
 bash tools/run_tests.sh
 ```
 
-The dev environment `cardputer-adv-dev` adds serial logs for the card and the speaker.
+The image is built `qio_qspi` at 80 MHz. That is the memory type on the Arduino-ESP32 `m5stack_cardputer` board (QIO flash, QSPI PSRAM type, PSRAM left disabled) and on Launcher's Cardputer environment. `-DBOARD_HAS_PSRAM` is not set, so M5GFX does not prefer a PSRAM heap that is not there. `qio_opi` would boot-init octal PSRAM on GPIO33–37, which this board uses for the display.
 
-The image is built `qio_qspi` at 80 MHz. That is the memory type on the Arduino-ESP32 `m5stack_cardputer` board (QIO flash, QSPI PSRAM type, PSRAM left disabled) and on Launcher's Cardputer environment. The Stamp-S3A is an ESP32-S3FN8: 8MB flash and no PSRAM. `qio_opi` would boot-init octal PSRAM on GPIO33–37, which this board uses for the display. Sample and loop caches call `psramFound()` and use internal RAM when no PSRAM answers, so the same binary still uses PSRAM if a later module has it. `-DBOARD_HAS_PSRAM` is not set, so M5GFX does not prefer a PSRAM heap that is not there.
+`partitions/cardputer_adv_8MB.csv` is the development table used by a USB flash and by the linker. Launcher does not use it. Launcher installs the application image into an OTA slot after its own `APP_TEST` image.
 
-## Install from Launcher
+## Hardware
 
-See [releases/INSTALL.md](releases/INSTALL.md) for the button-by-button steps. Short version: copy `mothdeck-cardputer-adv.bin` (the file that starts with `E9`) to a FAT32 card, boot Launcher, press Enter on the splash, and install the file from the SD browser.
+Cardputer ADV: Stamp-S3A (ESP32-S3FN8, 8MB flash, no onboard PSRAM), ST7789 240×135, TCA8418 keyboard at I2C `0x34` (SDA 8, SCL 9), ES8311 on the same I2C bus at `0x18`. GPIO42 is the codec data line (DSDIN), GPIO41 is bit clock, GPIO43 is word select, and GPIO46 is the codec microphone data. The NS4150B follows the codec headphone driver. microSD is a separate SPI bus (SCK 40, MISO 39, MOSI 14, CS 12) with GPIO5 held high before mount. Display pins are MOSI 35, SCLK 36, CS 37, DC 34, RST 33, backlight GPIO38. Battery ADC is GPIO10. The front button is GPIO0. Grove (GPIO1 / GPIO2) is left unused. The IMU is left off.
 
-### Why Exit works this way
+Octal PSRAM uses GPIO33–37. Those pins are the display, so a PSRAM module cannot be added to this Stamp-S3A, and the firmware stays on `qio_qspi`. Both hardware SPI controllers are already in use, one for the display and one for the microSD. A Grove SPI RAM board is not a supported upgrade. Extra sample room is the microSD: kits and short plugin samples stay in a small RAM cache, and loops are read from the card while they play.
 
-Launcher lives in an `APP_TEST` partition and points `otadata` at the installed app (`launcherPartitionSetOtaBoot`). `esp_ota_set_boot_partition()` cannot select that test slot. In ESP-IDF 5.5 the call only erases `otadata` for a factory image; any other subtype is reduced to its low nibble, and `0x20` (TEST) becomes OTA slot 0. Calling it would boot the wrong image.
-
-Exit is offered only when an `APP_TEST` slot holds a valid ESP32-S3 app image (header magic `E9`). That is the slot Launcher uses for itself. The check reads the partition table and the first 24 bytes of that image. A full-flash image, an erased slot, or a corrupt header leaves Exit greyed out with "Launcher not found", and holding Esc does not restart or erase `otadata`.
-
-When the image checks out, Exit erases `otadata`, which is what `launcherPartitionClearOtaBoot` does, then restarts. It does not call `esp_ota_set_boot_partition()` on that slot.
-
-Startup turns the backlight on, shows the moth splash for about a second, then draws the Play page before it scans the card, starts the speaker, or starts BLE. `M5.begin` would otherwise leave the backlight off after clearing the panel. The splash is `docs/splash-moth.png` (regenerate with `python3 tools/make_splash.py`).
-
-When Launcher is present, hold Esc (`` ` ``) or the front button for about 0.7 seconds, or confirm the Exit page. The same hold during MothDeck's own boot runs the exit before the audio task starts. After the restart, press Enter on Launcher's splash ("Press the button to enter the Launcher!") to stay there. Doing nothing on that splash starts the installed app again whenever the boot selection still names it. When Launcher is not present, the hold shows "Launcher not found" and continues in MothDeck.
-
-## Keyboard
-
-The drawings follow `src/Ui.cpp` and the 4×14 matrix in M5Cardputer `Keyboard.h`. Regenerate them with `python3 tools/make_keymap.py` (needs CairoSVG). Each key shows the unshifted action. A caption on the key is the Fn action where that differs.
-
-![Play / Tracker](docs/keymap-play.png)
-
-![Instrument](docs/keymap-inst.png)
-
-![FX](docs/keymap-fx.png)
-
-![Mixer](docs/keymap-mixer.png)
-
-![Song](docs/keymap-song.png)
-
-![Loops](docs/keymap-loops.png)
-
-![MIDI](docs/keymap-midi.png)
-
-![Settings](docs/keymap-settings.png)
-
-![Exit](docs/keymap-exit.png)
-
-Esc is the grave key. The arrow legends are `;` up, `,` left, `.` down, `/` right, and they only move something while Fn is held. Fn+`-` and Fn+`=` change speaker volume by 12 on every page. Fn plus any other key still does that key's normal action.
-
-Ctrl or Shift substitutes the key's shifted glyph before the UI lowercases it. Letter commands still match. Digit and punctuation commands do not: Ctrl+1–8 is `!@#$%^&*` and does not clear a track or pattern, and Shift+`,` is `<` rather than the high C. Ctrl+N still starts a new song.
-
-| Keys | Action |
-| --- | --- |
-| Tab | Next page. Shift+Tab or Ctrl+Tab goes to the previous page. While the page list is open, Tab moves the highlight and leaves the list up |
-| Space | Play / stop. While a menu is open, Space does nothing |
-| `` ` `` tap | On Play, toggle the page list. On any other page, return to Play. While the page list, name editor, or Exit confirm is open, `` ` `` cancels that menu |
-| `` ` `` or the front button, held ~0.7s | Exit to Launcher, including during boot |
-| 1–4 | Select track. On Song, select a slot and report full or empty |
-| 5–8 | Select pattern. On Song, these keys do nothing |
-| 9 / 0 | On Instrument, previous / next instrument. Elsewhere, previous / next BPM slot |
-| `-` / `=` | Nudge the current BPM slot by 1 (40–240). With Fn, speaker volume ±12 |
-| Backspace | On Play, clear the step under the cursor. In the name editor, delete one character. On the page list or Exit confirm, cancel back to Play. On any other page, return to Play |
-| Ctrl+N | New song at the current length, without advancing that length |
-
-### Play
-
-`Z X C V B N M ,` are C D E F G A B C for the current octave. Comma is the C above that octave. `S D G H J` are C# D# F# G# A#. `Q` through `]` is the next octave, chromatic. Shift adds an octave on letter notes, Alt adds another, Opt subtracts one. They stack and clamp to four octaves, MIDI C2–B5.
-
-| Key | Action |
-| --- | --- |
-| A | Low pass, cycles 0–2 |
-| F | Retrig, cycles 0–2 |
-| K | Wobble, cycles 0–2 |
-| L | Echo, cycles 0–2 |
-| `;` | Sends note-length `L` with the stored length. It does not step. The voice stores 4 minus that value. Fn+`;` moves the page list up when the list is open |
-| `'` | Toggle sampler mode |
-| `\` | Cycle the octave |
-| `.` | Copy pattern. Fn+`.` moves the page list down when the list is open |
-| `/` | Paste pattern. Fn+`/` does nothing on Play |
-| Enter | No action |
-
-Played keys are also sent as BLE MIDI note-on on the selected track's channel.
-
-While the page list is open it takes every key. Fn+`;` and Fn+`.` move the highlight, Tab does the same, Enter stays on the highlighted page, and `` ` `` or Backspace returns to Play. Notes, space, track, pattern, and BPM keys do nothing until the list closes.
-
-### Instrument
-
-`9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track only, and that instrument stays on the track. Selecting another track recalls the instrument already stored there. The four names across the top of the page are tracks 1–4. `R` rescans instruments, drum kits, and loops. `,` and `/` (also Fn+`,` and Fn+`/`) load the previous or next drum kit onto the Drums instrument. The line under the list is the kit name. The first kit is the built-in one. Further kits are folders under `/moth/drums`. If the card has none, the toast says "No SD kits". The row after Pad is Loops: notes on that track start an SD loop lined up to the bar. 1–4 still select the track and 5–8 the pattern.
-
-### FX
-
-Eleven insert rows for the selected track: filter (off, low pass, high pass), cutoff, resonance, delay, feedback, mix, reverb send, bitcrush, drive, chorus, and tremolo. Fn+`;` and Fn+`.` move the row. Fn+`,`, Fn+`/`, and Enter change the value. Delay time follows the BPM as 1/32, 1/16, or 1/8, and a division that would be longer than the history buffer is shortened. Tremolo is a mono level wobble. Each track keeps its own inserts. They are saved in the song (version 3). Tracks with no insert stay a version 1 or 2 file. The Play-page keys A, F, K, and L still cycle the older 0–2 effects on the selected track.
-
-### Mixer
-
-All four tracks are vertical volume faders, with the instrument name on each and the selected track highlighted. Fn+`;` raises the selected track's volume and Fn+`.` lowers it (0–8). Fn+`,` selects the previous track and Fn+`/` the next. `1`–`4` still jump to a track. `M` mutes the selected track and `S` solos it. `` ` `` or Backspace returns to Play, the same as the other pages. Volume is stored with the song in every file version.
-
-### Song
-
-| Key | Action |
-| --- | --- |
-| 1–4 | Select the slot |
-| 5–8 | No action |
-| S / L / X / T | Save, load, delete, slot status |
-| N | Advance the length (32, 64, 96, 128) and start a new song. From boot the first press is 64 steps |
-| C / V / G | Copy pattern, paste pattern, paste all patterns |
-| M | Toggle song mode and pattern mode |
-| H | Toggle master volume |
-| B | Next BPM slot |
-| Enter | Load the selected slot |
-
-`9` and `0` still move the BPM slot. Ctrl+N starts a new song at the current length and does not advance it.
-
-### Loops
-
-Enter launches the row onto the selected track. `A` auditions. `Q` cycles quantize: now, beat, bar. `S` stops the loop on the track. `R` rescans `/moth/loops`. Fn+`;` moves the row up and will not pass row 8. Fn+`.` moves down to the last entry. Fn+`,` and Fn+`/` change library.
-
-### MIDI
-
-The page shows connection, the advertised name, and the channel map. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
-
-### Settings
-
-Rows: speaker, brightness, BLE name, battery, free RAM, card. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising. On any other row, Enter does nothing. While the name editor is open it takes every key: glyphs are lowercased and appended, up to 16, Backspace deletes one character, and `` ` `` cancels. Space does not play and is not typed.
-
-Free RAM is internal heap still unused, over the heap size (`86/312k` means 86KB free of a 312KB heap). It is not flash, and it is not the whole chip. The legend on that row is the largest contiguous block a load can take. BLE, the screen buffer, and the audio DMA already sit in that heap, so the free number is small even when the program is fine. A `P` suffix is free PSRAM, which this Stamp-S3A does not have.
-
-### Exit
-
-The Exit page is a confirm, and it is in the page list only when a Launcher image is detected. Enter clears the OTA boot selection and restarts toward Launcher. `` ` `` or Backspace returns to Play. Notes, space, track, pattern, and BPM keys do nothing on this page. Holding `` ` `` or the front button exits from any screen when Launcher is present. When it is not, the menu entry is grey, the page says "Launcher not found", and the hold does not change the boot selection.
-
-## MIDI
-
-Advertised as a BLE MIDI peripheral. Apple-style timestamped packets, same codec as MothOS.
-
-| Message | Map |
-| --- | --- |
-| Note on/off, channel 1–4 | Tracks 1–4. Notes 36–83 are C2–B5 |
-| CC 0 / CC 32 bank | Instrument. MSB 0–11 built-in, 12–62 plugin id, 63 Loops. A non-zero LSB still spreads the 14-bit value across the 12 built-ins, as MothOS does |
-| CC 1 mod | Low pass |
-| CC 7 / CC 39 volume | 14-bit, mapped to voice volume 0–8 |
-| Pitch bend | Per channel, ± the voice pitch ratio |
-
-Keypad notes are sent back out as note-on on the track channel. Bank and volume are sent when the matching control changes.
-
-## Card layout
-
-```
-/moth/slot1.mos … slot4.mos
-/moth/instruments/<folder>/manifest.txt
-/moth/instruments/<folder>/sample.wav    (or sample.raw)
-/moth/drums/<kit>/manifest.txt
-/moth/drums/<kit>/*.wav
-/moth/loops/<library>/manifest.txt
-/moth/loops/<library>/*.wav              (or raw, or .pat)
-```
-
-`releases/mothdeck-sd-pack.zip` is the card pack (kits, loops, and plugin instruments). Unzip it onto the card root. Regenerate it with `python3 tools/make_sd_pack.py`. `python3 tools/gen_sd_examples.py` still writes a smaller `sd-card-example/moth` tree.
-
-Built-in drums, built-in sound effects, and the files in that pack are unsigned 8-bit mono PCM at 22050 Hz. 128 is silence. That is about 22 KB/s, where 44.1 kHz stereo 16-bit is about 176 KB/s. The speaker mix stays 44100 Hz and stretches these files up to it. `tools/wav_to_instrument.py` and `tools/wav_to_loop.py` resample to 22050 Hz and write that 8-bit WAV. `--raw` on the instrument converter stays little-endian int16 at the source rate. A 16-bit WAV still loads, and stereo is mixed to mono. The low tom in a kit folder is `perc.wav`.
-
-```bash
-python3 tools/wav_to_instrument.py take.wav card/moth/instruments/take --name take --root 60
-python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \
-    card/moth/loops/house kick.wav hats.wav
-```
-
-The instrument and loop manifests, the version 2 and version 3 song tails, and the pattern file are specified in [docs/FORMATS.md](docs/FORMATS.md).
-
-Plugins get ids 12–62. Id 63 is the Loops instrument. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. Loops stream from the card through a short window (four streams). Instrument PCM may recycle the oldest of four slots. Without PSRAM a plugin sample is at most 4096 frames and a drum kit is at most 8000 frames, 1800 per pad. Both are read straight from the WAV, not copied twice. A failed load says how many kilobytes it needed and how many were free. A corrupt manifest or WAV is reported on the page and skipped.
-
-Built-in drums, one pad per key, at the recorded pitch on every octave: C kick, C# rim, D snare, D# clap, E closed hat, F open hat, F# low tom, G tom, G# shaker, A ride, A# snap, B crash. The same key an octave higher plays that same piece again. It does not transpose it. SFX is twelve different effects (riser, downlifter, zap, sweep, impact, noise, blip, siren, reverse, drop, bubbles, whoosh), one per key, and those do follow the octave. Sine is a plain sine. Square is a rounded square. Saw is a detuned saw lead. Tri is a triangle. Organ is drawbar sines. Pluck is a closing filter with a fast decay. Bell is decaying FM. Flute is a slow sine with breath and vibrato. Bass is a sub sine plus detuned saws, lowpassed. Pad is a slow attack, detuned and dark, and it holds longer than the other tones.
-
-Loops resample to the project BPM by advancing the source faster when the project is faster. Launch can wait for the next beat or the next bar.
+The splash art is `docs/splash-moth.png`. Regenerate the embedded mask with `python3 tools/make_splash.py`.
 
 ## Project layout
 
@@ -212,18 +292,12 @@ Loops resample to the project BPM by advancing the source faster when the projec
 include/     headers, including the codecs the host tests compile
 src/         firmware
 test/        host tests (MIDI, song v1/v2/v3, per-track FX, manifests, WAV, synth render)
-tools/       sample generator, WAV converters, test runner, build helper
-docs/        file formats
+tools/       sample generator, WAV converters, keymap and splash tools, test runner
+docs/        file formats, keymap drawings, splash art
 sd-card-example/
 partitions/  development table, not used by Launcher
-releases/    application image, full-flash image, checksums, install notes
+releases/    application image, full-flash image, SD pack, checksums, install notes
 ```
-
-## Hardware notes
-
-Cardputer ADV: Stamp-S3A (ESP32-S3FN8, 8MB flash, no onboard PSRAM), ST7789 240×135, TCA8418 keyboard at I2C `0x34` (SDA 8, SCL 9), ES8311 on the same I2C bus. GPIO42 is the codec data line (DSDIN), GPIO41 is bit clock, GPIO43 is word select, and GPIO46 is the codec microphone data. The NS4150B follows the codec headphone driver. microSD is a separate SPI bus (SCK 40, MISO 39, MOSI 14, CS 12) with GPIO5 held high before mount. Battery ADC is GPIO10. The front button is GPIO0. Grove (GPIO1 / GPIO2) is left unused. The IMU is left off.
-
-There is no practical way to add the chip's own PSRAM. Those pins are GPIO33–37, which this board uses for the display, so an octal PSRAM module on the Stamp-S3A would fight the panel and `qio_opi` must stay off. Both hardware SPI controllers are already taken (the display and the microSD). A Grove SPI RAM board is not wired up and is not a supported upgrade. Extra sample room is the microSD: kits and short plugin samples stay in a small RAM cache, and loops are read from the card while they play.
 
 ## Licence
 

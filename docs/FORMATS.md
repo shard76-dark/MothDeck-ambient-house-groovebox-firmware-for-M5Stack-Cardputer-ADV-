@@ -2,6 +2,8 @@
 
 The firmware and the host tests share these parsers. A bad file returns an error string and is skipped. It does not reset the device.
 
+Card audio is unsigned 8-bit mono PCM at 22050 Hz. In an 8-bit WAV, 128 is silence. That is about 22 KB per second. The speaker mix stays 44100 Hz and stretches these files up to it. A 16-bit mono WAV still loads, and a stereo file is mixed to mono on the way in. A plugin `sample.raw` is little-endian int16 with no header, at the rate written in the manifest. Built-in drums and sound effects in flash use the same 8-bit 22050 Hz layout.
+
 Names used in paths (`name`, `sample`, `loop`, `pattern`, folder names) are at most 23 characters and may contain letters, digits, `_`, `-`, and a single `.`. `..`, slashes, and empty names are rejected.
 
 ## Song slots
@@ -71,7 +73,7 @@ fm_index=40
 
 `type` is `sample`, `wavetable`, `subtractive`, or `fm`. `sample` and `wavetable` require `sample=`. Audio is unsigned 8-bit mono WAV at 22050 Hz (128 is silence, about 22 KB/s), or little-endian int16 raw with no header. A 16-bit mono WAV still loads, and a stereo file is mixed to mono. `root` is the MIDI note the recording is at. Loop end must be greater than loop start when it is not zero. `wave` is `sine`, `square`, `saw`, or `triangle`. Synth types are rendered once, at load, into a 168-frame cycle.
 
-The folder name is the id stored in a song. Up to 4 instruments stay in memory. Without PSRAM a sample is kept to 4096 frames. Plugin ids are 12..63.
+The folder name is the id stored in a song. Up to 4 instruments stay in memory. Without PSRAM a sample is kept to 4096 frames. Plugin ids are 12..62. Id 63 is the Loops instrument, not a plugin folder.
 
 ## Loop library
 

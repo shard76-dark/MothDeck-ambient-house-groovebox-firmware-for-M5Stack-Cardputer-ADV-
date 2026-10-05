@@ -6,7 +6,7 @@
 // Everything used here is on the board: no external wiring.
 // Display, keyboard (TCA8418), and the ES8311 codec are brought up by
 // M5Unified / M5Cardputer. These pins are the ones the firmware touches
-// directly (SD and the amplifier enable).
+// directly (the SD bus and the I2S lines into the ES8311).
 
 #define BOARD_NAME "Cardputer ADV"
 #define MOTHDECK_VERSION "1.0.0"

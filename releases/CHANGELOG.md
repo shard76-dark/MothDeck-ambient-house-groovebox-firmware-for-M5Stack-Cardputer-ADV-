@@ -1,5 +1,7 @@
 ## 2026-10-05
 
+The README, `docs/FORMATS.md`, and `releases/INSTALL.md` now describe this ADV image end to end: boot and splash, drums and kit loading, Mixer and FX, streamed loops, the 8-bit 22050 Hz sample format, the free/total memory row, the SD pack, and the hardware limits of the Stamp-S3A. This tree builds one target, `cardputer-adv`.
+
 The moth splash was blue because `pushImage` sends a `uint16_t` buffer as already byte-swapped RGB565. Amber `0xFD20` left the chip as `0x20FD`, which this panel draws as blue, while the grey background still looks grey. The splash now marks the buffer as logical RGB565, so the moth is amber on grey.
 
 That same image reset a moment after Play. The UI sprite had been cut to 8-bit, so every frame was expanded onto the panel through the SPI DMA path, and the loop windows (about 21KB) sat in BSS before BLE and the speaker started. The sprite is RGB565 again, and a loop window is allocated only when that loop opens. Boot stays on Play.
