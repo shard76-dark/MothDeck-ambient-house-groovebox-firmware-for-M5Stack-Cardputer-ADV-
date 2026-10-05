@@ -4,6 +4,8 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 ## Download the binary
 
+**Use earphones or headphones.** Plug them into the 3.5 mm jack on the side of the Cardputer ADV. This firmware does not play through the internal speaker. The jack is how you hear the drums, the kits, and the loops. Unplugging the earphones does not switch the sound to the speaker.
+
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
 - SHA-256: `a67fa4fc02f588ccd3c3da78bbf5f91b2eb5ef9e50dc98947b6e4bcf55de5d5c`
@@ -26,7 +28,7 @@ The public source and releases live in this repository. Flash the application im
 
 This repository is the Cardputer ADV firmware. The PlatformIO target is `cardputer-adv`. `cardputer-adv-dev` is that same firmware with SD and speaker logs on USB serial. The board id in `platformio.ini` is `esp32-s3-devkitc-1` because PlatformIO has no Stamp-S3A entry; the pins in `include/BoardConfig.h` are the ADV. There is no second ADV build.
 
-Everything it uses is on the board. There is no wiring. The speaker, headphone jack, display, keyboard, and microSD are brought up by M5Unified. A card is optional. The built-in drums, sound effects, and tonal instruments are synthesized when the firmware is built. They are not recordings of anyone else's samples.
+Everything it uses is on the board. There is no wiring. The headphone jack, display, keyboard, and microSD are brought up by M5Unified. The internal speaker does not play with this firmware; use earphones or headphones in the 3.5 mm jack. A card is optional. The built-in drums, sound effects, and tonal instruments are synthesized when the firmware is built. They are not recordings of anyone else's samples.
 
 ## Flash it
 
@@ -42,7 +44,7 @@ Unzip `releases/mothdeck-sd-pack.zip` onto the card root when you want the extra
 
 ## Boot
 
-Power-on turns the backlight on, draws an amber moth on a grey panel for about one second, then draws the Play page. The splash does not wait for a key. After Play is on screen, the firmware scans the card, starts the ES8311 speaker, and starts BLE. That order is what keeps the panel lit and the speaker clocked: the codec is not started inside `M5.begin`, and GPIO42 is the codec data line, not an amplifier pin to drive high.
+Power-on turns the backlight on, draws an amber moth on a grey panel for about one second, then draws the Play page. The splash does not wait for a key. After Play is on screen, the firmware scans the card, starts the ES8311 headphone output, and starts BLE. That order is what keeps the panel lit and the codec clocked: the codec is not started inside `M5.begin`, and GPIO42 is the codec data line, not an amplifier pin to drive high. Sound comes out of the 3.5 mm jack. The internal speaker stays quiet.
 
 The moth is amber (`0xFD20`) on grey (`0x1082`). An earlier image sent that amber buffer as already byte-swapped RGB565, so the panel showed blue. The splash now marks the buffer as logical RGB565 before `pushImage`. The UI sprite stays RGB565 as well. An 8-bit sprite had to be expanded through the SPI DMA path on every frame, and the loop windows used to sit in static RAM before the speaker and BLE started. Together those reset the ADV a moment after Play. The windows are allocated only when a loop opens. The image that stays on Play is the one in `releases/`.
 
@@ -302,7 +304,7 @@ The image is built `qio_qspi` at 80 MHz. That is the memory type on the Arduino-
 
 ## Hardware
 
-Cardputer ADV: Stamp-S3A (ESP32-S3FN8, 8MB flash, no onboard PSRAM), ST7789 240×135, TCA8418 keyboard at I2C `0x34` (SDA 8, SCL 9), ES8311 on the same I2C bus at `0x18`. GPIO42 is the codec data line (DSDIN), GPIO41 is bit clock, GPIO43 is word select, and GPIO46 is the codec microphone data. The NS4150B follows the codec headphone driver. microSD is a separate SPI bus (SCK 40, MISO 39, MOSI 14, CS 12) with GPIO5 held high before mount. Display pins are MOSI 35, SCLK 36, CS 37, DC 34, RST 33, backlight GPIO38. Battery ADC is GPIO10. The front button is GPIO0. Grove (GPIO1 / GPIO2) is left unused. The IMU is left off.
+Cardputer ADV: Stamp-S3A (ESP32-S3FN8, 8MB flash, no onboard PSRAM), ST7789 240×135, TCA8418 keyboard at I2C `0x34` (SDA 8, SCL 9), ES8311 on the same I2C bus at `0x18`. GPIO42 is the codec data line (DSDIN), GPIO41 is bit clock, GPIO43 is word select, and GPIO46 is the codec microphone data. The NS4150B speaker amp follows the codec, and its enable pin is not a GPIO: the board pulls it on, and the 3.5 mm jack turns it off while a plug is inserted. This firmware still does not play through that speaker. Use earphones or headphones. microSD is a separate SPI bus (SCK 40, MISO 39, MOSI 14, CS 12) with GPIO5 held high before mount. Display pins are MOSI 35, SCLK 36, CS 37, DC 34, RST 33, backlight GPIO38. Battery ADC is GPIO10. The front button is GPIO0. Grove (GPIO1 / GPIO2) is left unused. The IMU is left off.
 
 Octal PSRAM uses GPIO33–37. Those pins are the display, so a PSRAM module cannot be added to this Stamp-S3A, and the firmware stays on `qio_qspi`. Both hardware SPI controllers are already in use, one for the display and one for the microSD. A Grove SPI RAM board is not a supported upgrade. Extra sample room is the microSD: kits and short plugin samples stay in a small RAM cache, and loops are read from the card while they play.
 
