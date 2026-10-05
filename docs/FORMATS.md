@@ -88,6 +88,33 @@ pattern=offbeat.pat
 
 `bpm` is 40..240. `bars` is 1..8. Up to 16 entries in a file; the browser keeps 8. Audio is WAV or raw int16. Playback resamples with linear interpolation so the loop's BPM matches the project BPM. Pitch moves with tempo. Launch quantize is immediate, next beat, or next bar.
 
+The **Loops** instrument (id 63, the row after Pad) plays these audio loops from the keyboard. Notes wrap across the audio entries that fit in memory, and the loop phase is lined up with the current bar. Without PSRAM a loop file can be at most 16000 frames. A song that selects Loops is version 2. Plugin folders use ids 12..62 so they do not collide with it.
+
+## Drum kit
+
+`/moth/drums/<folder>/manifest.txt`
+
+```
+mothdeck-kit 1
+name=808
+pad=kick.wav
+pad=rim.wav
+pad=snare.wav
+pad=clap.wav
+pad=hat.wav
+pad=openhat.wav
+pad=perc.wav
+pad=tom.wav
+pad=shaker.wav
+pad=ride.wav
+pad=snap.wav
+pad=crash.wav
+```
+
+Exactly twelve `pad=` lines, in keyboard order: C kick, C# rim, D snare, D# clap, E closed hat, F open hat, F# perc, G tom, G# shaker, A ride, A# snap, B crash. `name` is a display label and may contain spaces. Pad filenames follow the same rules as other manifest filenames.
+
+Audio is 16-bit PCM WAV. On the Cardputer ADV (no PSRAM) each pad may be at most 6000 frames and the kit at most 18000 frames. A larger file is rejected and the built-in kit stays selected. The built-in kit is Ambient House and is not a file. Fn+`,` and Fn+`/` on the Instrument page switch kits. Selecting the built-in kit drops the SD buffers. The card is never erased by a kit change.
+
 A pattern file:
 
 ```

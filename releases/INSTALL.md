@@ -55,4 +55,4 @@ If the port does not show up, hold the front button (GPIO0) and tap reset to ent
 
 ## SD contents
 
-Optional. Copy `sd-card-example/moth` to `/moth` on the card. Layout and file formats are in the README and in `docs/FORMATS.md`.
+Optional. Unzip `mothdeck-sd-pack.zip` onto the card root so `moth/` is at the top. It holds the 808 and Dusty drum kits, the house loops used by the Loops instrument, and a few plugin instruments. The Ambient House kit is already in the firmware. Layout and file formats are in the pack README and in `docs/FORMATS.md`.

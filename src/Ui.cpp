@@ -3,6 +3,7 @@
 #include "AudioEngine.h"
 #include "InstrumentBank.h"
 #include "LoopLibrary.h"
+#include "DrumKit.h"
 #include "SdStorage.h"
 #include "SdCard.h"
 #include "LauncherExit.h"
@@ -176,6 +177,8 @@ void uiBegin() {
   launcherOk = launcherInstalled();
   instrumentBank.Scan();
   loopLibrary.Scan();
+  drumKit.Scan();
+  loopLibrary.PreloadInstrument(nullptr, 0);
 }
 
 static void statusBar(BleMidi &ble) {
@@ -220,7 +223,7 @@ static void voiceName(int id, char *dst, int n) {
   if (n < 2) {
     return;
   }
-  if (id >= 0 && id <= 11) {
+  if ((id >= 0 && id <= 11) || id == kLoopsVoice) {
     snprintf(dst, n, "%s", InstrumentBank::BuiltinName(id));
     return;
   }
@@ -312,7 +315,7 @@ static void drawPlay() {
 }
 
 static int instCount() {
-  return 12 + instrumentBank.Count();
+  return 13 + instrumentBank.Count();
 }
 
 static void instLabel(int index, char *dst, int n) {
@@ -320,7 +323,11 @@ static void instLabel(int index, char *dst, int n) {
     snprintf(dst, n, "%02d %s", index, InstrumentBank::BuiltinName(index));
     return;
   }
-  const PluginInfo &p = instrumentBank.At(index - 12);
+  if (index == 12) {
+    snprintf(dst, n, "12 Loops");
+    return;
+  }
+  const PluginInfo &p = instrumentBank.At(index - 13);
   snprintf(dst, n, "%s %s", p.loaded ? "*" : " ", p.name[0] ? p.name : p.folder);
 }
 
@@ -329,10 +336,13 @@ static bool rowIsTrackVoice(int idx) {
   if (idx < 12) {
     return id == idx;
   }
-  if (idx - 12 >= instrumentBank.Count()) {
+  if (idx == 12) {
+    return id == kLoopsVoice;
+  }
+  if (idx - 13 >= instrumentBank.Count()) {
     return false;
   }
-  const PluginInfo &p = instrumentBank.At(idx - 12);
+  const PluginInfo &p = instrumentBank.At(idx - 13);
   return p.loaded && p.id == (uint8_t)id;
 }
 
@@ -350,7 +360,7 @@ static void drawInst() {
   if (top < 0) {
     top = 0;
   }
-  for (int row = 0; row < 6; row++) {
+  for (int row = 0; row < 5; row++) {
     int idx = top + row;
     if (idx >= total) {
       break;
@@ -367,15 +377,22 @@ static void drawInst() {
     if (rowIsTrackVoice(idx)) {
       canvas->print(" =");
     }
-    if (idx >= 12) {
-      const PluginInfo &p = instrumentBank.At(idx - 12);
+    if (idx >= 13) {
+      const PluginInfo &p = instrumentBank.At(idx - 13);
       if (p.error[0] && idx == cursor) {
         canvas->print(" ");
         canvas->print(p.error);
       }
     }
   }
-  legend("Ent assign  R rescan  UpDn move");
+  canvas->setTextColor(COL_DIM);
+  canvas->setCursor(2, 100);
+  if (cursor == 12) {
+    canvas->print("Notes play SD loops, synced");
+  } else {
+    canvas->printf("Kit: %.16s", drumKit.Name(drumKit.Selected()));
+  }
+  legend("Ent assign  R scan  Fn ,/ kit");
 }
 
 static const char *kMixLabel[] = {"Volume", "Mute", "Solo", "Drive", "Low pass", "Retrig", "Wobble", "Echo", "Arp", "Whoosh", "Pitch", "Envelope", "Note len"};
@@ -711,7 +728,19 @@ static void assignInstrument() {
     toastSet(InstrumentBank::BuiltinName(cursor));
     return;
   }
-  int index = cursor - 12;
+  if (cursor == 12) {
+    char err[48];
+    err[0] = 0;
+    int n = loopLibrary.PreloadInstrument(err, (int)sizeof(err));
+    audioCommand('I', kLoopsVoice);
+    if (n <= 0) {
+      toastSet(err[0] ? err : "No loop samples");
+    } else {
+      toastSet("Loops");
+    }
+    return;
+  }
+  int index = cursor - 13;
   char err[48];
   int id = instrumentBank.Load(index, err, (int)sizeof(err));
   if (id < 0) {
@@ -822,7 +851,20 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       return;
     }
     if (c == ',') {
-      if (page == 2) {
+      if (page == 1) {
+        int n = drumKit.Count();
+        int s = drumKit.Selected();
+        if (n < 1) {
+          n = 1;
+        }
+        s = (s + n - 1) % n;
+        char err[48];
+        if (!drumKit.Select(s, err, (int)sizeof(err))) {
+          toastSet(err[0] ? err : "Kit failed");
+        } else {
+          toastSet(drumKit.Name(s));
+        }
+      } else if (page == 2) {
         tweakMix(-1);
       } else if (page == 4 && loopLibrary.Count() > 0) {
         loopLib = (loopLib + loopLibrary.Count() - 1) % loopLibrary.Count();
@@ -839,7 +881,20 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       return;
     }
     if (c == '/') {
-      if (page == 2) {
+      if (page == 1) {
+        int n = drumKit.Count();
+        int s = drumKit.Selected();
+        if (n < 1) {
+          n = 1;
+        }
+        s = (s + 1) % n;
+        char err[48];
+        if (!drumKit.Select(s, err, (int)sizeof(err))) {
+          toastSet(err[0] ? err : "Kit failed");
+        } else {
+          toastSet(drumKit.Name(s));
+        }
+      } else if (page == 2) {
         tweakMix(1);
       } else if (page == 4 && loopLibrary.Count() > 0) {
         loopLib = (loopLib + 1) % loopLibrary.Count();
@@ -945,6 +1000,9 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
   if (page == 1) {
     if (c == 'r') {
       instrumentBank.Scan();
+      drumKit.Scan();
+      loopLibrary.Scan();
+      loopLibrary.PreloadInstrument(nullptr, 0);
       toastSet(sdCard.Mounted() ? "Rescanned" : "No SD card");
     }
     return;

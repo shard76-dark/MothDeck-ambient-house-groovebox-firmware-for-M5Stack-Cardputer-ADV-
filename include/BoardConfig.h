@@ -49,4 +49,8 @@
 // Audio rate. Step timing uses rate/4, matching MothOS (16th-note steps).
 static const int kSampleRate = 44100;
 
+// Built-ins are 0..11. 63 is the Loops instrument (notes play SD loops in
+// time with the project BPM). Plugin folders use 12..62.
+static const int kLoopsVoice = 63;
+
 #endif

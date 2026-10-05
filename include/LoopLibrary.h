@@ -3,6 +3,7 @@
 #include "SongFile.h"
 #include "Snap.h"
 #include "LoopFormat.h"
+#include "LoopInstrument.h"
 
 struct LoopLibInfo {
   char folder[24];
@@ -27,6 +28,9 @@ public:
   bool PrepareSong(SongData *song, char *err, int errLen);
   // After PrepareSong, pointers for enabled tracks are ready for ArmLoop.
   bool TrackArm(int track, LoopArm *arm) const;
+  // Loads the first audio loops into the cache for the Loops instrument.
+  // Returns how many are ready. Safe to call again.
+  int PreloadInstrument(char *err, int errLen);
 
 private:
   LoopLibInfo libs[kMaxLibs];

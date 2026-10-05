@@ -27,6 +27,7 @@ echo "Modal input"
   "$ROOT/src/ModalInput.cpp" \
   "$ROOT/src/Tracker.cpp" \
   "$ROOT/src/Voice.cpp" \
+  "$ROOT/src/ToneSynth.cpp" \
   "$ROOT/src/default_samples.cpp" \
   -o /tmp/mothdeck_test_modal
 /tmp/mothdeck_test_modal
@@ -36,9 +37,26 @@ echo "Per-track instruments"
   "$ROOT/test/test_tracks.cpp" \
   "$ROOT/src/Tracker.cpp" \
   "$ROOT/src/Voice.cpp" \
+  "$ROOT/src/ToneSynth.cpp" \
   "$ROOT/src/default_samples.cpp" \
   -o /tmp/mothdeck_test_tracks
 /tmp/mothdeck_test_tracks
+
+echo "Drum kits"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_kit.cpp" \
+  "$ROOT/src/KitFormat.cpp" \
+  "$ROOT/src/PluginFormat.cpp" \
+  -o /tmp/mothdeck_test_kit
+/tmp/mothdeck_test_kit
+
+echo "Voices"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_voices.cpp" \
+  "$ROOT/src/ToneSynth.cpp" \
+  "$ROOT/src/default_samples.cpp" \
+  -o /tmp/mothdeck_test_voices
+/tmp/mothdeck_test_voices
 
 echo "Plugins, loops, WAV, synth render"
 "$CXX" "${FLAGS[@]}" \

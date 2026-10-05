@@ -1,6 +1,7 @@
 #ifndef Voice_h
 #define Voice_h
 #include <stdint.h>
+#include "ToneSynth.h"
 
 class Voice {
 public:
@@ -70,7 +71,10 @@ private:
   int ReadDrumWaveform();
   int ReadSfxWaveform();
   int ReadExt();
-  int ReadOneShot(const int16_t *const *tables, const int *lengths);
+  int ReadOneShot(const int16_t *const *tables, const int *lengths, const int *rates);
+  int ReadPcmShot(const int16_t *data, int length, int rate);
+
+  ToneVoice tone;
   int GetBaseFreq(int val, int ioctave);
   void UpdateHistory(int sample);
   int GetHistorySample(int backOffset);

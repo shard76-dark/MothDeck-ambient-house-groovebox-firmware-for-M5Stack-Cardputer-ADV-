@@ -2,8 +2,15 @@
 #include "Voice.h"
 #include "MidiMap.h"
 #include "BoardConfig.h"
+#include "LoopInstrument.h"
 #include <string.h>
 #include <stdio.h>
+
+__attribute__((weak)) bool loopInstrumentHit(int note, LoopHit *out) {
+  (void)note;
+  (void)out;
+  return false;
+}
 
 Tracker::Tracker() {
   memset(ccMsb, 0, sizeof(ccMsb));
@@ -43,7 +50,11 @@ int Tracker::UpdateTracker() {
     for (int i = 0; i < 4; i++) {
       int note = tracks[i][trackIndex];
       if (note > 0) {
-        voices[i].SetNote(note - 1, false, trackOctaves[i][trackIndex], trackInstruments[i][trackIndex]);
+        int inst = trackInstruments[i][trackIndex];
+        if (inst == kLoopsVoice) {
+          TriggerLoopVoice(i, note - 1);
+        }
+        voices[i].SetNote(note - 1, false, trackOctaves[i][trackIndex], inst);
       }
     }
 
@@ -183,7 +194,9 @@ void Tracker::SetCommand(char command, int val) {
     case 'I':
       SetInstrument(val);
       QueueBankMidi();
-      if (val > 1) {
+      if (val == kLoopsVoice) {
+        SetHint("Loops");
+      } else if (val > 1) {
         SetHintF("Instrument: %d", val);
       } else if (val == 1) {
         SetHint("SFX Bank");
@@ -303,6 +316,9 @@ void Tracker::SetNote(int val, int track) {
     lastNoteTrackIndex = trackIndex % patternLength;
   } else {
     voices[track].SetNote(val, false, -1, inst);
+    if (inst == kLoopsVoice) {
+      TriggerLoopVoice(track, val);
+    }
   }
 }
 
@@ -411,7 +427,9 @@ void Tracker::RememberVoiceLabel(int val) {
   }
   currentVoice = val;
   memset(oledInstString, 0, sizeof(oledInstString));
-  if (val > 11) {
+  if (val == kLoopsVoice) {
+    memcpy(oledInstString, "LOOPS", 6);
+  } else if (val > 11) {
     snprintf(oledInstString, sizeof(oledInstString), "PLG%d", val);
   } else if (val > 1) {
     snprintf(oledInstString, sizeof(oledInstString), "INS%d", val);
@@ -468,6 +486,9 @@ void Tracker::SetInstrument(int val) {
   for (int i = 0; i < kMaxSteps; i++) {
     trackInstruments[selectedTrack][i] = (uint8_t)val;
   }
+  if (val != kLoopsVoice) {
+    StopLoop(selectedTrack);
+  }
   RememberVoiceLabel(val);
 }
 
@@ -497,7 +518,7 @@ void Tracker::QueueBankMidi() {
   int inst = currentVoice;
   if (inst < 0) {
     inst = 0;
-  } else if (inst > 11) {
+  } else if (inst > 63) {
     inst = 11;
   }
   QueueMidi(MIDI_MSG_MSB, (uint8_t)selectedTrack, 0, (uint8_t)inst);
@@ -794,6 +815,42 @@ static void copyName(char *dst, const char *src) {
     return;
   }
   strncpy(dst, src, 23);
+}
+
+void Tracker::TriggerLoopVoice(int track, int note) {
+  if (track < 0 || track > 3) {
+    return;
+  }
+  LoopHit hit;
+  if (!loopInstrumentHit(note, &hit) || !hit.pcm || hit.frames < 2) {
+    return;
+  }
+  LoopPlay &slot = loopPlay[track];
+  slot.pcm = hit.pcm;
+  slot.frames = hit.frames;
+  slot.rate = hit.rate > 0 ? hit.rate : 8000;
+  slot.bpm = hit.bpm > 0 ? hit.bpm : 120;
+  slot.quantize = 0;
+  slot.pending = 0;
+  slot.enabled = 1;
+  strncpy(slot.library, hit.library, sizeof(slot.library) - 1);
+  slot.library[sizeof(slot.library) - 1] = 0;
+  strncpy(slot.name, hit.name, sizeof(slot.name) - 1);
+  slot.name[sizeof(slot.name) - 1] = 0;
+  RecomputeLoopInc(&slot);
+  int stepInBar = trackIndex % 16;
+  if (stepInBar < 0) {
+    stepInBar = 0;
+  }
+  uint32_t bar = samplesPerStep * 16;
+  if (bar < 1) {
+    bar = 1;
+  }
+  uint32_t into = (uint32_t)stepInBar * samplesPerStep + stepSampleCount;
+  if (into > bar) {
+    into = bar;
+  }
+  slot.phase = (uint32_t)(((uint64_t)into * (uint32_t)slot.frames << 16) / bar);
 }
 
 void Tracker::ArmLoop(int track, const LoopArm &arm) {

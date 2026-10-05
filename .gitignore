@@ -10,3 +10,4 @@ agent-tools/
 *.map
 sdkconfig.*
 .cache/
+build/

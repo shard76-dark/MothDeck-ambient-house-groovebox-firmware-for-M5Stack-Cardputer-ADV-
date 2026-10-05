@@ -2,9 +2,13 @@
 #include "MidiMap.h"
 #include "DefaultSamples.h"
 #include "InstrumentBank.h"
+#include "DrumKit.h"
 #include "BoardConfig.h"
 #include <math.h>
 
+// Keyboard order, not the old kick/snare/hat groups. See docs/FORMATS.md.
+// C kick, C# rim, D snare, D# clap, E hat, F open hat, F# perc, G tom,
+// G# shaker, A ride, A# snap, B crash. All tables are 22050 Hz.
 static const int16_t *const kDrumWaves[12] = {
   kick1, snare1, special1, hihat1, kick2, snare2, special2, hihat2, kick3, snare3, special3, hihat3
 };
@@ -13,6 +17,16 @@ static const int kDrumLens[12] = {
   kick2Length, snare2Length, special2Length, hihat2Length,
   kick3Length, snare3Length, special3Length, hihat3Length
 };
+static const int kDrumRates[12] = {
+  22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050
+};
+static const int kSfxRate = 22050;
+
+__attribute__((weak)) bool drumKitHit(int note, DrumHitView *out) {
+  (void)note;
+  (void)out;
+  return false;
+}
 
 static const int16_t *const kSfxWaves[12] = {
   sfx1, sfx2, sfx3, sfx4, sfx5, sfx6, sfx7, sfx8, sfx9, sfx10, sfx11, sfx12
@@ -20,15 +34,6 @@ static const int16_t *const kSfxWaves[12] = {
 static const int kSfxLens[12] = {
   sfx1Length, sfx2Length, sfx3Length, sfx4Length, sfx5Length, sfx6Length,
   sfx7Length, sfx8Length, sfx9Length, sfx10Length, sfx11Length, sfx12Length
-};
-
-static const int16_t *const kInstWaves[10] = {
-  instrument1, instrument2, instrument3, instrument4, instrument5,
-  instrument6, instrument7, instrument8, instrument9, instrument10
-};
-static const int kInstLens[10] = {
-  instrument1Length, instrument2Length, instrument3Length, instrument4Length, instrument5Length,
-  instrument6Length, instrument7Length, instrument8Length, instrument9Length, instrument10Length
 };
 
 static const uint8_t kEnvelopes[4][101] = {
@@ -68,6 +73,7 @@ Voice::Voice() {
   voiceNum = 0;
   note = 0;
   bend14 = 8192;
+  toneNoteOn(&tone, 2);
   extBaseStep = 1000;
   isDelay = false;
   envelopeNum = 0;
@@ -164,19 +170,9 @@ int Voice::ReadWaveform() {
     }
   }
 
-  int inst = vSel - 2;
-  if (inst < 0 || inst > 9) {
+  if (vSel < 2 || vSel > 11) {
     return 0;
   }
-
-  sampleLen = kInstLens[inst];
-  int idx = sampleIndex / 1000;
-  if (idx < 0) {
-    idx = 0;
-  } else if (idx >= sampleLen) {
-    idx = sampleLen - 1;
-  }
-  int sample = kInstWaves[inst][idx];
 
   if (pitchMult > 0 && pitchDur > 0) {
     pitchDur -= pitchMult;
@@ -214,41 +210,65 @@ int Voice::ReadWaveform() {
   if (bend14 != 8192) {
     baseFreqLocal = scaleByBend(baseFreqLocal, bend14);
   }
-  sampleIndex += baseFreqLocal;
-  if (sampleIndex >= sampleLen * 1000) {
-    if (envelopeNum == 2) {
-      sampleIndex = (sampleLen - 1) * 1000;
-    } else {
-      sampleIndex -= sampleLen * 1000;
-    }
-  }
+  int sample = toneSample(&tone, vSel, baseFreqLocal);
 
+  // Pad, organ, flute, and bass keep a long body. The default fade is
+  // short enough that those voices used to die like a piano key.
+  int envCap = 50000;
+  int envDiv = 500;
+  if (vSel == 11) {
+    envCap = 220000;
+    envDiv = 2200;
+  } else if (vSel == 6 || vSel == 9 || vSel == 10) {
+    envCap = 140000;
+    envDiv = 1400;
+  }
   envelopeIndex += envelopeLength;
-  if (envelopeIndex > 50000) {
-    envelopeIndex = (envelopeNum == 3) ? 1 : 50000;
+  if (envelopeIndex > envCap) {
+    envelopeIndex = (envelopeNum == 3) ? 1 : envCap;
   }
-
-  sample = (sample * volume * kEnvelopes[envelopeNum][envelopeIndex / 500]) / 300;
+  int eidx = envelopeIndex / envDiv;
+  if (eidx > 100) {
+    eidx = 100;
+  } else if (eidx < 0) {
+    eidx = 0;
+  }
+  int envNum = envelopeNum;
+  if (envNum < 0 || envNum > 3) {
+    envNum = 0;
+  }
+  sample = (sample * volume * kEnvelopes[envNum][eidx]) / 300;
   if (isDelay) {
     sample /= 3;
   }
   return sample;
 }
 
-int Voice::ReadOneShot(const int16_t *const *tables, const int *lengths) {
-  if ((unsigned)note > 11) {
+int Voice::ReadPcmShot(const int16_t *data, int length, int rate) {
+  if (!data || length < 2) {
     return 0;
   }
-  sampleLen = lengths[note];
+  sampleLen = length;
   int sample = 0;
   if (sampleIndex < sampleLen * 1000) {
     int idx = sampleIndex / 1000;
     if (envelopeNum > 1) {
       idx = sampleLen - idx - 1;
     }
-    sample = tables[note][idx];
+    if (idx < 0) {
+      idx = 0;
+    } else if (idx >= sampleLen) {
+      idx = sampleLen - 1;
+    }
+    sample = data[idx];
     int oct = (recOctave > -1) ? (recOctave + 1) : (octave + 1);
     int step = oct * 500;
+    if (rate > 0 && rate != kSampleRate) {
+      step = (int)(((int64_t)step * rate) / kSampleRate);
+    }
+    if (step < 1) {
+      step = 1;
+    }
     if (bend14 != 8192) {
       step = scaleByBend(step, bend14);
     }
@@ -269,12 +289,28 @@ int Voice::ReadOneShot(const int16_t *const *tables, const int *lengths) {
   return sample;
 }
 
+int Voice::ReadOneShot(const int16_t *const *tables, const int *lengths, const int *rates) {
+  if ((unsigned)note > 11 || !tables || !lengths) {
+    return 0;
+  }
+  int rate = (rates && rates[note] > 0) ? rates[note] : kSampleRate;
+  return ReadPcmShot(tables[note], lengths[note], rate);
+}
+
 int Voice::ReadDrumWaveform() {
-  return ReadOneShot(kDrumWaves, kDrumLens);
+  DrumHitView hit;
+  if (drumKitHit(note, &hit)) {
+    return ReadPcmShot(hit.data, hit.length, hit.rate);
+  }
+  return ReadOneShot(kDrumWaves, kDrumLens, kDrumRates);
 }
 
 int Voice::ReadSfxWaveform() {
-  return ReadOneShot(kSfxWaves, kSfxLens);
+  static const int kRates[12] = {
+    kSfxRate, kSfxRate, kSfxRate, kSfxRate, kSfxRate, kSfxRate,
+    kSfxRate, kSfxRate, kSfxRate, kSfxRate, kSfxRate, kSfxRate
+  };
+  return ReadOneShot(kSfxWaves, kSfxLens, kRates);
 }
 
 int Voice::GetBaseFreq(int val, int ioctave) {
@@ -310,6 +346,13 @@ void Voice::SetNote(int val, bool delay, int optOctave, int optInstrument) {
   baseFreq_ch4 = GetBaseFreq(val + 7, oct);
   isDelay = delay;
   extBaseStep = 1000;
+  int synthId = optInstrument;
+  if (samplerMode && val >= 2 && val <= 11) {
+    synthId = val;
+  }
+  if (synthId >= 2 && synthId <= 11) {
+    toneNoteOn(&tone, synthId);
+  }
   if (optInstrument >= 12) {
     ExtSampleView view;
     if (instrumentView(optInstrument, &view) && view.length > 1) {

@@ -61,6 +61,9 @@ bool instrumentView(int id, ExtSampleView *out) {
 const char *InstrumentBank::BuiltinName(int id) {
   static const char *names[] = {
       "Drums", "SFX", "Sine", "Square", "Saw", "Tri", "Organ", "Pluck", "Bell", "Flute", "Bass", "Pad"};
+  if (id == kLoopsVoice) {
+    return "Loops";
+  }
   if (id < 0 || id > 11) {
     return "";
   }
@@ -106,7 +109,8 @@ static uint8_t idForFolder(const char *folder) {
       used[liveSlots[i].id] = true;
     }
   }
-  for (int id = 12; id <= 63; id++) {
+  used[kLoopsVoice] = true;
+  for (int id = 12; id <= 62; id++) {
     if (!used[id]) {
       return (uint8_t)id;
     }

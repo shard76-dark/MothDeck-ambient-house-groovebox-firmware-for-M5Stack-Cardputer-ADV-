@@ -7,6 +7,26 @@
 #include <string.h>
 #include <stdio.h>
 
+static const int kInstLoopMax = 8;
+static LoopHit instLoops[kInstLoopMax];
+static volatile int instLoopCount = 0;
+
+bool loopInstrumentHit(int note, LoopHit *out) {
+  int n = instLoopCount;
+  if (!out || n < 1 || n > kInstLoopMax) {
+    return false;
+  }
+  if (note < 0) {
+    note = 0;
+  }
+  const LoopHit &hit = instLoops[note % n];
+  if (!hit.pcm || hit.frames < 2) {
+    return false;
+  }
+  *out = hit;
+  return true;
+}
+
 LoopLibrary loopLibrary;
 
 static const int kLoopCache = 6;
@@ -300,6 +320,56 @@ bool LoopLibrary::PrepareSong(SongData *song, char *err, int errLen) {
     loadedOk[t] = 1;
   }
   return ok;
+}
+
+int LoopLibrary::PreloadInstrument(char *err, int errLen) {
+  LoopHit next[kInstLoopMax];
+  memset(next, 0, sizeof(next));
+  int n = 0;
+  setErr(err, errLen, "");
+  if (!sdCard.Ensure()) {
+    instLoopCount = 0;
+    setErr(err, errLen, "Loops need the SD card");
+    return 0;
+  }
+  if (count == 0) {
+    Scan();
+  }
+  for (int i = 0; i < count && n < kInstLoopMax; i++) {
+    for (int e = 0; e < libs[i].entryCount && n < kInstLoopMax; e++) {
+      if (libs[i].entries[e].kind != LOOP_AUDIO) {
+        continue;
+      }
+      uint8_t steps[kPatternStepsMax];
+      int stepCount = 0;
+      bool pattern = false;
+      LoopArm arm;
+      char local[48];
+      local[0] = 0;
+      if (!LoadEntry(i, e, &arm, steps, &stepCount, &pattern, local, (int)sizeof(local))) {
+        if (local[0]) {
+          setErr(err, errLen, local);
+        }
+        continue;
+      }
+      if (pattern || !arm.pcm || arm.frames < 2) {
+        continue;
+      }
+      next[n].pcm = arm.pcm;
+      next[n].frames = arm.frames;
+      next[n].rate = arm.rate;
+      next[n].bpm = arm.bpm;
+      strncpy(next[n].library, arm.library, sizeof(next[n].library) - 1);
+      strncpy(next[n].name, arm.name, sizeof(next[n].name) - 1);
+      n++;
+    }
+  }
+  memcpy(instLoops, next, sizeof(instLoops));
+  instLoopCount = n;
+  if (n == 0 && err && errLen > 0 && !err[0]) {
+    setErr(err, errLen, "No loop samples");
+  }
+  return n;
 }
 
 bool LoopLibrary::TrackArm(int track, LoopArm *arm) const {

@@ -68,6 +68,8 @@ public:
   void StopAudition();
   void WritePattern(int track, const uint8_t *steps, int count);
   void FillSnap(Snap *snap) const;
+  // Starts a preloaded SD loop on this track, phased to the current bar.
+  void TriggerLoopVoice(int track, int note);
   int Bpm() const { return bpms[bpmSlot]; }
   uint8_t BpmSlot() const { return bpmSlot; }
 

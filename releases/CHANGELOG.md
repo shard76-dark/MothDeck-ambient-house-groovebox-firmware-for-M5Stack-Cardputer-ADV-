@@ -1,5 +1,7 @@
 ## 2026-10-05
 
+The built-in drum kit is Ambient House: a deep kick with a pitch drop, a soft snare, a clap, closed and open hats, and the rest of a small kit, each with a short room in the sample. Sound effects are twelve different one-shots (riser, zap, impact, siren, and the rest), one per key. Sine stays a sine. Square, saw, triangle, organ, pluck, bell, flute, bass, and pad are voiced in real time from those names: the pad attacks slowly, stays detuned and dark, and holds. The Instrument page can load an SD drum kit into Drums (Fn comma and slash) and a Loops instrument that triggers card loops in time with the BPM. Kits and loops live in mothdeck-sd-pack.zip, not in the firmware image. otadata is still erased only after a Launcher image is verified.
+
 Exit to Launcher is enabled only when the APP_TEST slot contains a valid ESP32-S3 app image (magic E9). A full-flash layout, an empty slot, or a corrupt header greys the menu entry and shows "Launcher not found". Holding Esc does not restart, and otadata is erased only after that check passes.
 
 An open menu takes the keyboard. The page list, the BLE name editor, and the Exit confirm consume every key, so notes, recording, transport, track, pattern, and BPM changes do not reach the page underneath. Fn arrows or Tab move the page list, Enter confirms it, and grave or Backspace cancels. Holding grave or the front button still leaves for Launcher.
