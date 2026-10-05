@@ -52,7 +52,7 @@ Exit is offered only when an `APP_TEST` slot holds a valid ESP32-S3 app image (h
 
 When the image checks out, Exit erases `otadata`, which is what `launcherPartitionClearOtaBoot` does, then restarts. It does not call `esp_ota_set_boot_partition()` on that slot.
 
-Startup turns the backlight on and draws the Play page before it scans the card or starts audio and BLE. There is no splash image. `M5.begin` would otherwise leave the backlight off after clearing the panel.
+Startup turns the backlight on, shows the moth splash for about a second, then draws the Play page before it scans the card, starts the speaker, or starts BLE. `M5.begin` would otherwise leave the backlight off after clearing the panel. The splash is `docs/splash-moth.png` (regenerate with `python3 tools/make_splash.py`).
 
 When Launcher is present, hold Esc (`` ` ``) or the front button for about 0.7 seconds, or confirm the Exit page. The same hold during MothDeck's own boot runs the exit before the audio task starts. After the restart, press Enter on Launcher's splash ("Press the button to enter the Launcher!") to stay there. Doing nothing on that splash starts the installed app again whenever the boot selection still names it. When Launcher is not present, the hold shows "Launcher not found" and continues in MothDeck.
 

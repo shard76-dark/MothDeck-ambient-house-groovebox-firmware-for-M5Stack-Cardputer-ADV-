@@ -27,10 +27,15 @@
 #define PIN_SD_AUX 5
 
 // ES8311 I2S, from the ADV schematic. M5.Speaker owns these after begin().
+// GPIO42 is DSDIN (data into the codec). It is not an amplifier enable:
+// driving it high as a plain GPIO replaces the I2S stream and mutes the
+// speaker. The NS4150B follows the codec headphone driver, which is
+// powered by the ES8311 register write in audioStart(). GPIO46 is ASDOUT
+// (microphone data out of the codec).
 #define PIN_I2S_BCLK 41
 #define PIN_I2S_WS 43
-#define PIN_I2S_DOUT 46
-#define PIN_AMP_EN 42
+#define PIN_I2S_DOUT 42
+#define PIN_I2S_DIN 46
 
 // Internal I2C: TCA8418 keyboard 0x34, ES8311 codec 0x18, BMI270 0x68.
 #define PIN_I2C_SDA 8

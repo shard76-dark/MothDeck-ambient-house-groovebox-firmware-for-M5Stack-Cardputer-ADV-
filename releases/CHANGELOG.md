@@ -1,6 +1,10 @@
 ## 2026-10-05
 
-Boot no longer sits on a black panel. M5.begin was saving a brightness of 0 from before the ST7789 exists, clearing the screen, and writing that 0 back, so the backlight stayed off until late in setup. There is no splash bitmap. The backlight is turned on and the Play page is drawn before the card scan, the speaker, or BLE. External display probes are not run at startup, and the speaker is started only after that first frame.
+Sound is back on the build that lit the panel. That build set `internal_spk` off so the speaker would not run inside `M5.begin`. On the Cardputer ADV that flag is what assigns I2S (BCLK GPIO41, WS GPIO43, data GPIO42) and registers the ES8311 power-up callback. `Speaker.begin()` later then ran with no data pin, so the codec stayed in reset and nothing reached the NS4150B. GPIO42 is the codec data input, not an amp-enable to drive high. The speaker profile is installed again during display bring-up, and `audioStart()` (still after the splash and the Play frame) writes the ES8311 registers, starts I2S on those pins, and sets the volume to 160.
+
+Boot shows a one-second moth splash with the backlight already on, then the Play page, then the card scan, the speaker, and BLE. The splash does not wait for a key. Regenerate it with `python3 tools/make_splash.py`.
+
+Boot no longer sits on a black panel. M5.begin was saving a brightness of 0 from before the ST7789 exists, clearing the screen, and writing that 0 back, so the backlight stayed off until late in setup. The backlight is turned on before the card scan, the speaker, or BLE. External display probes are not run at startup.
 
 The Mixer page is now FX: filter, BPM-synced delay, reverb send, bitcrush, drive, chorus, and tremolo, each stored on the selected track and saved in a version 3 song. A new Mixer page shows all four tracks as volume faders. Fn+`;` and Fn+`.` change the selected track's volume, Fn+`,` and Fn+`/` select the track, and `` ` `` returns to Play. Per-track volume was already in the song file. Songs with no insert effect stay version 1 or 2.
 

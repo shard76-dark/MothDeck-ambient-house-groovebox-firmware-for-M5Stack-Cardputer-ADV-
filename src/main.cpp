@@ -4,6 +4,7 @@
 #include "BleMidi.h"
 #include "BoardConfig.h"
 #include "LauncherExit.h"
+#include "SplashMoth.h"
 #include "Ui.h"
 
 // The UI reads the SD card and draws a full frame. The default loop stack
@@ -73,18 +74,24 @@ static void bootExitChord() {
 
 // M5.begin saves brightness before the panel exists (so the value is 0),
 // clears the ST7789, then writes that 0 back. The backlight stays off and
-// the panel stays black until something draws. There is no splash bitmap.
-// External-display probes are left off so begin() cannot sit on the SPI bus
-// the panel needs. The speaker starts later, in audioStart().
+// the panel stays black until something draws. External-display probes are
+// left off so begin() cannot sit on the SPI bus the panel needs.
+// internal_spk stays on: that is what installs the ADV I2S pins and the
+// ES8311 enable callback. The codec itself is not started until audioStart(),
+// which runs after the splash and the Play frame.
 static void bringUpDisplay() {
   auto cfg = M5.config();
   cfg.internal_mic = false;
   cfg.internal_imu = false;
-  cfg.internal_spk = false;
+  cfg.internal_spk = true;
   cfg.external_display_value = 0;
   cfg.fallback_board = m5::board_t::board_M5CardputerADV;
   cfg.clear_display = true;
   M5Cardputer.begin(cfg, true);
+
+  // M5.begin drives GPIO46 high before the board is known. On the ADV that
+  // pin is the codec's ADC data line, not a power hold.
+  pinMode(PIN_I2S_DIN, INPUT);
 
   // Stamp-S3A gates the backlight on GPIO38. PWM from a detected panel
   // owns the pin when autodetect worked; a plain high covers a missed detect.
@@ -93,15 +100,32 @@ static void bringUpDisplay() {
     digitalWrite(38, HIGH);
   }
   M5Cardputer.Display.setBrightness(200);
-  M5Cardputer.Display.fillScreen(0x1082);
-  M5Cardputer.Display.setTextColor(0xFD20);
-  M5Cardputer.Display.setTextSize(1);
-  M5Cardputer.Display.setCursor(8, 60);
-  M5Cardputer.Display.print("MothDeck");
+}
+
+// One-second moth mark. The wait is bounded; it does not scan the card or
+// start the speaker, and it returns even if no key is pressed.
+static void showSplash() {
+  uint16_t line[kSplashW];
+  const uint16_t bg = 0x1082;
+  const uint16_t ink = 0xFD20;
+  const int rowBytes = kSplashW / 8;
+  for (int y = 0; y < kSplashH; y++) {
+    const uint8_t *row = kSplashMoth + y * rowBytes;
+    for (int x = 0; x < kSplashW; x++) {
+      bool on = row[x >> 3] & (uint8_t)(0x80 >> (x & 7));
+      line[x] = on ? ink : bg;
+    }
+    M5Cardputer.Display.pushImage(0, y, kSplashW, 1, line);
+  }
+  uint32_t start = millis();
+  while ((uint32_t)(millis() - start) < 1000) {
+    delay(20);
+  }
 }
 
 void setup() {
   bringUpDisplay();
+  showSplash();
   uiBegin();
   uiDraw(ble);
   bootExitChord();

@@ -113,6 +113,28 @@ static void renderBlock(int16_t *dst) {
   publishSnap(peak);
 }
 
+// Same sequence M5Unified uses for board_M5CardputerADV. Without it the
+// codec stays in reset and the speaker task has nothing to clock.
+static void es8311PowerUp() {
+  static const uint8_t seq[][2] = {
+      {0x00, 0x80},  // CSM power on
+      {0x01, 0xB5},  // MCLK from BCLK
+      {0x02, 0x18},  // MULT_PRE = 3
+      {0x0D, 0x01},  // analog circuitry
+      {0x12, 0x00},  // DAC power
+      {0x13, 0x10},  // headphone driver, which feeds the NS4150B
+      {0x32, 0xBF},  // DAC volume, 0 dB
+      {0x37, 0x08},  // bypass the DAC equalizer
+  };
+  for (size_t i = 0; i < sizeof(seq) / sizeof(seq[0]); i++) {
+    for (int attempt = 0; attempt < 3; attempt++) {
+      if (M5.In_I2C.writeRegister8(0x18, seq[i][0], seq[i][1], 100000)) {
+        break;
+      }
+    }
+  }
+}
+
 static void audioTask(void *arg) {
   (void)arg;
   int fill = 0;
@@ -140,6 +162,16 @@ void audioStart() {
   midiOutQ = xQueueCreate(16, sizeof(MidiEvent));
   M5.Speaker.end();
   auto cfg = M5.Speaker.config();
+  // Pins and port are what _begin_audio installs for the ADV. Setting them
+  // again here keeps playback alive if that profile was skipped. GPIO42 is
+  // the codec data input, so it stays an I2S pin rather than a GPIO high.
+  cfg.pin_bck = PIN_I2S_BCLK;
+  cfg.pin_ws = PIN_I2S_WS;
+  cfg.pin_data_out = PIN_I2S_DOUT;
+  cfg.pin_mck = I2S_PIN_NO_CHANGE;
+  cfg.i2s_port = I2S_NUM_1;
+  cfg.buzzer = false;
+  cfg.use_dac = false;
   cfg.sample_rate = kSampleRate;
   cfg.task_priority = 4;
   cfg.task_pinned_core = 1;
@@ -148,6 +180,7 @@ void audioStart() {
   cfg.magnification = 2;
   cfg.stereo = false;
   M5.Speaker.config(cfg);
+  es8311PowerUp();
   if (!M5.Speaker.begin()) {
     DEV_LOG("Speaker: begin failed");
   } else {
