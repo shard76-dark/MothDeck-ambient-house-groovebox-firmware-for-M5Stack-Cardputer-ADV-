@@ -180,6 +180,9 @@ void uiBegin() {
   M5Cardputer.Display.setBrightness(bright);
   audioSetSpeakerVolume(outVol);
   launcherOk = launcherInstalled();
+}
+
+void uiMountStorage() {
   instrumentBank.Scan();
   loopLibrary.Scan();
   drumKit.Scan();

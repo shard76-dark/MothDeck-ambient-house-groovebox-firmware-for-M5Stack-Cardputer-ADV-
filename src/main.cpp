@@ -71,15 +71,41 @@ static void bootExitChord() {
   }
 }
 
-void setup() {
+// M5.begin saves brightness before the panel exists (so the value is 0),
+// clears the ST7789, then writes that 0 back. The backlight stays off and
+// the panel stays black until something draws. There is no splash bitmap.
+// External-display probes are left off so begin() cannot sit on the SPI bus
+// the panel needs. The speaker starts later, in audioStart().
+static void bringUpDisplay() {
   auto cfg = M5.config();
   cfg.internal_mic = false;
   cfg.internal_imu = false;
-  cfg.internal_spk = true;
+  cfg.internal_spk = false;
+  cfg.external_display_value = 0;
+  cfg.fallback_board = m5::board_t::board_M5CardputerADV;
+  cfg.clear_display = true;
   M5Cardputer.begin(cfg, true);
 
-  bootExitChord();
+  // Stamp-S3A gates the backlight on GPIO38. PWM from a detected panel
+  // owns the pin when autodetect worked; a plain high covers a missed detect.
+  if (M5Cardputer.Display.width() < 200 || M5Cardputer.Display.height() < 120) {
+    pinMode(38, OUTPUT);
+    digitalWrite(38, HIGH);
+  }
+  M5Cardputer.Display.setBrightness(200);
+  M5Cardputer.Display.fillScreen(0x1082);
+  M5Cardputer.Display.setTextColor(0xFD20);
+  M5Cardputer.Display.setTextSize(1);
+  M5Cardputer.Display.setCursor(8, 60);
+  M5Cardputer.Display.print("MothDeck");
+}
+
+void setup() {
+  bringUpDisplay();
   uiBegin();
+  uiDraw(ble);
+  bootExitChord();
+  uiMountStorage();
   audioStart();
   ble.Begin(uiBleName());
 }
