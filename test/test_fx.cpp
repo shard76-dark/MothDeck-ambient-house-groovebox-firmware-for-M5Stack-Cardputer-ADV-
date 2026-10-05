@@ -1,6 +1,7 @@
 #include "Tracker.h"
 #include "SongFile.h"
 #include "InstrumentBank.h"
+#include "DefaultSamples.h"
 #include <cstdio>
 #include <cstring>
 
@@ -102,6 +103,94 @@ static int energy(Voice *voice, int count) {
   return sum;
 }
 
+static int meanAbsDelta(Voice *voice, int count) {
+  int prev = voice->UpdateVoice();
+  long acc = 0;
+  for (int i = 1; i < count; i++) {
+    int s = voice->UpdateVoice();
+    int d = s - prev;
+    if (d < 0) {
+      d = -d;
+    }
+    acc += d;
+    prev = s;
+  }
+  return (int)(acc / (count - 1));
+}
+
+static void testDrumHitsOverlap() {
+  Voice kick;
+  kick.SetNote(0, false, -1, 0);
+  int first = kick.UpdateVoice();
+  int want = (((int)kick1[0] - 128) << 8) * kick.volume / 3;
+  expect(first == want, "a single kick starts at the recorded level");
+
+  Voice both;
+  both.SetNote(0, false, -1, 0);
+  for (int i = 0; i < 3000; i++) {
+    both.UpdateVoice();
+  }
+  both.SetNote(4, false, -1, 0);
+  Voice hat;
+  hat.SetNote(4, false, -1, 0);
+  long diff = 0;
+  long hatE = 0;
+  for (int i = 0; i < 800; i++) {
+    int b = both.UpdateVoice();
+    int h = hat.UpdateVoice();
+    int d = b - h;
+    diff += (long)d * (long)d;
+    hatE += (long)h * (long)h;
+  }
+  expect(diff > hatE / 8, "a hat does not replace the kick that is still ringing");
+
+  Voice sfx;
+  sfx.SetNote(0, false, -1, 1);
+  int loud = 0;
+  for (int i = 0; i < 400; i++) {
+    int s = sfx.UpdateVoice();
+    if (s < 0) {
+      s = -s;
+    }
+    loud += s;
+  }
+  expect(loud > 1000, "a sound effect still plays");
+}
+
+static void testInsertsAreSmooth() {
+  Voice dry;
+  Voice echo;
+  dry.SetNote(0, false, 1, 4);
+  echo.SetNote(0, false, 1, 4);
+  echo.bps = 2.0f;
+  echo.fx.delayDiv = 1;
+  echo.fx.delayMix = 100;
+  echo.fx.delayFb = 40;
+  int dryEdge = meanAbsDelta(&dry, 6000);
+  int wetEdge = meanAbsDelta(&echo, 6000);
+  expect(wetEdge > 0 && wetEdge < dryEdge, "a full wet delay is darker than the dry saw, not grittier");
+
+  Voice chor;
+  chor.SetNote(0, false, 1, 4);
+  chor.fx.chorus = 80;
+  int chorEdge = meanAbsDelta(&chor, 4000);
+  expect(chorEdge < dryEdge * 2, "chorus does not buzz the saw");
+
+  Voice room;
+  room.SetNote(0, false, 1, 4);
+  room.fx.reverb = 80;
+  bool changed = false;
+  Voice plain;
+  plain.SetNote(0, false, 1, 4);
+  for (int i = 0; i < 8000; i++) {
+    if (room.UpdateVoice() != plain.UpdateVoice()) {
+      changed = true;
+      break;
+    }
+  }
+  expect(changed, "reverb changes the voice it is set on");
+}
+
 static void testInsertsAreIndependent() {
   Voice dry;
   Voice filtered;
@@ -150,6 +239,8 @@ static void testInsertsAreIndependent() {
 int main() {
   testFxStaysOnTrack();
   testVolumeRoundTrip();
+  testDrumHitsOverlap();
+  testInsertsAreSmooth();
   testInsertsAreIndependent();
   if (failures) {
     std::printf("%d failed\n", failures);

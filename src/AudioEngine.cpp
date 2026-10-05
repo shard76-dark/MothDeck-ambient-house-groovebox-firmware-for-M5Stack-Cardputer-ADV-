@@ -1,4 +1,5 @@
 #include "AudioEngine.h"
+#include "DspHot.h"
 #include "Tracker.h"
 #include "BoardConfig.h"
 #include "DevLog.h"
@@ -93,18 +94,9 @@ static void renderBlock(int16_t *dst) {
   drainSide();
   int peak[4] = {0, 0, 0, 0};
   for (int i = 0; i < kBlock; i++) {
-    int sample = tracker.UpdateTracker();
-    if (sample > 32767) {
-      sample = 32767;
-    } else if (sample < -32768) {
-      sample = -32768;
-    }
-    dst[i] = (int16_t)sample;
+    dst[i] = (int16_t)dspSat16(tracker.UpdateTracker());
     for (int t = 0; t < 4; t++) {
-      int a = tracker.lastSamples[t];
-      if (a < 0) {
-        a = -a;
-      }
+      int a = dspAbs(tracker.lastSamples[t]);
       if (a > peak[t]) {
         peak[t] = a;
       }

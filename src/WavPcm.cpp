@@ -1,4 +1,5 @@
 #include "WavPcm.h"
+#include "DspHot.h"
 #include <string.h>
 
 static uint16_t ru16(const uint8_t *p) {
@@ -205,12 +206,7 @@ int decodeWavMono(const uint8_t *data, int len, int16_t *dst, int dstFrames, Wav
     if (w->channels == 2) {
       acc /= 2;
     }
-    if (acc > 32767) {
-      acc = 32767;
-    } else if (acc < -32768) {
-      acc = -32768;
-    }
-    dst[i] = (int16_t)acc;
+    dst[i] = (int16_t)dspSat16(acc);
   }
   return frames;
 }

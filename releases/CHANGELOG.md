@@ -1,5 +1,9 @@
 ## 2026-10-05
 
+Drums, sound effects, and one-shot samples on one track overlap. A new hit used to restart the only playback cursor, so a hat cut a kick that was still ringing. Each track keeps eight one-shots and mixes them. A loop on that track is mixed with the voice and then runs through the insert, instead of replacing the voice.
+
+The insert was stair-stepped. The delay line kept every other sample, so delay, chorus, and reverb aliased. Chorus and tremolo ran their LFOs at audio rate. The filter moved in whole samples, so a dark cutoff stuck and then jumped. The line is full rate now (about 186 ms; a 1/8 delay clamps to that instead of folding). Chorus and tremolo are slow sines, the filter keeps a fractional state, and delay and reverb lowpass their tails. Bitcrush is still the control that is supposed to sound lo-fi. On the ESP32-S3 the output clamp, the delay and reverb poles, and the fractional delay read use CLAMPS and MULL. The same helpers cover the rest of the sample loop where the product still fits in 32 bits: shot interpolation, drive gain, chorus and tremolo, the synth lowpass and amplitude, pitch bend, and the PCM saturator. The filter's fractional state stays a wide multiply.
+
 The README, the Pages landing page, and `releases/INSTALL.md` say to use earphones or headphones. The Cardputer ADV internal speaker does not play with this firmware. The codec and I2S pins already match M5Unified's ADV speaker profile, and the NS4150B enable is the jack switch on the board rather than a GPIO this image can turn on. No speaker-path change is in this note.
 
 The README, `docs/FORMATS.md`, and `releases/INSTALL.md` now describe this ADV image end to end: boot and splash, drums and kit loading, Mixer and FX, streamed loops, the 8-bit 22050 Hz sample format, the free/total memory row, the SD pack, and the hardware limits of the Stamp-S3A. This tree builds one target, `cardputer-adv`.

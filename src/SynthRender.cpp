@@ -1,14 +1,5 @@
 #include "SynthRender.h"
-
-static int clamp16(int v) {
-  if (v > 32767) {
-    return 32767;
-  }
-  if (v < -32768) {
-    return -32768;
-  }
-  return v;
-}
+#include "DspHot.h"
 
 static int osc(int wave, int i, int n) {
   if (n < 2) {
@@ -85,7 +76,7 @@ void renderSubtractive(int16_t *dst, int n, int wave, int cutoff, int resonance)
     // A touch of the previous sample keeps the cycle from clicking.
     y = (y * 3 + prev) / 4;
     prev = y;
-    dst[i] = (int16_t)clamp16(y);
+    dst[i] = (int16_t)dspSat16(y);
   }
   // Remove DC so a looped cycle does not thump.
   int64_t sum = 0;
@@ -94,7 +85,7 @@ void renderSubtractive(int16_t *dst, int n, int wave, int cutoff, int resonance)
   }
   int dc = (int)(sum / n);
   for (int i = 0; i < n; i++) {
-    dst[i] = (int16_t)clamp16(dst[i] - dc);
+    dst[i] = (int16_t)dspSat16(dst[i] - dc);
   }
 }
 
@@ -125,6 +116,6 @@ void renderFm(int16_t *dst, int n, int ratio, int indexAmount) {
     if (idx < 0) {
       idx = (idx % n + n) % n;
     }
-    dst[i] = (int16_t)clamp16(osc(0, idx, n));
+    dst[i] = (int16_t)dspSat16(osc(0, idx, n));
   }
 }

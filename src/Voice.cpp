@@ -1,10 +1,12 @@
 #include "Voice.h"
+#include "DspHot.h"
 #include "MidiMap.h"
 #include "DefaultSamples.h"
 #include "InstrumentBank.h"
 #include "DrumKit.h"
 #include "BoardConfig.h"
 #include <math.h>
+#include <string.h>
 
 // Keyboard order, not the old kick/snare/hat groups. See docs/FORMATS.md.
 // C kick, C# rim, D snare, D# clap, E hat, F open hat, F# perc, G tom,
@@ -78,30 +80,232 @@ Voice::Voice() {
   isDelay = false;
   envelopeNum = 0;
   filtLp = 0;
+  filtLp2 = 0;
+  delayLp = 0;
+  revDamp = 0;
   crushHold = 0;
   crushCount = 0;
   chorusPhase = 0;
   tremPhase = 0;
+  shotSerial = 0;
+  memset(shots, 0, sizeof(shots));
   SetEnvelopeLength(1);
   ResetEffects();
 }
 
-int Voice::UpdateVoice() {
+void Voice::ReleaseShots() {
+  memset(shots, 0, sizeof(shots));
+}
+
+static int pcmStep(int rate, bool native, int octave, int recOctave) {
+  int step;
+  if (native) {
+    int r = rate > 0 ? rate : kSampleRate;
+    step = (int)(((int64_t)1000 * r) / kSampleRate);
+  } else {
+    int oct = (recOctave > -1) ? (recOctave + 1) : (octave + 1);
+    step = oct * 500;
+    if (rate > 0 && rate != kSampleRate) {
+      step = (int)(((int64_t)step * rate) / kSampleRate);
+    }
+  }
+  if (step < 1) {
+    step = 1;
+  }
+  return step;
+}
+
+void Voice::StartShot(const void *data, int length, int step, bool eightBit, uint8_t kind, bool fromKit, int instrument) {
+  if (!data || length < 2 || step < 1) {
+    return;
+  }
+  int slot = -1;
+  for (int i = 0; i < kShotCount; i++) {
+    if (!shots[i].active) {
+      slot = i;
+      break;
+    }
+  }
+  if (slot < 0) {
+    slot = 0;
+    for (int i = 1; i < kShotCount; i++) {
+      int64_t left = (int64_t)shots[i].index * (shots[slot].length > 0 ? shots[slot].length : 1);
+      int64_t right = (int64_t)shots[slot].index * (shots[i].length > 0 ? shots[i].length : 1);
+      if (left > right) {
+        slot = i;
+      }
+    }
+  }
+  Shot &s = shots[slot];
+  memset(&s, 0, sizeof(s));
+  s.data = data;
+  s.length = length;
+  s.step = step;
+  s.eightBit = eightBit ? 1 : 0;
+  s.reverse = envelopeNum > 1 ? 1 : 0;
+  s.fromKit = fromKit ? 1 : 0;
+  s.kind = kind;
+  s.note = (uint8_t)note;
+  s.instrument = (int8_t)instrument;
+  s.index = 0;
+  s.active = 1;
+  s.serial = ++shotSerial;
+}
+
+void Voice::ArmPcm(int instrument) {
+  if (samplerMode) {
+    return;
+  }
+  if (instrument == 0) {
+    DrumHitView hit;
+    if ((unsigned)note <= 11 && drumKitHit(note, &hit) && hit.data && hit.length > 1) {
+      int rate = hit.rate > 0 ? hit.rate : kSampleRate;
+      StartShot(hit.data, hit.length, pcmStep(rate, true, octave, recOctave), false, 1, true, 0);
+      return;
+    }
+    if ((unsigned)note > 11) {
+      return;
+    }
+    int rate = kDrumRates[note] > 0 ? kDrumRates[note] : kSampleRate;
+    StartShot(kDrumWaves[note], kDrumLens[note], pcmStep(rate, true, octave, recOctave), true, 1, false, 0);
+    return;
+  }
+  if (instrument == 1) {
+    if ((unsigned)note > 11) {
+      return;
+    }
+    StartShot(kSfxWaves[note], kSfxLens[note], pcmStep(kSfxRate, false, octave, recOctave), true, 2, false, 1);
+    return;
+  }
+  if (instrument >= 12) {
+    ExtSampleView view;
+    if (!instrumentView(instrument, &view) || !view.data || view.length < 2 || !view.oneshot) {
+      return;
+    }
+    int step = extBaseStep > 0 ? extBaseStep : 1000;
+    StartShot(view.data, view.length, step, false, 3, false, instrument);
+  }
+}
+
+static bool shotNewer(uint16_t a, uint16_t b) {
+  return a != b && (uint16_t)(a - b) < 0x8000;
+}
+
+int Voice::MixShots() {
+  int newest = -1;
+  for (int i = 0; i < kShotCount; i++) {
+    if (!shots[i].active) {
+      continue;
+    }
+    if (newest < 0 || shotNewer(shots[i].serial, shots[newest].serial)) {
+      newest = i;
+    }
+  }
+  bool ownPitch = !samplerMode && (voiceNum <= 1 || voiceNum >= 12);
+  int acc = 0;
+  for (int i = 0; i < kShotCount; i++) {
+    Shot &shot = shots[i];
+    if (!shot.active || !shot.data || shot.length < 2) {
+      shot.active = 0;
+      continue;
+    }
+    if (shot.kind == 1 && shot.fromKit) {
+      DrumHitView hit;
+      if (!drumKitHit(shot.note, &hit) || hit.data != shot.data) {
+        shot.active = 0;
+        continue;
+      }
+    } else if (shot.kind == 3) {
+      ExtSampleView view;
+      if (!instrumentView(shot.instrument, &view) || view.data != shot.data) {
+        shot.active = 0;
+        continue;
+      }
+    }
+    if (shot.index >= shot.length * 1000) {
+      shot.active = 0;
+      continue;
+    }
+    int pos = shot.index;
+    int span = shot.length * 1000;
+    if (shot.reverse) {
+      pos = span - 1 - pos;
+    }
+    if (pos < 0) {
+      pos = 0;
+    } else if (pos >= span) {
+      pos = span - 1;
+    }
+    int idx = pos / 1000;
+    int frac = pos % 1000;
+    int idx2 = idx + 1;
+    if (idx2 >= shot.length) {
+      idx2 = shot.length - 1;
+    }
+    int s0;
+    int s1;
+    if (shot.eightBit) {
+      const uint8_t *p = static_cast<const uint8_t *>(shot.data);
+      s0 = ((int)p[idx] - 128) << 8;
+      s1 = ((int)p[idx2] - 128) << 8;
+    } else {
+      const int16_t *p = static_cast<const int16_t *>(shot.data);
+      s0 = p[idx];
+      s1 = p[idx2];
+    }
+    // frac is 0..999. The product fits MULL; divide keeps the read linear
+    // between frames instead of a staircase. frac 0 is the raw frame.
+    int sample = s0 + dspMul(s1 - s0, frac) / 1000;
+    int step = shot.step > 0 ? shot.step : 1;
+    if (bend14 != 8192) {
+      step = scaleByBend(step, bend14);
+    }
+    shot.index += step;
+    if (ownPitch && i == newest && pitchMult > 0 && pitchDur > 0) {
+      pitchDur -= pitchMult;
+      if (pitchMult == 1) {
+        shot.index -= pitchDur / 5;
+      } else if (pitchMult == 2) {
+        shot.index += pitchDur / 5;
+      }
+    }
+    if (shot.index < 0) {
+      shot.index = 0;
+    }
+    sample = dspMul(sample, volume) / 3;
+    acc += sample;
+  }
+  return dspClamp(acc, -28000, 28000);
+}
+
+int Voice::RenderSource() {
+  int sample = 0;
+  if (voiceNum >= 12) {
+    ExtSampleView view;
+    bool oneshot = instrumentView(voiceNum, &view) && view.oneshot != 0;
+    if (!oneshot) {
+      sample = ReadExt();
+    }
+  } else if (voiceNum > 1 || samplerMode) {
+    sample = ReadWaveform();
+  }
+  sample += MixShots();
+  return dspClamp(sample, -28000, 28000);
+}
+
+int Voice::OutputWith(int extra) {
+  int sample = RenderSource() + extra;
   if (soloMute || mute) {
     return 0;
   }
+  return Shape(sample);
+}
 
-  int sample;
-  if (voiceNum >= 12) {
-    sample = ReadExt();
-  } else if (voiceNum > 1 || samplerMode) {
-    sample = ReadWaveform();
-  } else if (voiceNum == 1) {
-    sample = ReadSfxWaveform();
-  } else {
-    sample = ReadDrumWaveform();
-  }
+int Voice::UpdateVoice() {
+  return OutputWith(0);
+}
 
+int Voice::Shape(int sample) {
   if (phaserMult > 0) {
     if (phaserDir >= 0) {
       phaserOffset++;
@@ -177,52 +381,83 @@ int Voice::FxDelayBack() const {
   }
   int perBeat = (int)(44100.0f / rate);
   int n = perBeat / div;
-  if (n > 7000) {
-    n = 7000;
+  // Full-rate line. 1/32 and 1/16 fit at the stock tempos. 1/8 clamps
+  // to the buffer instead of aliasing a longer tap.
+  int limit = kHistoryLen - 8;
+  if (n > limit) {
+    n = limit;
   } else if (n < 2) {
     n = 2;
   }
   return n;
 }
 
+static int lfoSine(int phase) {
+  int q = (phase >> 14) & 3;
+  int a = phase & 16383;
+  if (q & 1) {
+    a = 16383 - a;
+  }
+  int s = dspMulQ(a, 32767 - dspMulQ(a, a, 14), 14);
+  if (s > 32767) {
+    s = 32767;
+  }
+  if (q >= 2) {
+    s = -s;
+  }
+  return s;
+}
+
+static int clamp30k(int sample) {
+  return dspClamp(sample, -30000, 30000);
+}
+
 int Voice::ApplyInserts(int sample) {
   if (fx.drive > 0) {
-    int gain = 256 + (int)fx.drive * 6;
-    sample = (int)(((int64_t)sample * gain) >> 8);
-    int mag = sample < 0 ? -sample : sample;
-    if (mag > 4000) {
-      int over = mag - 4000;
-      int denom = 64 + (int)fx.drive + (over >> 6);
-      int shaped = 4000 + (over * 48) / denom;
-      if (shaped > 20000) {
-        shaped = 20000;
-      }
-      sample = sample < 0 ? -shaped : shaped;
+    // Smooth saturation. A hard knee at a fixed threshold steps the
+    // waveform and sounds like crunch even when bitcrush is off.
+    int gain = 256 + (int)fx.drive * 4;
+    int x = dspMulQ(sample, gain, 8);
+    int knee = 14000 - (int)fx.drive * 70;
+    if (knee < 4000) {
+      knee = 4000;
     }
+    int ax = dspAbs(x);
+    int y = (int)(((int64_t)ax * knee) / (knee + ax / 2));
+    if (y > 24000) {
+      y = 24000;
+    }
+    sample = x < 0 ? -y : y;
   }
 
   if (fx.filter == 1 || fx.filter == 2) {
-    int coef = 180 + (int)fx.cutoff * 220;
-    if (coef > 28000) {
-      coef = 28000;
+    // Q10 state so a dark cutoff still moves in fractions of an LSB
+    // instead of sticking and then jumping.
+    int coef = 500 + (int)fx.cutoff * 180;
+    if (coef > 22000) {
+      coef = 22000;
     }
     int x = sample;
-    if (fx.res > 0) {
-      int band = x - filtLp;
-      x += (int)(((int64_t)band * fx.res) / 220);
-      if (x > 26000) {
-        x = 26000;
-      } else if (x < -26000) {
-        x = -26000;
-      }
+    if (fx.filter == 1 && fx.res > 0) {
+      int low = filtLp2 >> 10;
+      int band = x - low;
+      x += dspMul(band, fx.res) / 600;
+      x = clamp30k(x);
     }
-    filtLp += (int)(((int64_t)(x - filtLp) * coef) >> 15);
-    if (filtLp > 30000) {
-      filtLp = 30000;
-    } else if (filtLp < -30000) {
-      filtLp = -30000;
+    int target = x << 10;
+    // Q10. The state times the coefficient does not fit MULL.
+    filtLp += (int)(((int64_t)(target - filtLp) * coef) >> 15);
+    int poleLimit = 30000 << 10;
+    filtLp = dspClamp(filtLp, -poleLimit, poleLimit);
+    if (fx.filter == 1) {
+      int mid = filtLp >> 10;
+      int target2 = mid << 10;
+      filtLp2 += (int)(((int64_t)(target2 - filtLp2) * coef) >> 15);
+      filtLp2 = dspClamp(filtLp2, -poleLimit, poleLimit);
+      sample = filtLp2 >> 10;
+    } else {
+      sample = x - (filtLp >> 10);
     }
-    sample = (fx.filter == 2) ? (x - filtLp) : filtLp;
   } else if (lowPassMult > 0) {
     int taps = 4 * lowPassMult;
     for (int i = 1; i < taps; i++) {
@@ -232,6 +467,7 @@ int Voice::ApplyInserts(int sample) {
   }
 
   if (fx.crush > 0 && fx.crush <= 4) {
+    // Named lo-fi. Everything else in this chain stays full rate.
     if (crushCount <= 0) {
       int shift = (int)fx.crush * 2;
       crushHold = (sample >> shift) << shift;
@@ -242,66 +478,78 @@ int Voice::ApplyInserts(int sample) {
   }
 
   if (fx.chorus > 0) {
-    chorusPhase += 6 + (int)bps;
-    if (chorusPhase >= 2048) {
-      chorusPhase -= 2048;
+    // ~0.7 Hz. The old step (~130 Hz) modulated the delay like a buzz.
+    chorusPhase += 1;
+    if (chorusPhase >= 65536) {
+      chorusPhase -= 65536;
     }
-    int tri = chorusPhase < 1024 ? chorusPhase : 2048 - chorusPhase;
-    int back = 220 + (tri >> 1);
-    if (back > 700) {
-      back = 700;
-    }
-    int wet = GetHistorySample(back);
-    int mix = (int)fx.chorus / 2;
-    if (mix > 50) {
-      mix = 50;
+    int mod = lfoSine(chorusPhase);
+    int delayQ8 = (880 << 8) + dspMulQ(mod, 160, 7);
+    int back = delayQ8 >> 8;
+    int frac = delayQ8 & 255;
+    int wet = HistoryAt(back, frac);
+    int mix = (int)fx.chorus;
+    if (mix > 60) {
+      mix = 60;
     }
     sample = sample * (100 - mix) / 100 + wet * mix / 100;
   }
 
-  int stored = sample;
+  int echo = 0;
   if (fx.delayDiv > 0 && fx.delayDiv <= 3) {
-    int delayed = GetHistorySample(FxDelayBack());
-    int fed = (int)(((int64_t)delayed * fx.delayFb) / 100);
-    stored = sample + fed;
-    if (stored > 24000) {
-      stored = 24000;
-    } else if (stored < -24000) {
-      stored = -24000;
+    int raw = GetHistorySample(FxDelayBack());
+    // Darken the repeat so feedback does not pile up into a bright fizz.
+    delayLp = dspClamp(delayLp, -24000, 24000);
+    echo = dspPole(&delayLp, raw, 9000);
+  }
+
+  if (fx.reverb > 0) {
+    static const int kTaps[6] = {947, 1601, 2251, 3119, 4327, 5987};
+    int wet = 0;
+    for (int i = 0; i < 6; i++) {
+      wet += GetHistorySample(kTaps[i]);
     }
+    wet /= 6;
+    revDamp = dspClamp(revDamp, -24000, 24000);
+    dspPole(&revDamp, wet, 5000);
+  }
+
+  // The line stores the dry plus damped feedback, not the wet mix.
+  int stored = sample;
+  if (echo != 0 && fx.delayFb > 0) {
+    stored += dspMul(echo, fx.delayFb) / 100;
+  }
+  if (fx.reverb > 0) {
+    stored += dspMul(revDamp, fx.reverb) / 400;
+  }
+  stored = clamp30k(stored);
+  UpdateHistory(stored);
+
+  if (fx.delayDiv > 0 && fx.delayDiv <= 3) {
     int mix = fx.delayMix;
     if (mix > 100) {
       mix = 100;
     }
-    sample = sample * (100 - mix) / 100 + delayed * mix / 100;
+    sample = sample * (100 - mix) / 100 + echo * mix / 100;
   }
 
-  UpdateHistory(stored);
-
   if (fx.tremolo > 0) {
-    tremPhase += 10 + (int)(bps * 28);
-    if (tremPhase >= 2048) {
-      tremPhase -= 2048;
+    // About 4 Hz, sine rather than a fast triangle.
+    tremPhase += 6;
+    if (tremPhase >= 65536) {
+      tremPhase -= 65536;
     }
-    int tri = tremPhase < 1024 ? tremPhase : 2048 - tremPhase;
-    int dip = ((1024 - tri) * (int)fx.tremolo) / 1024;
-    int gain = 100 - dip;
-    if (gain < 12) {
-      gain = 12;
+    int uni = (lfoSine(tremPhase) + 32768) >> 1;
+    int dip = dspMul(32767 - uni, fx.tremolo) / 32767;
+    int gain = 100 - dip * 3 / 4;
+    if (gain < 20) {
+      gain = 20;
     }
     sample = sample * gain / 100;
   }
 
   if (fx.reverb > 0) {
-    int wet = GetHistorySample(640) / 2;
-    wet += GetHistorySample(1480) / 3;
-    wet += GetHistorySample(2680) / 4;
-    sample += (int)(((int64_t)wet * fx.reverb) / 120);
-    if (sample > 26000) {
-      sample = 26000;
-    } else if (sample < -26000) {
-      sample = -26000;
-    }
+    sample += dspMul(revDamp, fx.reverb) / 100;
   } else if (reverbMult > 0) {
     int rSample = 0;
     for (int i = 2; i < 7; i++) {
@@ -318,7 +566,7 @@ int Voice::ApplyInserts(int sample) {
       sample = -5000;
     }
   }
-  return sample;
+  return clamp30k(sample);
 }
 
 int Voice::ReadWaveform() {
@@ -553,6 +801,7 @@ void Voice::SetNote(int val, bool delay, int optOctave, int optInstrument) {
       extBaseStep = step;
     }
   }
+  ArmPcm(optInstrument);
 }
 
 int Voice::ReadExt() {
@@ -684,6 +933,9 @@ void Voice::ResetEffects() {
   delaySamples = 0;
   fx = TrackFx();
   filtLp = 0;
+  filtLp2 = 0;
+  delayLp = 0;
+  revDamp = 0;
   crushHold = 0;
   crushCount = 0;
   chorusPhase = 0;
@@ -694,6 +946,9 @@ void Voice::CopyFx(const TrackFx &in) {
   fx = in;
   trackFxClamp(&fx);
   filtLp = 0;
+  filtLp2 = 0;
+  delayLp = 0;
+  revDamp = 0;
   crushHold = 0;
   crushCount = 0;
 }
@@ -703,15 +958,29 @@ void Voice::UpdateDelayOffset() {
 }
 
 void Voice::UpdateHistory(int sample) {
-  if (sample > 32767) {
-    sample = 32767;
-  } else if (sample < -32768) {
-    sample = -32768;
+  sample = dspSat16(sample);
+  sampleHistory[sampleHistoryIndex & kHistoryMask] = (int16_t)sample;
+  sampleHistoryIndex = (uint16_t)((sampleHistoryIndex + 1) & kHistoryMask);
+}
+
+int Voice::HistoryAt(int back, int frac256) {
+  if (back < 1) {
+    back = 1;
   }
-  sampleHistory[(sampleHistoryIndex >> 1) & (kHistoryLen - 1)] = (int16_t)sample;
-  sampleHistoryIndex = (uint16_t)((sampleHistoryIndex + 1) & kHistoryIndexMask);
+  if (back >= kHistoryLen - 1) {
+    back = kHistoryLen - 2;
+    frac256 = 0;
+  }
+  if (frac256 < 0) {
+    frac256 = 0;
+  } else if (frac256 > 255) {
+    frac256 = 255;
+  }
+  int i0 = (sampleHistoryIndex - back) & kHistoryMask;
+  int i1 = (i0 - 1) & kHistoryMask;
+  return dspLerp8(sampleHistory[i0], sampleHistory[i1], frac256);
 }
 
 int Voice::GetHistorySample(int backOffset) {
-  return sampleHistory[(((sampleHistoryIndex - backOffset) & kHistoryIndexMask) >> 1)];
+  return HistoryAt(backOffset, 0);
 }
