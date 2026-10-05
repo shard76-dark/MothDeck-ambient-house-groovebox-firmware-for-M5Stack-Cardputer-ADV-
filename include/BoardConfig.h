@@ -1,7 +1,8 @@
 #ifndef BoardConfig_h
 #define BoardConfig_h
 
-// M5Stack Cardputer ADV (ESP32-S3, 8MB flash, octal PSRAM, ST7789 240x135).
+// M5Stack Cardputer ADV (Stamp-S3A / ESP32-S3FN8, 8MB flash, no PSRAM,
+// ST7789 240x135). Sample caches use PSRAM only when psramFound() is true.
 // Everything used here is on the board: no external wiring.
 // Display, keyboard (TCA8418), and the ES8311 codec are brought up by
 // M5Unified / M5Cardputer. These pins are the ones the firmware touches

@@ -38,7 +38,7 @@ bash tools/run_tests.sh
 
 The dev environment `cardputer-adv-dev` adds serial logs for the card and the speaker.
 
-Flash mode is `qio_opi` so the octal PSRAM is usable for samples. Launcher's own Cardputer environment is `qio_qspi`. If a Launcher-installed image reboots before the UI, that PSRAM mode is the first thing to suspect; the application image itself does not change the bootloader Launcher already flashed.
+The image is built `qio_qspi` at 80 MHz. That is the memory type on the Arduino-ESP32 `m5stack_cardputer` board (QIO flash, QSPI PSRAM type, PSRAM left disabled) and on Launcher's Cardputer environment. The Stamp-S3A is an ESP32-S3FN8: 8MB flash and no PSRAM. `qio_opi` would boot-init octal PSRAM on GPIO33–37, which this board uses for the display. Sample and loop caches call `psramFound()` and use internal RAM when no PSRAM answers, so the same binary still uses PSRAM if a later module has it. `-DBOARD_HAS_PSRAM` is not set, so M5GFX does not prefer a PSRAM heap that is not there.
 
 ## Install from Launcher
 
@@ -152,7 +152,7 @@ releases/    application image, full-flash image, checksums, install notes
 
 ## Hardware notes
 
-Cardputer ADV: ESP32-S3, 8MB flash, octal PSRAM, ST7789 240×135, TCA8418 keyboard at I2C `0x34` (SDA 8, SCL 9), ES8311 on the same I2C bus, speaker amp enable GPIO42, microSD on a separate SPI (SCK 40, MISO 39, MOSI 14, CS 12) with GPIO5 held high before mount, battery ADC GPIO10, front button GPIO0. Grove (GPIO1 / GPIO2) is left unused. The IMU is left off.
+Cardputer ADV: Stamp-S3A (ESP32-S3FN8, 8MB flash, no onboard PSRAM), ST7789 240×135, TCA8418 keyboard at I2C `0x34` (SDA 8, SCL 9), ES8311 on the same I2C bus, speaker amp enable GPIO42, microSD on a separate SPI (SCK 40, MISO 39, MOSI 14, CS 12) with GPIO5 held high before mount, battery ADC GPIO10, front button GPIO0. Grove (GPIO1 / GPIO2) is left unused. The IMU is left off.
 
 ## Licence
 
