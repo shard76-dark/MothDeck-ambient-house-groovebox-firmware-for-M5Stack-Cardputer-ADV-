@@ -8,8 +8,9 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- SHA-256: `a67fa4fc02f588ccd3c3da78bbf5f91b2eb5ef9e50dc98947b6e4bcf55de5d5c`
-- Size: 1,128,112 bytes (app image, magic `E9`)
+- SHA-256: `ac13390947360fa20de01e39a5ceb9e564af5612c051aa9a440c347dc976dc72`
+- Size: 1,129,152 bytes (app image, magic `E9`)
+- This image mixes overlapping drum hits and one-shots on a track, and the insert effects are the smoother full-rate versions. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
