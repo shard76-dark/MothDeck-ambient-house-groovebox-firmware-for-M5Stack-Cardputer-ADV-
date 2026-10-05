@@ -224,7 +224,7 @@ PAGES = [
             "Bottom letters are the current octave. Q through ] is the next octave, chromatic. Comma is the C above that row.",
             "Shift or Alt adds an octave on letter notes. Opt subtracts one. They stack and clamp to MIDI C2–B5.",
             "Fn+; and Fn+. change page only while the page list is open. Fn+, and Fn+/ do nothing on Play. Other Fn chords still do the key's normal action.",
-            "Fn+− and Fn+= change speaker volume on every page (step 12). Hold ` or the front button about 0.7s to exit.",
+            "Fn+− and Fn+= change speaker volume on every page (step 12). Hold ` or the front button about 0.7s to exit when Launcher is present.",
             "While the page list is open it takes every key. Fn+; , Fn+. , and Tab move the highlight. Enter stays there. ` or Backspace returns to Play. Notes, space, and track keys do nothing.",
             "; sends note-length L with the stored length, and does not step it. The voice stores 4 minus that value. Enter does nothing on Play.",
             "Ctrl or Shift sends the shifted glyph, then the UI lowercases it. Digits and punctuation no longer match, so Ctrl+1–8 (!@#$%^&*) does not clear a track or pattern, and Shift+, is < rather than high C. Ctrl+N still starts a new song.",
@@ -295,8 +295,9 @@ PAGES = [
         "Exit",
         paint_exit,
         [
-            "Exit is a confirm. Enter clears the OTA boot selection and restarts toward Launcher. Other keys do not change playback.",
-            "` or Backspace returns to Play. Hold ` or the front button 0.7s to exit from any page, including boot.",
+            "Exit is offered when the APP_TEST slot holds a valid ESP32-S3 image (magic E9). Enter then clears the boot selection.",
+            "Without that image the menu entry is grey and says Launcher not found. Hold ` does not erase the boot selection.",
+            "` or Backspace returns to Play. Hold ` or the front button 0.7s to exit from any page when Launcher is present.",
         ],
     ),
 ]

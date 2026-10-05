@@ -14,6 +14,13 @@ echo "MIDI and song file"
   -o /tmp/mothdeck_test_midi
 /tmp/mothdeck_test_midi
 
+echo "Launcher detection"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_launcher.cpp" \
+  "$ROOT/src/LauncherDetect.cpp" \
+  -o /tmp/mothdeck_test_launcher
+/tmp/mothdeck_test_launcher
+
 echo "Modal input"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_modal.cpp" \

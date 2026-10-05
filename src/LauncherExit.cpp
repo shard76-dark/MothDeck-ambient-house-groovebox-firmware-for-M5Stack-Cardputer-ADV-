@@ -1,48 +1,49 @@
 #include "LauncherExit.h"
+#include "LauncherDetect.h"
 #include "DevLog.h"
 #include <Arduino.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <esp_system.h>
+#include <string.h>
 
-static bool different(const esp_partition_t *part, const esp_partition_t *running) {
-  return part && (!running || part->address != running->address);
+// Read every app slot and accept Launcher only when the APP_TEST image
+// header is a real ESP32-S3 app. otadata is erased only after that check.
+bool launcherInstalled() {
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  uint32_t runningAddress = running ? running->address : 0xFFFFFFFFu;
+  FlashSlot slots[8];
+  uint8_t headers[8][kAppHeaderBytes];
+  memset(slots, 0, sizeof(slots));
+  memset(headers, 0, sizeof(headers));
+  int count = 0;
+  esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, nullptr);
+  while (it && count < 8) {
+    const esp_partition_t *part = esp_partition_get(it);
+    if (part) {
+      FlashSlot &slot = slots[count];
+      slot.exists = true;
+      slot.subtype = part->subtype;
+      slot.address = part->address;
+      slot.size = part->size;
+      if (part->size >= (uint32_t)kAppHeaderBytes &&
+          esp_partition_read(part, 0, headers[count], kAppHeaderBytes) == ESP_OK) {
+        slot.header = headers[count];
+        slot.headerLen = kAppHeaderBytes;
+      }
+      count++;
+    }
+    it = esp_partition_next(it);
+  }
+  esp_partition_iterator_release(it);
+  return launcherPresent(slots, count, runningAddress);
 }
 
-// Launcher (bmorcelli/Launcher, read from current main) keeps itself in an
-// APP_TEST slot. Installed apps are real OTA subtypes, and Launcher selects
-// one by writing otadata (launcherPartitionSetOtaBoot). The matching clear
-// is launcherPartitionClearOtaBoot, which erases that partition.
-//
-// esp_ota_set_boot_partition() is the wrong call for APP_TEST. In ESP-IDF
-// 5.5 it only special-cases FACTORY (erase otadata). Every other subtype,
-// including TEST (0x20), is passed to esp_rewrite_ota_data(), which keeps
-// only the low nibble. 0x20 therefore selects OTA slot 0, not Launcher.
-// A FACTORY slot, when one exists and it is not the image we are running,
-// can be selected with the API. The TEST slot is selected by erasing
-// otadata and restarting, which is the clear path Launcher itself uses.
 bool exitToLauncher() {
-  const esp_partition_t *running = esp_ota_get_running_partition();
-  const esp_partition_t *test =
-      esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_TEST, nullptr);
-  const esp_partition_t *factory =
-      esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, nullptr);
-
-  if (different(factory, running)) {
-    esp_err_t err = esp_ota_set_boot_partition(factory);
-    if (err == ESP_OK) {
-      DEV_LOG("Launcher: factory selected, restarting");
-      delay(40);
-      esp_restart();
-      return true;
-    }
-  }
-
-  if (!different(test, running) && !different(factory, running)) {
-    DEV_LOG("Launcher: no resident partition");
+  if (!launcherInstalled()) {
+    DEV_LOG("Launcher: not verified, otadata left untouched");
     return false;
   }
-
   const esp_partition_t *ota =
       esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
   if (!ota || esp_partition_erase_range(ota, 0, ota->size) != ESP_OK) {

@@ -48,9 +48,11 @@ See [releases/INSTALL.md](releases/INSTALL.md) for the button-by-button steps. S
 
 Launcher lives in an `APP_TEST` partition and points `otadata` at the installed app (`launcherPartitionSetOtaBoot`). `esp_ota_set_boot_partition()` cannot select that test slot. In ESP-IDF 5.5 the call only erases `otadata` for a factory image; any other subtype is reduced to its low nibble, and `0x20` (TEST) becomes OTA slot 0. Calling it would boot the wrong image.
 
-Exit erases `otadata`, which is what `launcherPartitionClearOtaBoot` does, then restarts. It refuses to restart when no other app partition exists, so a standalone USB flash does not reboot-loop if Esc is held at boot.
+Exit is offered only when an `APP_TEST` slot holds a valid ESP32-S3 app image (header magic `E9`). That is the slot Launcher uses for itself. The check reads the partition table and the first 24 bytes of that image. A full-flash image, an erased slot, or a corrupt header leaves Exit greyed out with "Launcher not found", and holding Esc does not restart or erase `otadata`.
 
-Hold Esc (`` ` ``) or the front button for about 0.7 seconds, or confirm the Exit page. The same hold during MothDeck's own boot runs the exit before the audio task starts. After the restart, press Enter on Launcher's splash ("Press the button to enter the Launcher!") to stay there. Doing nothing on that splash starts the installed app again whenever the boot selection still names it.
+When the image checks out, Exit erases `otadata`, which is what `launcherPartitionClearOtaBoot` does, then restarts. It does not call `esp_ota_set_boot_partition()` on that slot.
+
+When Launcher is present, hold Esc (`` ` ``) or the front button for about 0.7 seconds, or confirm the Exit page. The same hold during MothDeck's own boot runs the exit before the audio task starts. After the restart, press Enter on Launcher's splash ("Press the button to enter the Launcher!") to stay there. Doing nothing on that splash starts the installed app again whenever the boot selection still names it. When Launcher is not present, the hold shows "Launcher not found" and continues in MothDeck.
 
 ## Keyboard
 
@@ -148,7 +150,7 @@ Rows: speaker, brightness, BLE name, battery, memory, card. Fn+`;` and Fn+`.` mo
 
 ### Exit
 
-The Exit page is a confirm. Enter clears the OTA boot selection and restarts toward Launcher. `` ` `` or Backspace returns to Play. Notes, space, track, pattern, and BPM keys do nothing on this page. Holding `` ` `` or the front button still exits from any screen.
+The Exit page is a confirm, and it is in the page list only when a Launcher image is detected. Enter clears the OTA boot selection and restarts toward Launcher. `` ` `` or Backspace returns to Play. Notes, space, track, pattern, and BPM keys do nothing on this page. Holding `` ` `` or the front button exits from any screen when Launcher is present. When it is not, the menu entry is grey, the page says "Launcher not found", and the hold does not change the boot selection.
 
 ## MIDI
 

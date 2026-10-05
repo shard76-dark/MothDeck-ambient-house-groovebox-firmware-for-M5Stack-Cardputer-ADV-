@@ -39,6 +39,15 @@ static void bootExitChord() {
   if (!held) {
     return;
   }
+  if (!launcherInstalled()) {
+    M5Cardputer.Display.fillScreen(0x1082);
+    M5Cardputer.Display.setTextColor(0x6B6D);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setCursor(8, 56);
+    M5Cardputer.Display.println("Launcher not found");
+    delay(700);
+    return;
+  }
   uint32_t confirm = millis();
   while ((uint32_t)(millis() - confirm) < 350) {
     M5Cardputer.update();
@@ -57,7 +66,7 @@ static void bootExitChord() {
   delay(400);
   if (!exitToLauncher()) {
     M5Cardputer.Display.setCursor(8, 80);
-    M5Cardputer.Display.println("No Launcher partition");
+    M5Cardputer.Display.println("Launcher not found");
     delay(900);
   }
 }

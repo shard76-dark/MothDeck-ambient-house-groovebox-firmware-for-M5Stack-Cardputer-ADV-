@@ -33,11 +33,13 @@ From inside MothDeck:
 - Open the Exit page (Tab until Exit) and press Enter, or
 - Hold Esc or the front button while MothDeck is starting.
 
-That clears the OTA boot selection and restarts. It does not call `esp_ota_set_boot_partition()` on Launcher's slot: that slot is type APP_TEST, and ESP-IDF treats the low nibble of that subtype as OTA slot 0, so the call would select the wrong image. Erasing `otadata` is the same operation as Launcher's `launcherPartitionClearOtaBoot`.
+MothDeck enables those controls only after it finds Launcher. The expected slot is the `APP_TEST` partition (subtype `0x20`), which is where Launcher keeps its own image. The first 24 bytes of that image must be a valid ESP32-S3 app header, starting with `E9`. An OTA slot with an app in it does not count, and neither does an erased or corrupt test slot.
+
+When that check passes, Exit clears the OTA boot selection and restarts. It does not call `esp_ota_set_boot_partition()` on Launcher's slot: ESP-IDF treats the low nibble of subtype `0x20` as OTA slot 0, so the call would select the wrong image. Erasing `otadata` is the same operation as Launcher's `launcherPartitionClearOtaBoot`. The erase runs only after the header check succeeds.
 
 After the restart, press Enter on the splash to remain in Launcher. If a Launcher build still boots the first OTA image when `otadata` is blank, power the device off and on and press Enter on the splash. That splash is the return path Launcher documents.
 
-A USB flash of `mothdeck-cardputer-adv-full.bin` has no Launcher partition. Exit then stays in MothDeck and shows "No Launcher partition".
+A USB flash of `mothdeck-cardputer-adv-full.bin` replaces the partition table and has no `APP_TEST` slot. Exit stays grey, the page list says "Launcher not found", and holding Esc does not erase `otadata`.
 
 ## USB flash, development only
 

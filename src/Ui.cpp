@@ -25,6 +25,8 @@ static const uint16_t COL_TRACK[4] = {0xFD20, 0x2D7F, 0xF81F, 0x07E0};
 
 static const char *kPageName[] = {"Play", "Instrument", "Mixer", "Song", "Loops", "MIDI", "Settings", "Exit"};
 static const int kPageCount = 8;
+static const int kExitPage = 7;
+static bool launcherOk = false;
 
 static const char *kNoteName[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 static const char *kEnvName[] = {"Fade out", "Fade in", "No fade", "Loop"};
@@ -114,7 +116,27 @@ static void playNote(char c, bool shift, bool alt, bool opt) {
   audioCommand('O', snap.octave);
 }
 
+static int pageSpan() {
+  return launcherOk ? kPageCount : kExitPage;
+}
+
+static int stepPage(int from, int delta) {
+  int n = pageSpan();
+  if (n < 1) {
+    return 0;
+  }
+  if (from < 0 || from >= n) {
+    from = 0;
+  }
+  return (from + delta + n) % n;
+}
+
 static void requestExit() {
+  if (!launcherInstalled()) {
+    launcherOk = false;
+    toastSet("Launcher not found");
+    return;
+  }
   canvas->fillSprite(COL_BG);
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(8, 36);
@@ -127,7 +149,8 @@ static void requestExit() {
   canvas->pushSprite(0, 0);
   delay(500);
   if (!exitToLauncher()) {
-    toastSet("No Launcher partition");
+    launcherOk = false;
+    toastSet("Launcher not found");
   }
 }
 
@@ -150,6 +173,7 @@ void uiBegin() {
   }
   M5Cardputer.Display.setBrightness(bright);
   audioSetSpeakerVolume(outVol);
+  launcherOk = launcherInstalled();
   instrumentBank.Scan();
   loopLibrary.Scan();
 }
@@ -595,6 +619,17 @@ static void drawSettings() {
 }
 
 static void drawExit() {
+  if (!launcherOk) {
+    canvas->setTextColor(COL_DIM);
+    canvas->setCursor(2, 36);
+    canvas->print("Launcher not found");
+    canvas->setCursor(2, 52);
+    canvas->print("Exit stays off.");
+    canvas->setCursor(2, 68);
+    canvas->print("Hold ` does nothing.");
+    legend("` back to Play");
+    return;
+  }
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   canvas->print("Exit to Launcher");
@@ -618,8 +653,16 @@ static void drawExit() {
 static void drawOverlay() {
   canvas->fillRect(40, 18, 160, 100, COL_BAR);
   canvas->drawRect(40, 18, 160, 100, COL_AMBER);
+  int rowH = launcherOk ? 11 : 10;
   for (int i = 0; i < kPageCount; i++) {
-    canvas->setCursor(50, 24 + i * 11);
+    bool grey = (i == kExitPage && !launcherOk);
+    canvas->setCursor(50, 22 + i * rowH);
+    if (grey) {
+      canvas->setTextColor(COL_DIM);
+      canvas->print("  ");
+      canvas->print(kPageName[i]);
+      continue;
+    }
     if (i == page) {
       canvas->setTextColor(COL_AMBER);
       canvas->print("> ");
@@ -628,6 +671,11 @@ static void drawOverlay() {
       canvas->print("  ");
     }
     canvas->print(kPageName[i]);
+  }
+  if (!launcherOk) {
+    canvas->setTextColor(COL_DIM);
+    canvas->setCursor(48, 104);
+    canvas->print("Launcher not found");
   }
 }
 
@@ -969,7 +1017,7 @@ static KeyEvent eventFrom(const Keyboard_Class::KeysState &st) {
 
 static void applyModal(const ModalAction &action, char typed, BleMidi &ble) {
   if (action.pageDelta) {
-    page = (page + action.pageDelta + kPageCount) % kPageCount;
+    page = stepPage(page, action.pageDelta);
   }
   if (action.cancelToPlay) {
     page = 0;
@@ -1007,15 +1055,11 @@ static void applyModal(const ModalAction &action, char typed, BleMidi &ble) {
 }
 
 static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
-  if (activeModal(overlay, naming, page == 7) != MODAL_NONE) {
+  if (activeModal(overlay, naming, page == kExitPage) != MODAL_NONE) {
     return;
   }
   if (st.tab) {
-    if (st.shift || st.ctrl) {
-      page = (page + kPageCount - 1) % kPageCount;
-    } else {
-      page = (page + 1) % kPageCount;
-    }
+    page = stepPage(page, (st.shift || st.ctrl) ? -1 : 1);
     overlay = false;
     naming = false;
     return;
@@ -1064,7 +1108,16 @@ void uiPoll(BleMidi &ble) {
       escFired = false;
     } else if (!escFired && (uint32_t)(millis() - escSince) > 700) {
       escFired = true;
-      requestExit();
+      if (launcherInstalled()) {
+        launcherOk = true;
+        requestExit();
+      } else {
+        launcherOk = false;
+        if (page == kExitPage) {
+          page = 0;
+        }
+        toastSet("Launcher not found");
+      }
     }
   } else {
     escDown = false;
@@ -1073,7 +1126,7 @@ void uiPoll(BleMidi &ble) {
   if (kb.isChange() && kb.isPressed()) {
     Keyboard_Class::KeysState st = kb.keysState();
     KeyEvent ev = eventFrom(st);
-    ModalKind kind = activeModal(overlay, naming, page == 7);
+    ModalKind kind = activeModal(overlay, naming, page == kExitPage);
     if (kind != MODAL_NONE) {
       ModalAction action;
       dispatchModal(kind, ev, &action);
