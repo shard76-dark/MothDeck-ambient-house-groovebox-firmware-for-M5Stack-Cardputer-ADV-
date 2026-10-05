@@ -1,0 +1,12 @@
+.pio/
+.pioenvs/
+.piolibdeps/
+__pycache__/
+*.pyc
+.vscode/
+uploads/
+agent-tools/
+*.elf
+*.map
+sdkconfig.*
+.cache/

@@ -1,0 +1,292 @@
+#include "AudioEngine.h"
+#include "Tracker.h"
+#include "BoardConfig.h"
+#include "DevLog.h"
+#include "LoopFormat.h"
+#include <Arduino.h>
+#include <M5Unified.h>
+#include <atomic>
+#include <string.h>
+
+static Tracker tracker;
+static QueueHandle_t cmdQ = nullptr;
+static QueueHandle_t midiOutQ = nullptr;
+static TaskHandle_t audioTaskHandle = nullptr;
+static std::atomic<int> songPending{0};
+static std::atomic<int> captureState{0};
+static std::atomic<int> loopPending{0};
+static std::atomic<int> patPending{0};
+static SongData songBuf;
+static SongData captureBuf;
+static LoopArm loopBuf;
+static int loopTrack = 0;
+static uint8_t patBuf[kPatternStepsMax];
+static int patCount = 0;
+static int patTrack = 0;
+static Snap snapSlots[2];
+static std::atomic<uint32_t> snapSeq{0};
+static const int kBlock = 256;
+static int16_t blocks[3][kBlock];
+
+enum CmdType : uint8_t { CMD_KEY = 1, CMD_MIDI = 2, CMD_STOP_LOOP = 3, CMD_STOP_AUD = 4 };
+
+struct Cmd {
+  uint8_t type;
+  char kind;
+  int val;
+  MidiEvent midi;
+};
+
+static void publishSnap(const int *peak) {
+  uint32_t s = snapSeq.load(std::memory_order_relaxed);
+  snapSeq.store(s + 1, std::memory_order_release);
+  Snap &dst = snapSlots[((s / 2) + 1) & 1];
+  for (int t = 0; t < 4; t++) {
+    tracker.lastSamples[t] = peak[t];
+  }
+  tracker.FillSnap(&dst);
+  snapSeq.store(s + 2, std::memory_order_release);
+}
+
+static void drainSide() {
+  if (captureState.load(std::memory_order_acquire) == 1) {
+    tracker.CaptureSong(&captureBuf);
+    captureState.store(2, std::memory_order_release);
+  }
+  if (songPending.load(std::memory_order_acquire) == 1) {
+    tracker.ApplySong(songBuf);
+    songPending.store(0, std::memory_order_release);
+  }
+  if (loopPending.load(std::memory_order_acquire) == 1) {
+    if (loopTrack < 0) {
+      tracker.StartAudition(loopBuf);
+    } else {
+      tracker.ArmLoop(loopTrack, loopBuf);
+    }
+    loopPending.store(0, std::memory_order_release);
+  }
+  if (patPending.load(std::memory_order_acquire) == 1) {
+    tracker.WritePattern(patTrack, patBuf, patCount);
+    patPending.store(0, std::memory_order_release);
+  }
+  Cmd cmd;
+  while (cmdQ && xQueueReceive(cmdQ, &cmd, 0) == pdTRUE) {
+    if (cmd.type == CMD_KEY) {
+      tracker.SetCommand(cmd.kind, cmd.val);
+    } else if (cmd.type == CMD_MIDI) {
+      tracker.HandleMidi(cmd.midi);
+    } else if (cmd.type == CMD_STOP_LOOP) {
+      tracker.StopLoop(cmd.val);
+    } else if (cmd.type == CMD_STOP_AUD) {
+      tracker.StopAudition();
+    }
+  }
+  MidiEvent out;
+  while (tracker.PopMidiOut(&out)) {
+    if (midiOutQ) {
+      xQueueSend(midiOutQ, &out, 0);
+    }
+  }
+}
+
+static void renderBlock(int16_t *dst) {
+  drainSide();
+  int peak[4] = {0, 0, 0, 0};
+  for (int i = 0; i < kBlock; i++) {
+    int sample = tracker.UpdateTracker();
+    if (sample > 32767) {
+      sample = 32767;
+    } else if (sample < -32768) {
+      sample = -32768;
+    }
+    dst[i] = (int16_t)sample;
+    for (int t = 0; t < 4; t++) {
+      int a = tracker.lastSamples[t];
+      if (a < 0) {
+        a = -a;
+      }
+      if (a > peak[t]) {
+        peak[t] = a;
+      }
+    }
+  }
+  publishSnap(peak);
+}
+
+static void audioTask(void *arg) {
+  (void)arg;
+  int fill = 0;
+  for (;;) {
+    int queued = (int)M5.Speaker.isPlaying(0);
+    if (queued >= 2) {
+      vTaskDelay(1);
+      continue;
+    }
+    renderBlock(blocks[fill]);
+    if (!M5.Speaker.playRaw(blocks[fill], kBlock, (uint32_t)kSampleRate, false, 1, 0, false)) {
+      vTaskDelay(1);
+      continue;
+    }
+    fill = (fill + 1) % 3;
+  }
+}
+
+void audioStart() {
+  if (audioTaskHandle) {
+    return;
+  }
+  memset(snapSlots, 0, sizeof(snapSlots));
+  cmdQ = xQueueCreate(24, sizeof(Cmd));
+  midiOutQ = xQueueCreate(16, sizeof(MidiEvent));
+  M5.Speaker.end();
+  auto cfg = M5.Speaker.config();
+  cfg.sample_rate = kSampleRate;
+  cfg.task_priority = 4;
+  cfg.task_pinned_core = 1;
+  cfg.dma_buf_len = 256;
+  cfg.dma_buf_count = 8;
+  cfg.magnification = 2;
+  cfg.stereo = false;
+  M5.Speaker.config(cfg);
+  if (!M5.Speaker.begin()) {
+    DEV_LOG("Speaker: begin failed");
+  } else {
+    DEV_LOG("Speaker: 44100 Hz");
+  }
+  M5.Speaker.setVolume(160);
+  xTaskCreatePinnedToCore(audioTask, "mothdeck-audio", 8192, nullptr, 5, &audioTaskHandle, 1);
+}
+
+bool audioRunning() {
+  return audioTaskHandle != nullptr;
+}
+
+void audioCommand(char kind, int val) {
+  if (!cmdQ) {
+    return;
+  }
+  Cmd cmd;
+  memset(&cmd, 0, sizeof(cmd));
+  cmd.type = CMD_KEY;
+  cmd.kind = kind;
+  cmd.val = val;
+  xQueueSend(cmdQ, &cmd, 0);
+}
+
+void audioMidi(const MidiEvent &event) {
+  if (!cmdQ) {
+    return;
+  }
+  Cmd cmd;
+  memset(&cmd, 0, sizeof(cmd));
+  cmd.type = CMD_MIDI;
+  cmd.midi = event;
+  xQueueSend(cmdQ, &cmd, 0);
+}
+
+bool audioCapture(SongData *song) {
+  if (!song) {
+    return false;
+  }
+  if (captureState.load() != 0) {
+    return false;
+  }
+  captureState.store(1);
+  uint32_t start = millis();
+  while (captureState.load() != 2) {
+    if ((uint32_t)(millis() - start) > 300) {
+      captureState.store(0);
+      return false;
+    }
+    delay(1);
+  }
+  *song = captureBuf;
+  captureState.store(0);
+  return true;
+}
+
+void audioApplySong(const SongData &song) {
+  while (songPending.load() != 0) {
+    delay(1);
+  }
+  songBuf = song;
+  songPending.store(1);
+}
+
+void audioArmLoop(int track, const LoopArm &arm) {
+  while (loopPending.load() != 0) {
+    delay(1);
+  }
+  loopBuf = arm;
+  loopTrack = track;
+  loopPending.store(1);
+}
+
+void audioStopLoop(int track) {
+  if (!cmdQ) {
+    return;
+  }
+  Cmd cmd;
+  memset(&cmd, 0, sizeof(cmd));
+  cmd.type = CMD_STOP_LOOP;
+  cmd.val = track;
+  xQueueSend(cmdQ, &cmd, 0);
+}
+
+void audioAudition(const LoopArm &arm) {
+  audioArmLoop(-1, arm);
+}
+
+void audioStopAudition() {
+  if (!cmdQ) {
+    return;
+  }
+  Cmd cmd;
+  memset(&cmd, 0, sizeof(cmd));
+  cmd.type = CMD_STOP_AUD;
+  xQueueSend(cmdQ, &cmd, 0);
+}
+
+void audioWritePattern(int track, const uint8_t *steps, int count) {
+  if (!steps || count <= 0) {
+    return;
+  }
+  while (patPending.load() != 0) {
+    delay(1);
+  }
+  if (count > kPatternStepsMax) {
+    count = kPatternStepsMax;
+  }
+  memset(patBuf, 0, sizeof(patBuf));
+  memcpy(patBuf, steps, count);
+  patCount = count;
+  patTrack = track;
+  patPending.store(1);
+}
+
+bool audioPopMidi(MidiEvent *event) {
+  if (!event || !midiOutQ) {
+    return false;
+  }
+  return xQueueReceive(midiOutQ, event, 0) == pdTRUE;
+}
+
+void audioReadSnap(Snap *out) {
+  if (!out) {
+    return;
+  }
+  for (int n = 0; n < 4; n++) {
+    uint32_t s = snapSeq.load(std::memory_order_acquire);
+    if (s & 1) {
+      continue;
+    }
+    *out = snapSlots[(s / 2) & 1];
+    if (snapSeq.load(std::memory_order_acquire) == s) {
+      return;
+    }
+  }
+}
+
+void audioSetSpeakerVolume(uint8_t volume) {
+  M5.Speaker.setVolume(volume);
+}
