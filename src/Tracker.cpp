@@ -292,19 +292,29 @@ void Tracker::SetVolume(int val) {
 }
 
 void Tracker::SetNote(int val, int track) {
+  if (track < 0 || track > 3) {
+    return;
+  }
+  int inst = trackVoice[track];
   if (isPlaying && pressedOnce) {
     tracks[track][trackIndex] = val + 1;
     trackOctaves[track][trackIndex] = voices[selectedTrack].octave;
-    trackInstruments[track][trackIndex] = currentVoice;
+    trackInstruments[track][trackIndex] = (uint8_t)inst;
     lastNoteTrackIndex = trackIndex % patternLength;
   } else {
-    voices[track].SetNote(val, false, -1, currentVoice);
+    voices[track].SetNote(val, false, -1, inst);
   }
 }
 
 void Tracker::SetTrackNum(int val) {
+  if (val < 0) {
+    val = 0;
+  } else if (val > 3) {
+    val = 3;
+  }
   selectedTrack = val;
   SoloTrack(true);
+  RememberVoiceLabel(trackVoice[selectedTrack]);
 }
 
 void Tracker::ClearTrackNum(int val) {
@@ -351,6 +361,7 @@ void Tracker::PastePattern() {
     memcpy(&trackInstruments[j][start], patternCopyInstruments[j], patternLength);
     memcpy(&trackOctaves[j][start], patternCopyOctaves[j], patternLength);
   }
+  SyncTrackVoicesFromSteps();
 }
 
 void Tracker::PastePatternAll() {
@@ -362,6 +373,7 @@ void Tracker::PastePatternAll() {
       memcpy(&trackOctaves[j][start], patternCopyOctaves[j], patternLength);
     }
   }
+  SyncTrackVoicesFromSteps();
 }
 
 void Tracker::ClearAll(int val) {
@@ -374,10 +386,11 @@ void Tracker::ClearAll(int val) {
   trackIndex = 0;
   stepSampleCount = 0;
   barCount = 0;
-  memcpy(oledInstString, "DRUMS", 6);
   memset(tracks, 0, sizeof(tracks));
   memset(trackInstruments, 0, sizeof(trackInstruments));
   memset(trackOctaves, 0, sizeof(trackOctaves));
+  memset(trackVoice, 0, sizeof(trackVoice));
+  RememberVoiceLabel(0);
   for (int j = 0; j < 4; j++) {
     voices[j].ResetEffects();
     voices[j].SetEnvelopeNum(0);
@@ -390,13 +403,14 @@ void Tracker::ClearAll(int val) {
   memset(&audition, 0, sizeof(audition));
 }
 
-void Tracker::SetInstrument(int val) {
+void Tracker::RememberVoiceLabel(int val) {
   if (val < 0) {
     val = 0;
   } else if (val > 63) {
     val = 63;
   }
   currentVoice = val;
+  memset(oledInstString, 0, sizeof(oledInstString));
   if (val > 11) {
     snprintf(oledInstString, sizeof(oledInstString), "PLG%d", val);
   } else if (val > 1) {
@@ -406,6 +420,55 @@ void Tracker::SetInstrument(int val) {
   } else {
     memcpy(oledInstString, "DRUM", 5);
   }
+}
+
+int Tracker::InferTrackVoice(int track) const {
+  if (track < 0 || track > 3) {
+    return 0;
+  }
+  uint8_t first = trackInstruments[track][0];
+  bool same = true;
+  for (int s = 1; s < kMaxSteps; s++) {
+    if (trackInstruments[track][s] != first) {
+      same = false;
+      break;
+    }
+  }
+  if (same) {
+    return first;
+  }
+  for (int s = 0; s < kMaxSteps; s++) {
+    if (tracks[track][s] > 0) {
+      return trackInstruments[track][s];
+    }
+  }
+  return 0;
+}
+
+void Tracker::SyncTrackVoicesFromSteps() {
+  for (int t = 0; t < 4; t++) {
+    trackVoice[t] = (uint8_t)InferTrackVoice(t);
+  }
+  if (selectedTrack < 0 || selectedTrack > 3) {
+    selectedTrack = 0;
+  }
+  RememberVoiceLabel(trackVoice[selectedTrack]);
+}
+
+void Tracker::SetInstrument(int val) {
+  if (val < 0) {
+    val = 0;
+  } else if (val > 63) {
+    val = 63;
+  }
+  if (selectedTrack < 0 || selectedTrack > 3) {
+    selectedTrack = 0;
+  }
+  trackVoice[selectedTrack] = (uint8_t)val;
+  for (int i = 0; i < kMaxSteps; i++) {
+    trackInstruments[selectedTrack][i] = (uint8_t)val;
+  }
+  RememberVoiceLabel(val);
 }
 
 void Tracker::ArmTransport() {
@@ -604,7 +667,27 @@ void Tracker::ApplySong(const SongData &song) {
     voice.bend14 = in.bend14;
     voice.soloMute = false;
   }
-  SetInstrument(song.currentVoice);
+  SyncTrackVoicesFromSteps();
+  if (selectedTrack < 0 || selectedTrack > 3) {
+    selectedTrack = 0;
+  }
+  bool selectedHasNotes = false;
+  for (int s = 0; s < kMaxSteps; s++) {
+    if (tracks[selectedTrack][s] > 0) {
+      selectedHasNotes = true;
+      break;
+    }
+  }
+  if (!selectedHasNotes) {
+    int voice = song.currentVoice;
+    if (voice < 0) {
+      voice = 0;
+    } else if (voice > 63) {
+      voice = 63;
+    }
+    trackVoice[selectedTrack] = (uint8_t)voice;
+  }
+  RememberVoiceLabel(trackVoice[selectedTrack]);
   trackIndex = patternLength * currentPattern;
   stepSampleCount = 0;
   pressedOnce = true;
@@ -783,7 +866,7 @@ void Tracker::WritePattern(int track, const uint8_t *steps, int count) {
     }
     tracks[track][start + i] = note;
     trackOctaves[track][start + i] = voices[track].octave;
-    trackInstruments[track][start + i] = (uint8_t)currentVoice;
+    trackInstruments[track][start + i] = trackVoice[track];
   }
   SetHint("Pattern put");
 }
@@ -808,6 +891,7 @@ void Tracker::FillSnap(Snap *snap) const {
   snap->bpmSlot = bpmSlot;
   snap->octave = (uint8_t)voices[selectedTrack].octave;
   snap->currentVoice = (uint8_t)currentVoice;
+  memcpy(snap->trackVoice, trackVoice, sizeof(snap->trackVoice));
   snap->masterVolume = masterVolume;
   snap->envNum = voices[selectedTrack].EnvelopeNum();
   snap->envLen = voices[selectedTrack].EnvelopeLength();

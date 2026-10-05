@@ -110,7 +110,7 @@ Played keys are also sent as BLE MIDI note-on on the selected track's channel.
 
 ### Instrument
 
-`9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track and loads it when it is a plugin. `R` rescans `/moth/instruments`. 1–4 still select the track and 5–8 the pattern.
+`9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track only, and that instrument stays on the track. Selecting another track recalls the instrument already stored there. The four names across the top of the page are tracks 1–4. `R` rescans `/moth/instruments`. 1–4 still select the track and 5–8 the pattern.
 
 ### Mixer
 

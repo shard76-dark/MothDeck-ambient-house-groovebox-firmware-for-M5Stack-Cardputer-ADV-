@@ -191,6 +191,40 @@ static void drawToast() {
   canvas->print(toast);
 }
 
+static void voiceName(int id, char *dst, int n) {
+  if (n < 2) {
+    return;
+  }
+  if (id >= 0 && id <= 11) {
+    snprintf(dst, n, "%s", InstrumentBank::BuiltinName(id));
+    return;
+  }
+  for (int i = 0; i < instrumentBank.Count(); i++) {
+    const PluginInfo &p = instrumentBank.At(i);
+    if (p.id == (uint8_t)id && (p.loaded || p.name[0])) {
+      snprintf(dst, n, "%s", p.name[0] ? p.name : p.folder);
+      return;
+    }
+  }
+  snprintf(dst, n, "P%d", id);
+}
+
+static void drawTrackVoices(int y) {
+  for (int t = 0; t < 4; t++) {
+    char name[8];
+    voiceName(snap.trackVoice[t], name, (int)sizeof(name));
+    int x = t * 60;
+    if (t == snap.track) {
+      canvas->fillRect(x, y - 1, 59, 11, COL_TRACK[t]);
+      canvas->setTextColor(COL_BG);
+    } else {
+      canvas->setTextColor(COL_TEXT);
+    }
+    canvas->setCursor(x + 2, y);
+    canvas->printf("%d %.6s", t + 1, name);
+  }
+}
+
 static void drawPlay() {
   for (int t = 0; t < 4; t++) {
     int y = 16 + t * 12;
@@ -199,11 +233,9 @@ static void drawPlay() {
     canvas->printf("%d", t + 1);
     canvas->setTextColor(COL_TEXT);
     canvas->setCursor(14, y);
-    if (t == snap.track) {
-      canvas->print(snap.inst);
-    } else {
-      canvas->print(InstrumentBank::BuiltinName(0));
-    }
+    char name[8];
+    voiceName(snap.trackVoice[t], name, (int)sizeof(name));
+    canvas->printf("%.6s", name);
     int lv = snap.level[t];
     if (lv < 0) {
       lv = -lv;
@@ -267,32 +299,49 @@ static void instLabel(int index, char *dst, int n) {
   snprintf(dst, n, "%s %s", p.loaded ? "*" : " ", p.name[0] ? p.name : p.folder);
 }
 
+static bool rowIsTrackVoice(int idx) {
+  int id = snap.trackVoice[snap.track];
+  if (idx < 12) {
+    return id == idx;
+  }
+  if (idx - 12 >= instrumentBank.Count()) {
+    return false;
+  }
+  const PluginInfo &p = instrumentBank.At(idx - 12);
+  return p.loaded && p.id == (uint8_t)id;
+}
+
 static void drawInst() {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
-  canvas->print("Instrument  track ");
+  canvas->print("Assign to track ");
   canvas->printf("%d", snap.track + 1);
+  drawTrackVoices(28);
   int total = instCount();
   if (total < 1) {
     total = 12;
   }
-  int top = cursor - 3;
+  int top = cursor - 2;
   if (top < 0) {
     top = 0;
   }
-  for (int row = 0; row < 7; row++) {
+  for (int row = 0; row < 6; row++) {
     int idx = top + row;
     if (idx >= total) {
       break;
     }
     char line[28];
     instLabel(idx, line, (int)sizeof(line));
-    canvas->setCursor(2, 30 + row * 11);
+    int y = 42 + row * 11;
+    canvas->setCursor(2, y);
     canvas->setTextColor(idx == cursor ? COL_BG : COL_TEXT);
     if (idx == cursor) {
-      canvas->fillRect(0, 28 + row * 11, 240, 11, COL_AMBER);
+      canvas->fillRect(0, y - 2, 240, 11, COL_AMBER);
     }
     canvas->print(line);
+    if (rowIsTrackVoice(idx)) {
+      canvas->print(" =");
+    }
     if (idx >= 12) {
       const PluginInfo &p = instrumentBank.At(idx - 12);
       if (p.error[0] && idx == cursor) {

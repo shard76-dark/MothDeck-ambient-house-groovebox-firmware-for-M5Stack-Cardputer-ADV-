@@ -14,6 +14,15 @@ echo "MIDI and song file"
   -o /tmp/mothdeck_test_midi
 /tmp/mothdeck_test_midi
 
+echo "Per-track instruments"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_tracks.cpp" \
+  "$ROOT/src/Tracker.cpp" \
+  "$ROOT/src/Voice.cpp" \
+  "$ROOT/src/default_samples.cpp" \
+  -o /tmp/mothdeck_test_tracks
+/tmp/mothdeck_test_tracks
+
 echo "Plugins, loops, WAV, synth render"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_plugins.cpp" \

@@ -27,6 +27,9 @@ public:
   int lastSamples[4];
   char oledInstString[20];
   int currentVoice;
+  // Instrument assigned to each track. Selecting a track recalls this value.
+  // It does not copy the previous track's instrument across.
+  uint8_t trackVoice[4];
   uint8_t tracks[4][kMaxSteps];
   int8_t trackOctaves[4][kMaxSteps];
   uint8_t trackInstruments[4][kMaxSteps];
@@ -85,6 +88,9 @@ private:
 
   void SoloTrack(bool repeat);
   void SetInstrument(int val);
+  void RememberVoiceLabel(int val);
+  void SyncTrackVoicesFromSteps();
+  int InferTrackVoice(int track) const;
   void ArmTransport();
   void QueueMidi(MidiMsgType type, uint8_t channel, uint8_t number, uint8_t value);
   void QueueBankMidi();

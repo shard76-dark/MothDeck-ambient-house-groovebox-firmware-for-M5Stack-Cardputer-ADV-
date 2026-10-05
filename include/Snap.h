@@ -17,6 +17,7 @@ struct Snap {
   uint8_t bpmSlot;
   uint8_t octave;
   uint8_t currentVoice;
+  uint8_t trackVoice[4];
   uint8_t masterVolume;
   uint8_t envNum;
   uint8_t envLen;
