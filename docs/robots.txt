@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://shard76-dark.github.io/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/sitemap.xml

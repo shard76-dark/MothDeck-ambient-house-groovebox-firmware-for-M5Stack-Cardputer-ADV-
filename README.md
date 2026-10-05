@@ -1,6 +1,18 @@
 # MothDeck
 
-MothDeck is a 4-track sampler and tracker for the [M5Stack Cardputer ADV](https://docs.m5stack.com/en/core/Cardputer-Adv). It is a sibling of [MothOS](https://github.com/MothSynths): same song file, same BLE MIDI map, same voice and effect model, redrawn for the ADV's 240×135 colour screen and 56-key keyboard.
+MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](https://docs.m5stack.com/en/core/Cardputer-Adv) (Stamp-S3A, ESP32-S3): drums, a per-track FX insert, a four-track mixer, SD kits and loops, and BLE MIDI. It is a sibling of [MothOS](https://github.com/MothSynths): same song file, same BLE MIDI map, same voice and effect model, redrawn for the ADV's 240×135 colour screen and 56-key keyboard.
+
+The public source and releases live in this repository. Flash the application image with [releases/INSTALL.md](releases/INSTALL.md). The same overview, with HTML meta tags for search and link previews, is [docs/index.html](docs/index.html).
+
+## Features
+
+- Ambient house drums on the M5Stack Cardputer ADV: twelve distinct hits at the recorded pitch (kick, rim, snare, clap, hats, toms, shaker, ride, snap, crash)
+- Groovebox session on the ESP32-S3: 4 tracks, 4 patterns, up to 256 steps of 16th notes
+- Per-track FX (filter, delay, reverb, bitcrush, drive, chorus, tremolo) and a mixer with volume, mute, and solo
+- SD kits, plugin instruments, and loops. Loops stream from the card instead of filling RAM
+- BLE MIDI peripheral (notes, bank, volume, pitch bend)
+- Built-in sounds are unsigned 8-bit mono at 22050 Hz so they fit the 8MB flash and the internal SRAM
+- One-second amber moth splash, then the Play page, with a checked exit back to Launcher
 
 This repository is the Cardputer ADV firmware. The PlatformIO target is `cardputer-adv`. `cardputer-adv-dev` is that same firmware with SD and speaker logs on USB serial. The board id in `platformio.ini` is `esp32-s3-devkitc-1` because PlatformIO has no Stamp-S3A entry; the pins in `include/BoardConfig.h` are the ADV. There is no second ADV build.
 
@@ -286,6 +298,14 @@ Octal PSRAM uses GPIO33–37. Those pins are the display, so a PSRAM module cann
 
 The splash art is `docs/splash-moth.png`. Regenerate the embedded mask with `python3 tools/make_splash.py`.
 
+## Site
+
+GitHub Pages publishes the `docs/` folder on `main`. After that setting is on, the site is:
+
+https://shard76-dark.github.io/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/
+
+`docs/robots.txt` allows indexing and names `sitemap.xml`. `docs/sitemap.xml` lists that Pages URL. `docs/index.html` carries the description, Open Graph, Twitter card, and JSON-LD (`SoftwareApplication` and `WebSite`).
+
 ## Project layout
 
 ```
@@ -293,7 +313,7 @@ include/     headers, including the codecs the host tests compile
 src/         firmware
 test/        host tests (MIDI, song v1/v2/v3, per-track FX, manifests, WAV, synth render)
 tools/       sample generator, WAV converters, keymap and splash tools, test runner
-docs/        file formats, keymap drawings, splash art
+docs/        project site (index, robots, sitemap), file formats, keymap drawings, splash art
 sd-card-example/
 partitions/  development table, not used by Launcher
 releases/    application image, full-flash image, SD pack, checksums, install notes

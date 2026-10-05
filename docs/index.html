@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MothDeck — ambient-house groovebox firmware for M5Stack Cardputer ADV</title>
+  <meta name="description" content="MothDeck is ambient-house groovebox firmware for the M5Stack Cardputer ADV (ESP32-S3): drums, FX, mixer, SD kits and loops, and BLE MIDI.">
+  <meta name="keywords" content="MothDeck, M5Stack, Cardputer ADV, Cardputer, ESP32-S3, groovebox, BLE MIDI, ambient house, drums, firmware, PlatformIO">
+  <meta name="author" content="MothSynths">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://shard76-dark.github.io/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/">
+  <meta name="theme-color" content="#16181a">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="MothDeck">
+  <meta property="og:title" content="MothDeck — ambient-house groovebox for M5Stack Cardputer ADV">
+  <meta property="og:description" content="MothDeck is ambient-house groovebox firmware for the M5Stack Cardputer ADV (ESP32-S3): drums, FX, mixer, SD kits and loops, and BLE MIDI.">
+  <meta property="og:url" content="https://shard76-dark.github.io/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/">
+  <meta property="og:image" content="https://shard76-dark.github.io/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Amber moth silhouette beside the MothDeck name on a dark card">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MothDeck — ambient-house groovebox for M5Stack Cardputer ADV">
+  <meta name="twitter:description" content="Ambient-house groovebox firmware for the M5Stack Cardputer ADV (ESP32-S3): drums, FX, mixer, SD kits and loops, BLE MIDI.">
+  <meta name="twitter:image" content="https://shard76-dark.github.io/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/og.png">
+  <meta name="twitter:image:alt" content="Amber moth silhouette beside the MothDeck name on a dark card">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://shard76-dark.github.io/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/#website",
+        "name": "MothDeck",
+        "url": "https://shard76-dark.github.io/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/",
+        "description": "Ambient-house groovebox firmware for the M5Stack Cardputer ADV (ESP32-S3): drums, FX, mixer, SD kits and loops, and BLE MIDI.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://shard76-dark.github.io/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/#software",
+        "name": "MothDeck",
+        "applicationCategory": "MusicApplication",
+        "applicationSubCategory": "Groovebox firmware",
+        "operatingSystem": "M5Stack Cardputer ADV (ESP32-S3)",
+        "softwareVersion": "1.0.0",
+        "license": "https://opensource.org/licenses/MIT",
+        "isAccessibleForFree": true,
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "url": "https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-",
+        "installUrl": "https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md",
+        "downloadUrl": "https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/raw/main/releases/mothdeck-cardputer-adv.bin",
+        "description": "Ambient-house groovebox firmware for the M5Stack Cardputer ADV (ESP32-S3): drums, FX, mixer, SD kits and loops, and BLE MIDI.",
+        "keywords": "MothDeck, M5Stack, Cardputer ADV, ESP32-S3, groovebox, BLE MIDI, ambient house drums, firmware",
+        "author": {
+          "@type": "Organization",
+          "name": "MothSynths"
+        }
+      }
+    ]
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #121416;
+      --panel: #1b1e21;
+      --ink: #f3efe4;
+      --muted: #b7b1a4;
+      --amber: #f5a624;
+      --line: #2c3136;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 17px/1.55 ui-sans-serif, system-ui, sans-serif;
+    }
+    a { color: var(--amber); }
+    a:hover { color: #ffd27a; }
+    header, main, footer { width: min(980px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 28px 0 8px; }
+    .bar { height: 4px; background: var(--amber); }
+    .hero {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 28px;
+      align-items: center;
+      padding: 28px 0 8px;
+    }
+    .hero img {
+      width: 240px;
+      height: 135px;
+      background: #1a1c1e;
+      image-rendering: pixelated;
+    }
+    h1 { font-size: 2.4rem; line-height: 1.05; margin: 0 0 8px; letter-spacing: -0.03em; }
+    .kicker { color: var(--amber); font-size: 0.82rem; letter-spacing: 0.12em; text-transform: uppercase; margin: 0 0 8px; }
+    .lead { color: var(--muted); margin: 0; max-width: 42rem; }
+    h2 { font-size: 1.25rem; margin: 2rem 0 0.6rem; }
+    ul { padding-left: 1.15rem; }
+    li { margin: 0.35rem 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 0;
+      list-style: none;
+    }
+    .grid li {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 0;
+    }
+    .grid strong { display: block; color: var(--amber); font-size: 0.92rem; }
+    ol.steps { padding-left: 1.2rem; }
+    .links { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 0; }
+    .links a {
+      text-decoration: none;
+      border: 1px solid var(--amber);
+      color: var(--ink);
+      padding: 8px 12px;
+      border-radius: 999px;
+    }
+    .links a:hover { background: var(--amber); color: #1a1204; }
+    footer { color: var(--muted); font-size: 0.9rem; padding: 28px 0 48px; }
+    @media (max-width: 720px) {
+      .hero { grid-template-columns: 1fr; }
+      h1 { font-size: 2rem; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bar"></div>
+  <header>
+    <div class="hero">
+      <img src="splash-moth.png" width="240" height="135" alt="Amber moth silhouette on a grey panel, the MothDeck boot splash">
+      <div>
+        <p class="kicker">M5Stack Cardputer ADV · ESP32-S3</p>
+        <h1>MothDeck</h1>
+        <p class="lead">Ambient-house groovebox firmware for the M5Stack Cardputer ADV. Drums, FX, a mixer, SD kits and loops, and BLE MIDI, on the board you already have.</p>
+      </div>
+    </div>
+    <p class="links">
+      <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-">Source on GitHub</a>
+      <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md">Flash / install</a>
+      <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/raw/main/releases/mothdeck-cardputer-adv.bin">Application image</a>
+    </p>
+  </header>
+  <main>
+    <h2>Features</h2>
+    <ul class="grid">
+      <li><strong>Ambient house drums</strong> Twelve hits at the recorded pitch: kick, rim, snare, clap, hats, toms, shaker, ride, snap, crash. Octave does not transpose the kit.</li>
+      <li><strong>Groovebox</strong> Four tracks, four patterns, up to 256 steps of 16th notes on the ESP32-S3.</li>
+      <li><strong>FX and mixer</strong> Per-track filter, delay, reverb, bitcrush, drive, chorus, and tremolo. Mixer faders with mute and solo.</li>
+      <li><strong>SD kits and loops</strong> Load kits from the card onto Drums. Loops stream in short windows instead of filling RAM.</li>
+      <li><strong>BLE MIDI</strong> Peripheral for notes, bank, volume, and pitch bend. Default name MothSynth.</li>
+      <li><strong>Lean samples</strong> Unsigned 8-bit mono at 22050 Hz, about 22 KB/s. The mix stays 44100 Hz.</li>
+    </ul>
+
+    <h2>Flash it</h2>
+    <p>Install <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/raw/main/releases/mothdeck-cardputer-adv.bin">mothdeck-cardputer-adv.bin</a> from <a href="https://github.com/bmorcelli/Launcher">Launcher</a>. The full button sequence is in <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md">releases/INSTALL.md</a>.</p>
+    <ol class="steps">
+      <li>Copy the application image (the file that starts with <code>E9</code>) to a FAT32 microSD card. Do not install the full-flash image from Launcher.</li>
+      <li>Boot Launcher, press Enter on its splash, open the SD browser, and install that file.</li>
+      <li>The next boot that follows the boot selection starts MothDeck: backlight, a one-second amber moth, then Play.</li>
+    </ol>
+    <p>Unzip <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/raw/main/releases/mothdeck-sd-pack.zip">mothdeck-sd-pack.zip</a> onto the card root when you want the extra kits, loops, and plugin instruments. Checksums are in <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/SHA256SUMS">SHA256SUMS</a>.</p>
+
+    <h2>On the keyboard</h2>
+    <p>Tab moves through Play, Instrument, FX, Mixer, Song, Loops, MIDI, Settings, and Exit. On the Instrument page, comma and slash load the previous and next drum kit from <code>/moth/drums</code>. Hold Esc (the grave key) or the front button for about 0.7 seconds to return to Launcher, and only when a real Launcher image is present.</p>
+    <p>Key drawings: <a href="keymap-play.png">Play</a>, <a href="keymap-inst.png">Instrument</a>, <a href="keymap-fx.png">FX</a>, <a href="keymap-mixer.png">Mixer</a>, <a href="keymap-song.png">Song</a>, <a href="keymap-loops.png">Loops</a>, <a href="keymap-midi.png">MIDI</a>, <a href="keymap-settings.png">Settings</a>, <a href="keymap-exit.png">Exit</a>. File layouts are in <a href="FORMATS.md">FORMATS.md</a>.</p>
+  </main>
+  <footer>
+    <p>MIT. Copyright 2024 MothSynths. Firmware for the M5Stack Cardputer ADV (ESP32-S3FN8). Built with PlatformIO.</p>
+  </footer>
+</body>
+</html>
