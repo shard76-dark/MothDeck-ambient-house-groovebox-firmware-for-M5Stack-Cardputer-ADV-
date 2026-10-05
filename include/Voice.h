@@ -74,8 +74,8 @@ private:
   int ReadDrumWaveform();
   int ReadSfxWaveform();
   int ReadExt();
-  int ReadOneShot(const int16_t *const *tables, const int *lengths, const int *rates);
-  int ReadPcmShot(const int16_t *data, int length, int rate);
+  int ReadOneShot(const uint8_t *const *tables, const int *lengths, const int *rates);
+  int ReadPcmShot(const void *data, int length, int rate, bool native, bool eightBit);
 
   ToneVoice tone;
   int GetBaseFreq(int val, int ioctave);

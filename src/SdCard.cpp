@@ -1,6 +1,7 @@
 #include "SdCard.h"
 #include "BoardConfig.h"
 #include "DevLog.h"
+#include "WavPcm.h"
 #include <Arduino.h>
 #include <SD.h>
 #include <SPI.h>
@@ -21,10 +22,16 @@ void *deckAlloc(size_t bytes) {
     }
   }
   size_t freeInternal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  if (freeInternal < bytes + 48 * 1024) {
+  // Leave a little internal RAM for BLE and the audio DMA. The old 48KB
+  // floor rejected every kit and plugin once a loop had been cached.
+  if (freeInternal < bytes + 8 * 1024) {
     return nullptr;
   }
   return heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
+}
+
+size_t deckFreeInternal() {
+  return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 }
 
 void deckFree(void *p) {
@@ -114,6 +121,28 @@ bool SdCard::ReadAll(const char *path, uint8_t *dst, int maxBytes, int *outLen) 
   return true;
 }
 
+bool SdCard::ReadPrefix(const char *path, uint8_t *dst, int maxBytes, int *outLen) {
+  if (outLen) {
+    *outLen = 0;
+  }
+  if (!dst || maxBytes <= 0 || !path || !Ensure()) {
+    return false;
+  }
+  File file = SD.open(path, FILE_READ);
+  if (!file) {
+    return false;
+  }
+  int n = file.read(dst, maxBytes);
+  file.close();
+  if (n < 0) {
+    return false;
+  }
+  if (outLen) {
+    *outLen = n;
+  }
+  return n > 0;
+}
+
 bool SdCard::ReadText(const char *path, char *dst, int maxBytes) {
   if (!dst || maxBytes < 2) {
     return false;
@@ -140,6 +169,108 @@ bool SdCard::WriteAll(const char *path, const uint8_t *src, int len) {
   size_t wrote = file.write(src, len);
   file.close();
   return (int)wrote == len;
+}
+
+static void sdErr(char *err, int errLen, const char *msg) {
+  if (err && errLen > 0) {
+    snprintf(err, errLen, "%s", msg ? msg : "");
+  }
+}
+
+static int decodeChunk(const uint8_t *p, int frames, int channels, int bits, int16_t *dst) {
+  for (int i = 0; i < frames; i++) {
+    int32_t acc = 0;
+    for (int c = 0; c < channels; c++) {
+      int32_t s;
+      if (bits == 8) {
+        s = ((int32_t)(*p++) - 128) << 8;
+      } else {
+        s = (int16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+        p += 2;
+      }
+      acc += s;
+    }
+    if (channels == 2) {
+      acc /= 2;
+    }
+    if (acc > 32767) {
+      acc = 32767;
+    } else if (acc < -32768) {
+      acc = -32768;
+    }
+    dst[i] = (int16_t)acc;
+  }
+  return frames;
+}
+
+bool SdCard::LoadWavMono(const char *path, int16_t *dst, int dstFrames, int *got, int *rate, char *err, int errLen) {
+  if (got) {
+    *got = 0;
+  }
+  if (rate) {
+    *rate = 0;
+  }
+  if (!dst || dstFrames < 2 || !path || !Ensure()) {
+    sdErr(err, errLen, "No sample buffer");
+    return false;
+  }
+  File file = SD.open(path, FILE_READ);
+  if (!file) {
+    sdErr(err, errLen, "Sample missing");
+    return false;
+  }
+  uint8_t hdr[768];
+  int n = file.read(hdr, sizeof(hdr));
+  WavInfo info;
+  if (!parseWavPrefix(hdr, n, &info)) {
+    file.close();
+    sdErr(err, errLen, info.error[0] ? info.error : "Bad WAV");
+    return false;
+  }
+  int frames = info.frames;
+  if (frames > dstFrames) {
+    frames = dstFrames;
+  }
+  if (frames < 2) {
+    file.close();
+    sdErr(err, errLen, "Sample too short");
+    return false;
+  }
+  if (!file.seek(info.dataOffset)) {
+    file.close();
+    sdErr(err, errLen, "Sample seek failed");
+    return false;
+  }
+  int frameBytes = info.channels * (info.bits / 8);
+  const int kBatch = 256;
+  uint8_t chunk[kBatch * 4];
+  int wrote = 0;
+  while (wrote < frames) {
+    int batch = frames - wrote;
+    if (batch > kBatch) {
+      batch = kBatch;
+    }
+    int need = batch * frameBytes;
+    int gotBytes = file.read(chunk, need);
+    if (gotBytes < need) {
+      break;
+    }
+    decodeChunk(chunk, batch, info.channels, info.bits, dst + wrote);
+    wrote += batch;
+  }
+  file.close();
+  if (wrote < 2) {
+    sdErr(err, errLen, "Sample read failed");
+    return false;
+  }
+  if (got) {
+    *got = wrote;
+  }
+  if (rate) {
+    *rate = info.rate > 0 ? info.rate : 22050;
+  }
+  sdErr(err, errLen, "");
+  return true;
 }
 
 int SdCard::List(const char *path, char names[][24], int maxNames, bool directories) {

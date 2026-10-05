@@ -8,8 +8,8 @@
 
 // Keyboard order, not the old kick/snare/hat groups. See docs/FORMATS.md.
 // C kick, C# rim, D snare, D# clap, E hat, F open hat, F# perc, G tom,
-// G# shaker, A ride, A# snap, B crash. All tables are 22050 Hz.
-static const int16_t *const kDrumWaves[12] = {
+// G# shaker, A ride, A# snap, B crash. Unsigned 8-bit mono, 22050 Hz.
+static const uint8_t *const kDrumWaves[12] = {
   kick1, snare1, special1, hihat1, kick2, snare2, special2, hihat2, kick3, snare3, special3, hihat3
 };
 static const int kDrumLens[12] = {
@@ -28,7 +28,7 @@ __attribute__((weak)) bool drumKitHit(int note, DrumHitView *out) {
   return false;
 }
 
-static const int16_t *const kSfxWaves[12] = {
+static const uint8_t *const kSfxWaves[12] = {
   sfx1, sfx2, sfx3, sfx4, sfx5, sfx6, sfx7, sfx8, sfx9, sfx10, sfx11, sfx12
 };
 static const int kSfxLens[12] = {
@@ -408,7 +408,7 @@ int Voice::ReadWaveform() {
   return sample;
 }
 
-int Voice::ReadPcmShot(const int16_t *data, int length, int rate) {
+int Voice::ReadPcmShot(const void *data, int length, int rate, bool native, bool eightBit) {
   if (!data || length < 2) {
     return 0;
   }
@@ -424,11 +424,23 @@ int Voice::ReadPcmShot(const int16_t *data, int length, int rate) {
     } else if (idx >= sampleLen) {
       idx = sampleLen - 1;
     }
-    sample = data[idx];
-    int oct = (recOctave > -1) ? (recOctave + 1) : (octave + 1);
-    int step = oct * 500;
-    if (rate > 0 && rate != kSampleRate) {
-      step = (int)(((int64_t)step * rate) / kSampleRate);
+    if (eightBit) {
+      sample = ((int)static_cast<const uint8_t *>(data)[idx] - 128) << 8;
+    } else {
+      sample = static_cast<const int16_t *>(data)[idx];
+    }
+    int step;
+    if (native) {
+      // Kit pieces stay at the recorded pitch. Octave still selects which
+      // pad (the key), but it does not transpose the sample.
+      int r = rate > 0 ? rate : kSampleRate;
+      step = (int)(((int64_t)1000 * r) / kSampleRate);
+    } else {
+      int oct = (recOctave > -1) ? (recOctave + 1) : (octave + 1);
+      step = oct * 500;
+      if (rate > 0 && rate != kSampleRate) {
+        step = (int)(((int64_t)step * rate) / kSampleRate);
+      }
     }
     if (step < 1) {
       step = 1;
@@ -453,20 +465,24 @@ int Voice::ReadPcmShot(const int16_t *data, int length, int rate) {
   return sample;
 }
 
-int Voice::ReadOneShot(const int16_t *const *tables, const int *lengths, const int *rates) {
+int Voice::ReadOneShot(const uint8_t *const *tables, const int *lengths, const int *rates) {
   if ((unsigned)note > 11 || !tables || !lengths) {
     return 0;
   }
   int rate = (rates && rates[note] > 0) ? rates[note] : kSampleRate;
-  return ReadPcmShot(tables[note], lengths[note], rate);
+  return ReadPcmShot(tables[note], lengths[note], rate, false, true);
 }
 
 int Voice::ReadDrumWaveform() {
   DrumHitView hit;
   if (drumKitHit(note, &hit)) {
-    return ReadPcmShot(hit.data, hit.length, hit.rate);
+    return ReadPcmShot(hit.data, hit.length, hit.rate, true, false);
   }
-  return ReadOneShot(kDrumWaves, kDrumLens, kDrumRates);
+  if ((unsigned)note > 11) {
+    return 0;
+  }
+  int rate = kDrumRates[note] > 0 ? kDrumRates[note] : kSampleRate;
+  return ReadPcmShot(kDrumWaves[note], kDrumLens[note], rate, true, true);
 }
 
 int Voice::ReadSfxWaveform() {

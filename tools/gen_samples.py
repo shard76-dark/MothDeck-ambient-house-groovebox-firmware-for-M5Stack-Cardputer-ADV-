@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Bake the built-in Ambient House kit and the twelve sound effects.
+"""Bake the built-in kit and the twelve sound effects.
 
-Tonal instruments (sine through pad) are rendered in real time by
-src/ToneSynth.cpp. Regenerate with: python3 tools/gen_samples.py
+Tables are unsigned 8-bit mono at 22050 Hz (128 is silence). Tonal
+instruments are rendered in real time by src/ToneSynth.cpp.
+Regenerate with: python3 tools/gen_samples.py
 """
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from voices import DRUM_NAMES, SFX_NAMES, ambient_kit, clamp, sfx_bank  # noqa: E402
+from pcmutil import to_u8  # noqa: E402
+from voices import DRUM_NAMES, SFX_NAMES, ambient_kit, sfx_bank  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_H = os.path.join(ROOT, "include", "DefaultSamples.h")
@@ -28,18 +30,18 @@ def emit(tables):
         "#ifndef DefaultSamples_h",
         "#define DefaultSamples_h",
         "#include <stdint.h>",
-        "// Ambient House drums and distinct sound effects. See tools/gen_samples.py.",
-        "// Sample rate is 22050. Playback stretches that to the project rate.",
+        "// Unsigned 8-bit mono at 22050 Hz. 128 is silence. See tools/gen_samples.py.",
+        "// Playback expands each byte to 16-bit and stretches 22050 to the mix rate.",
         "",
     ]
     body = ['#include "DefaultSamples.h"', ""]
     for name, data in tables:
-        lines.append("extern const int16_t %s[];" % name)
+        lines.append("extern const uint8_t %s[];" % name)
         lines.append("extern const int %sLength;" % name)
-        body.append("const int16_t %s[] = {" % name)
+        body.append("const uint8_t %s[] = {" % name)
         row = []
         for sample in data:
-            row.append(str(clamp(sample)))
+            row.append(str(to_u8(sample)))
             if len(row) == 16:
                 body.append("  " + ",".join(row) + ",")
                 row = []

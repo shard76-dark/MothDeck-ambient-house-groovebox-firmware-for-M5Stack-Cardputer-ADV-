@@ -166,6 +166,9 @@ const char *uiBleName() {
 
 void uiBegin() {
   canvas = new M5Canvas(&M5Cardputer.Display);
+  // 8-bit sprite is half the RAM of RGB565 (32KB instead of 64KB). The UI
+  // is flat color, and that heap is what sample loads have to fit in.
+  canvas->setColorDepth(8);
   canvas->createSprite(240, 135);
   canvas->setTextSize(1);
   canvas->setTextColor(COL_TEXT);
@@ -398,9 +401,9 @@ static void drawInst() {
   if (cursor == 12) {
     canvas->print("Notes play SD loops, synced");
   } else {
-    canvas->printf("Kit: %.16s", drumKit.Name(drumKit.Selected()));
+    canvas->printf("Kit %.14s   , /", drumKit.Name(drumKit.Selected()));
   }
-  legend("Ent assign  R scan  Fn ,/ kit");
+  legend(", / load kit   Ent assign   R scan");
 }
 
 static const char *kFxLabel[] = {
@@ -619,7 +622,7 @@ static void drawSettings() {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   canvas->print("Settings");
-  const char *rows[] = {"Speaker", "Brightness", "BLE name", "Battery", "Memory", "Card"};
+  const char *rows[] = {"Speaker", "Brightness", "BLE name", "Battery", "Free RAM", "Card"};
   int top = cursor > 3 ? cursor - 3 : 0;
   for (int i = 0; i < 5; i++) {
     int idx = top + i;
@@ -651,7 +654,9 @@ static void drawSettings() {
         canvas->printf("%dmV %d%%", mv, pct);
       }
     } else if (idx == 4) {
-      canvas->printf("%uk", (unsigned)(ESP.getFreeHeap() / 1024));
+      unsigned freeKb = (unsigned)(ESP.getFreeHeap() / 1024);
+      unsigned totalKb = (unsigned)(ESP.getHeapSize() / 1024);
+      canvas->printf("%u/%uk", freeKb, totalKb);
       if (psramFound()) {
         canvas->printf(" P%uk", (unsigned)(ESP.getFreePsram() / 1024));
       }
@@ -662,7 +667,13 @@ static void drawSettings() {
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(4, 108);
   canvas->printf("v%s  %s", MOTHDECK_VERSION, BOARD_NAME);
-  legend(naming ? "Ent apply  Bksp  ` cancel" : "Lf/Rt change  Ent name");
+  if (!naming && cursor == 4) {
+    char line[40];
+    snprintf(line, sizeof(line), "free/total  largest %uk", (unsigned)(ESP.getMaxAllocHeap() / 1024));
+    legend(line);
+  } else {
+    legend(naming ? "Ent apply  Bksp  ` cancel" : "Lf/Rt change  Ent name");
+  }
 }
 
 static void drawExit() {
@@ -851,6 +862,25 @@ static void launchLoop(bool audition) {
   }
 }
 
+static void cycleKit(int dir) {
+  int n = drumKit.Count();
+  if (n < 1) {
+    n = 1;
+  }
+  int s = drumKit.Selected();
+  s = (s + dir + n) % n;
+  char err[48];
+  if (!drumKit.Select(s, err, (int)sizeof(err))) {
+    toastSet(err[0] ? err : "Kit failed");
+    return;
+  }
+  if (n < 2) {
+    toastSet("No SD kits");
+    return;
+  }
+  toastSet(drumKit.Name(s));
+}
+
 static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool fn) {
   if (fn) {
     if (c == ';') {
@@ -887,18 +917,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     }
     if (c == ',') {
       if (page == 1) {
-        int n = drumKit.Count();
-        int s = drumKit.Selected();
-        if (n < 1) {
-          n = 1;
-        }
-        s = (s + n - 1) % n;
-        char err[48];
-        if (!drumKit.Select(s, err, (int)sizeof(err))) {
-          toastSet(err[0] ? err : "Kit failed");
-        } else {
-          toastSet(drumKit.Name(s));
-        }
+        cycleKit(-1);
       } else if (page == kFxPage) {
         tweakFx(-1);
       } else if (page == kMixerPage) {
@@ -919,18 +938,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     }
     if (c == '/') {
       if (page == 1) {
-        int n = drumKit.Count();
-        int s = drumKit.Selected();
-        if (n < 1) {
-          n = 1;
-        }
-        s = (s + 1) % n;
-        char err[48];
-        if (!drumKit.Select(s, err, (int)sizeof(err))) {
-          toastSet(err[0] ? err : "Kit failed");
-        } else {
-          toastSet(drumKit.Name(s));
-        }
+        cycleKit(1);
       } else if (page == kFxPage) {
         tweakFx(1);
       } else if (page == kMixerPage) {
@@ -1043,6 +1051,10 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       loopLibrary.Scan();
       loopLibrary.PreloadInstrument(nullptr, 0);
       toastSet(sdCard.Mounted() ? "Rescanned" : "No SD card");
+    } else if (c == ',') {
+      cycleKit(-1);
+    } else if (c == '/') {
+      cycleKit(1);
     }
     return;
   }

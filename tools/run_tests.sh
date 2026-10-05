@@ -30,6 +30,7 @@ echo "Modal input"
   "$ROOT/src/ToneSynth.cpp" \
   "$ROOT/src/SongFile.cpp" \
   "$ROOT/src/default_samples.cpp" \
+  "$ROOT/test/pcm_hold_stub.cpp" \
   -o /tmp/mothdeck_test_modal
 /tmp/mothdeck_test_modal
 
@@ -41,6 +42,7 @@ echo "Per-track FX and mixer volume"
   "$ROOT/src/ToneSynth.cpp" \
   "$ROOT/src/SongFile.cpp" \
   "$ROOT/src/default_samples.cpp" \
+  "$ROOT/test/pcm_hold_stub.cpp" \
   -o /tmp/mothdeck_test_fx
 /tmp/mothdeck_test_fx
 
@@ -52,6 +54,7 @@ echo "Per-track instruments"
   "$ROOT/src/ToneSynth.cpp" \
   "$ROOT/src/SongFile.cpp" \
   "$ROOT/src/default_samples.cpp" \
+  "$ROOT/test/pcm_hold_stub.cpp" \
   -o /tmp/mothdeck_test_tracks
 /tmp/mothdeck_test_tracks
 

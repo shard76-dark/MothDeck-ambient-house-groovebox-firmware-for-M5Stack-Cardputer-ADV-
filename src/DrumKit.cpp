@@ -1,15 +1,16 @@
 #include "DrumKit.h"
 #include "KitFormat.h"
 #include "SdCard.h"
-#include "WavPcm.h"
 #include <Arduino.h>
 #include <string.h>
 #include <stdio.h>
 
 DrumKit drumKit;
 
-static const int kKitFrames = 18000;
-static const int kPadFrames = 6000;
+// Whole kit stays small enough for internal RAM after BLE and the screen.
+// Pads past the budget are shortened. The built-in kit is in flash, not here.
+static const int kKitFrames = 8000;
+static const int kPadFrames = 1800;
 
 static int16_t *kitBlock = nullptr;
 static int kitOffset[kKitPads];
@@ -99,47 +100,22 @@ void DrumKit::Scan() {
 }
 
 static bool decodePad(const char *path, int16_t *dst, int dstFrames, int *got, int *rate, char *err, int errLen) {
-  int maxBytes = kPadFrames * 4 + 256;
-  uint8_t *raw = (uint8_t *)deckAlloc((size_t)maxBytes);
-  if (!raw) {
-    setErr(err, errLen, "Out of memory");
+  if (!sdCard.LoadWavMono(path, dst, dstFrames, got, rate, err, errLen)) {
     return false;
   }
-  int n = 0;
-  if (!sdCard.ReadAll(path, raw, maxBytes, &n)) {
-    deckFree(raw);
-    setErr(err, errLen, "Pad missing or too big");
-    return false;
-  }
-  if (n < 12 || memcmp(raw, "RIFF", 4) != 0) {
-    deckFree(raw);
-    setErr(err, errLen, "Pad is not WAV");
-    return false;
-  }
-  WavInfo info;
-  if (!parseWavHeader(raw, n, &info)) {
-    setErr(err, errLen, info.error[0] ? info.error : "Bad WAV");
-    deckFree(raw);
-    return false;
-  }
-  int frames = info.frames;
-  if (frames > dstFrames) {
-    frames = dstFrames;
-  }
-  if (frames < 2) {
-    deckFree(raw);
+  if (!got || *got < 2) {
     setErr(err, errLen, "Pad too short");
     return false;
   }
-  int written = decodeWavMono(raw, n, dst, frames, &info);
-  deckFree(raw);
-  if (written < 2) {
-    setErr(err, errLen, "Pad decode failed");
-    return false;
-  }
-  *got = written;
-  *rate = info.rate > 0 ? info.rate : 22050;
   return true;
+}
+
+static void oom(char *err, int errLen, int needBytes) {
+  int freeKb = (int)(deckFreeInternal() / 1024);
+  int needKb = (needBytes + 1023) / 1024;
+  if (err && errLen > 0) {
+    snprintf(err, errLen, "Need %dk, %dk free", needKb, freeKb);
+  }
 }
 
 bool DrumKit::Select(int index, char *err, int errLen) {
@@ -168,7 +144,7 @@ bool DrumKit::Select(int index, char *err, int errLen) {
   }
   int16_t *block = (int16_t *)deckAlloc((size_t)kKitFrames * sizeof(int16_t));
   if (!block) {
-    setErr(err, errLen, "Out of memory");
+    oom(err, errLen, kKitFrames * (int)sizeof(int16_t));
     return false;
   }
   int used = 0;

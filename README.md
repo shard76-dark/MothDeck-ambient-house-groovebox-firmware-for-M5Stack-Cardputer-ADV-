@@ -7,7 +7,7 @@ Everything it uses is on the board. There is no wiring. The speaker, headphone j
 ## Features
 
 - 4 tracks, 4 patterns, up to 256 steps (16th notes). Step timing matches MothOS: 44100 Hz, one step is `11025 / beats-per-second` samples.
-- 12 built-in instruments plus Loops: drums (Ambient House), sound effects, sine, square, saw, triangle, organ, pluck, bell, flute, bass, pad. Sine through pad are synthesized per sample. Drums and effects are baked one-shots. SD kits replace the drum bank. Loops plays card loops in time with the BPM.
+- 12 built-in instruments plus Loops: drums (kick, snare, hats, and the rest of a kit), sound effects, sine, square, saw, triangle, organ, pluck, bell, flute, bass, pad. Sine through pad are synthesized per sample. Drums and effects are baked one-shots, unsigned 8-bit mono at 22050 Hz, played at their recorded pitch. SD kits replace the drum bank. Loops streams card loops in time with the BPM.
 - Per-track delay, low pass, phaser, retrig, overdrive, pitch, whoosh, and chord.
 - BLE MIDI peripheral, default name `MothSynth` (change it on the Settings page). The name is stored in NVS.
 - Song slots `/moth/slot1.mos` … `slot4.mos`. A song that stays on the built-in instruments is a 3155-byte MothOS version 1 file. Plugins and loops bump the file to version 2.
@@ -118,7 +118,7 @@ While the page list is open it takes every key. Fn+`;` and Fn+`.` move the highl
 
 ### Instrument
 
-`9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track only, and that instrument stays on the track. Selecting another track recalls the instrument already stored there. The four names across the top of the page are tracks 1–4. `R` rescans instruments, drum kits, and loops. Fn+`,` and Fn+`/` change the drum kit (built-in Ambient House, then each folder under `/moth/drums`). The row after Pad is Loops: notes on that track start an SD loop lined up to the bar. 1–4 still select the track and 5–8 the pattern.
+`9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track only, and that instrument stays on the track. Selecting another track recalls the instrument already stored there. The four names across the top of the page are tracks 1–4. `R` rescans instruments, drum kits, and loops. `,` and `/` (also Fn+`,` and Fn+`/`) load the previous or next drum kit onto the Drums instrument. The line under the list is the kit name. The first kit is the built-in one. Further kits are folders under `/moth/drums`. If the card has none, the toast says "No SD kits". The row after Pad is Loops: notes on that track start an SD loop lined up to the bar. 1–4 still select the track and 5–8 the pattern.
 
 ### FX
 
@@ -154,7 +154,9 @@ The page shows connection, the advertised name, and the channel map. `E` jumps t
 
 ### Settings
 
-Rows: speaker, brightness, BLE name, battery, memory, card. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising. On any other row, Enter does nothing. While the name editor is open it takes every key: glyphs are lowercased and appended, up to 16, Backspace deletes one character, and `` ` `` cancels. Space does not play and is not typed.
+Rows: speaker, brightness, BLE name, battery, free RAM, card. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising. On any other row, Enter does nothing. While the name editor is open it takes every key: glyphs are lowercased and appended, up to 16, Backspace deletes one character, and `` ` `` cancels. Space does not play and is not typed.
+
+Free RAM is internal heap still unused, over the heap size (`86/312k` means 86KB free of a 312KB heap). It is not flash, and it is not the whole chip. The legend on that row is the largest contiguous block a load can take. BLE, the screen buffer, and the audio DMA already sit in that heap, so the free number is small even when the program is fine. A `P` suffix is free PSRAM, which this Stamp-S3A does not have.
 
 ### Exit
 
@@ -188,6 +190,8 @@ Keypad notes are sent back out as note-on on the track channel. Bank and volume 
 
 `releases/mothdeck-sd-pack.zip` is the card pack (kits, loops, and plugin instruments). Unzip it onto the card root. Regenerate it with `python3 tools/make_sd_pack.py`. `python3 tools/gen_sd_examples.py` still writes a smaller `sd-card-example/moth` tree.
 
+Built-in drums, built-in sound effects, and the files in that pack are unsigned 8-bit mono PCM at 22050 Hz. 128 is silence. That is about 22 KB/s, where 44.1 kHz stereo 16-bit is about 176 KB/s. The speaker mix stays 44100 Hz and stretches these files up to it. `tools/wav_to_instrument.py` and `tools/wav_to_loop.py` resample to 22050 Hz and write that 8-bit WAV. `--raw` on the instrument converter stays little-endian int16 at the source rate. A 16-bit WAV still loads, and stereo is mixed to mono. The low tom in a kit folder is `perc.wav`.
+
 ```bash
 python3 tools/wav_to_instrument.py take.wav card/moth/instruments/take --name take --root 60
 python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \
@@ -196,9 +200,9 @@ python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \
 
 The instrument and loop manifests, the version 2 and version 3 song tails, and the pattern file are specified in [docs/FORMATS.md](docs/FORMATS.md).
 
-Plugins get ids 12–62. Id 63 is the Loops instrument. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. Loop PCM is not evicted while a track holds it (six slots). Instrument PCM may recycle the oldest slot. Samples are capped (48k frames with PSRAM, 8k without; loops 120k / 16k; a drum kit is 18000 frames, 6000 per pad) and prefer PSRAM. A corrupt manifest or WAV is reported on the page and skipped.
+Plugins get ids 12–62. Id 63 is the Loops instrument. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. Loops stream from the card through a short window (four streams). Instrument PCM may recycle the oldest of four slots. Without PSRAM a plugin sample is at most 4096 frames and a drum kit is at most 8000 frames, 1800 per pad. Both are read straight from the WAV, not copied twice. A failed load says how many kilobytes it needed and how many were free. A corrupt manifest or WAV is reported on the page and skipped.
 
-Built-in voices, at the usual playing octave: Drums is an ambient/deep-house kit (pitched kick, soft snare, clap, short and open hats, tom, ride) with a short room baked into the sample. SFX is twelve different effects (riser, downlifter, zap, sweep, impact, noise, blip, siren, reverse, drop, bubbles, whoosh), one per key. Sine is a plain sine. Square is a rounded square. Saw is a detuned saw lead. Tri is a triangle. Organ is drawbar sines. Pluck is a closing filter with a fast decay. Bell is decaying FM. Flute is a slow sine with breath and vibrato. Bass is a sub sine plus detuned saws, lowpassed. Pad is a slow attack, detuned and dark, and it holds longer than the other tones.
+Built-in drums, one pad per key, at the recorded pitch on every octave: C kick, C# rim, D snare, D# clap, E closed hat, F open hat, F# low tom, G tom, G# shaker, A ride, A# snap, B crash. The same key an octave higher plays that same piece again. It does not transpose it. SFX is twelve different effects (riser, downlifter, zap, sweep, impact, noise, blip, siren, reverse, drop, bubbles, whoosh), one per key, and those do follow the octave. Sine is a plain sine. Square is a rounded square. Saw is a detuned saw lead. Tri is a triangle. Organ is drawbar sines. Pluck is a closing filter with a fast decay. Bell is decaying FM. Flute is a slow sine with breath and vibrato. Bass is a sub sine plus detuned saws, lowpassed. Pad is a slow attack, detuned and dark, and it holds longer than the other tones.
 
 Loops resample to the project BPM by advancing the source faster when the project is faster. Launch can wait for the next beat or the next bar.
 
@@ -217,7 +221,9 @@ releases/    application image, full-flash image, checksums, install notes
 
 ## Hardware notes
 
-Cardputer ADV: Stamp-S3A (ESP32-S3FN8, 8MB flash, no onboard PSRAM), ST7789 240×135, TCA8418 keyboard at I2C `0x34` (SDA 8, SCL 9), ES8311 on the same I2C bus, speaker amp enable GPIO42, microSD on a separate SPI (SCK 40, MISO 39, MOSI 14, CS 12) with GPIO5 held high before mount, battery ADC GPIO10, front button GPIO0. Grove (GPIO1 / GPIO2) is left unused. The IMU is left off.
+Cardputer ADV: Stamp-S3A (ESP32-S3FN8, 8MB flash, no onboard PSRAM), ST7789 240×135, TCA8418 keyboard at I2C `0x34` (SDA 8, SCL 9), ES8311 on the same I2C bus. GPIO42 is the codec data line (DSDIN), GPIO41 is bit clock, GPIO43 is word select, and GPIO46 is the codec microphone data. The NS4150B follows the codec headphone driver. microSD is a separate SPI bus (SCK 40, MISO 39, MOSI 14, CS 12) with GPIO5 held high before mount. Battery ADC is GPIO10. The front button is GPIO0. Grove (GPIO1 / GPIO2) is left unused. The IMU is left off.
+
+There is no practical way to add the chip's own PSRAM. Those pins are GPIO33–37, which this board uses for the display, so an octal PSRAM module on the Stamp-S3A would fight the panel and `qio_opi` must stay off. Both hardware SPI controllers are already taken (the display and the microSD). A Grove SPI RAM board is not wired up and is not a supported upgrade. Extra sample room is the microSD: kits and short plugin samples stay in a small RAM cache, and loops are read from the card while they play.
 
 ## Licence
 

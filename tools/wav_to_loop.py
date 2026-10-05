@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Turn one or more WAV files into a MothDeck loop library folder.
 
+Each loop is rewritten as unsigned 8-bit mono PCM at 22050 Hz. Duration
+is kept. 128 is silence. The firmware streams these files.
+
 Example:
   python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \\
       sd-card/loops/house kick.wav hat.wav
@@ -10,7 +13,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from pcmutil import read_wav_mono, write_wav  # noqa: E402
+from pcmutil import ASSET_RATE, read_wav_mono, resample, write_wav  # noqa: E402
 
 
 def safe_name(path, index):
@@ -50,6 +53,9 @@ def main():
         lines.append("tags=%s" % args.tags)
     for index, wav in enumerate(args.wavs):
         samples, rate = read_wav_mono(wav)
+        if rate != ASSET_RATE:
+            samples = [int(round(s)) for s in resample(samples, rate, ASSET_RATE)]
+            rate = ASSET_RATE
         filename = safe_name(wav, index) + ".wav"
         write_wav(os.path.join(args.outdir, filename), samples, rate)
         lines.append("loop=%s" % filename)

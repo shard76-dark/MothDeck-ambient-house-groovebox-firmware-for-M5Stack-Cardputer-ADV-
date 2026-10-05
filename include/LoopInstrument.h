@@ -3,9 +3,11 @@
 #include <stdint.h>
 
 // A loop the Loops instrument may start from the audio task.
-// PCM is already in memory. This call does not touch the SD card.
+// hold > 0 streams from the card (see PcmHold). pcm is only set for a
+// fully resident buffer, which the card path no longer uses.
 struct LoopHit {
   const int16_t *pcm;
+  int hold;
   int frames;
   int rate;
   int bpm;

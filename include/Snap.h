@@ -53,6 +53,7 @@ struct Snap {
 
 struct LoopArm {
   const int16_t *pcm;
+  int hold;
   int frames;
   int rate;
   int bpm;

@@ -160,7 +160,8 @@ def paint_inst(g):
     put(g, 2, 11, "Fn: cursor −", "fn", "hold Fn")
     put(g, 2, 12, "—", "idle")
     put(g, 2, 13, "Assign", "act", "loads plugin")
-    put(g, 3, 11, "Fn: cursor +", "fn", "hold Fn")
+    put(g, 3, 11, "Prev kit", "act", "Fn: cursor +")
+    put(g, 3, 12, "Next kit", "act")
 
 
 def paint_fx(g):
@@ -245,7 +246,8 @@ PAGES = [
         paint_inst,
         [
             "9 / 0 and Fn+; / Fn+. move the instrument list. Enter assigns it to the selected track and loads an SD plugin.",
-            "R rescans /moth/instruments. Other letters do nothing. 1–4 still select the track, 5–8 the pattern.",
+            ", and / load the previous or next drum kit onto the Drums instrument (Fn+, and Fn+/ do the same). Kits live in /moth/drums. R rescans the card.",
+            "1–4 still select the track, 5–8 the pattern.",
         ],
     ),
     (

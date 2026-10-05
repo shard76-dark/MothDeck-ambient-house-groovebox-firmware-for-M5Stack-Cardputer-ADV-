@@ -1,4 +1,5 @@
 #include "Tracker.h"
+#include "PcmHold.h"
 #include "Voice.h"
 #include "MidiMap.h"
 #include "BoardConfig.h"
@@ -860,8 +861,18 @@ void Tracker::RecomputeLoopInc(LoopPlay *loop) {
   }
 }
 
+static int loopSampleAt(Tracker::LoopPlay *loop, int index) {
+  if (loop->hold > 0) {
+    return pcmHoldAt(loop->hold, index);
+  }
+  if (!loop->pcm || index < 0 || index >= loop->frames) {
+    return 0;
+  }
+  return loop->pcm[index];
+}
+
 int Tracker::ReadLoop(LoopPlay *loop) {
-  if (!loop->pcm || loop->frames < 2) {
+  if (loop->frames < 2 || (loop->hold <= 0 && !loop->pcm)) {
     return 0;
   }
   uint32_t pos = loop->phase >> 16;
@@ -871,8 +882,8 @@ int Tracker::ReadLoop(LoopPlay *loop) {
   if (i1 >= loop->frames) {
     i1 = 0;
   }
-  int s0 = loop->pcm[i0];
-  int s1 = loop->pcm[i1];
+  int s0 = loopSampleAt(loop, i0);
+  int s1 = loopSampleAt(loop, i1);
   int s = s0 + (int)(((int64_t)(s1 - s0) * frac) >> 16);
   loop->phase += loop->inc > 0 ? loop->inc : 1;
   uint32_t limit = (uint32_t)loop->frames << 16;
@@ -912,11 +923,12 @@ void Tracker::TriggerLoopVoice(int track, int note) {
     return;
   }
   LoopHit hit;
-  if (!loopInstrumentHit(note, &hit) || !hit.pcm || hit.frames < 2) {
+  if (!loopInstrumentHit(note, &hit) || hit.frames < 2 || (hit.hold <= 0 && !hit.pcm)) {
     return;
   }
   LoopPlay &slot = loopPlay[track];
   slot.pcm = hit.pcm;
+  slot.hold = hit.hold;
   slot.frames = hit.frames;
   slot.rate = hit.rate > 0 ? hit.rate : 8000;
   slot.bpm = hit.bpm > 0 ? hit.bpm : 120;
@@ -944,12 +956,13 @@ void Tracker::TriggerLoopVoice(int track, int note) {
 }
 
 void Tracker::ArmLoop(int track, const LoopArm &arm) {
-  if (track < 0 || track > 3 || !arm.pcm || arm.frames < 2) {
+  if (track < 0 || track > 3 || arm.frames < 2 || (arm.hold <= 0 && !arm.pcm)) {
     SetHint("No loop");
     return;
   }
   LoopPlay &slot = loopPlay[track];
   slot.pcm = arm.pcm;
+  slot.hold = arm.hold;
   slot.frames = arm.frames;
   slot.rate = arm.rate > 0 ? arm.rate : kSampleRate;
   slot.bpm = arm.bpm > 0 ? arm.bpm : 120;
@@ -978,11 +991,12 @@ void Tracker::StopLoop(int track) {
 }
 
 void Tracker::StartAudition(const LoopArm &arm) {
-  if (!arm.pcm || arm.frames < 2) {
+  if (arm.frames < 2 || (arm.hold <= 0 && !arm.pcm)) {
     SetHint("No loop");
     return;
   }
   audition.pcm = arm.pcm;
+  audition.hold = arm.hold;
   audition.frames = arm.frames;
   audition.rate = arm.rate > 0 ? arm.rate : kSampleRate;
   audition.bpm = arm.bpm > 0 ? arm.bpm : 120;

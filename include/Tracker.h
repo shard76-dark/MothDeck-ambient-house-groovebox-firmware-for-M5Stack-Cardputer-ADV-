@@ -40,6 +40,7 @@ public:
     uint8_t pending;
     uint8_t quantize;
     const int16_t *pcm;
+    int hold;
     int frames;
     int rate;
     int bpm;

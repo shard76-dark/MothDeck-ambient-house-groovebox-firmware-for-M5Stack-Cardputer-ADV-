@@ -4,6 +4,7 @@
 #include "BleMidi.h"
 #include "BoardConfig.h"
 #include "LauncherExit.h"
+#include "PcmHold.h"
 #include "SplashMoth.h"
 #include "Ui.h"
 
@@ -150,5 +151,6 @@ void loop() {
   }
 
   uiDraw(ble);
+  pcmHoldService();
   delay(16);
 }

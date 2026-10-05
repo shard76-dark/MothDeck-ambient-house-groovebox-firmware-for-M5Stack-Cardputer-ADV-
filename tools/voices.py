@@ -260,16 +260,105 @@ def dusty(samples, rate, seed=3):
     return out
 
 
+def role_kick(rate):
+    # Sub thump plus a short click. Dry, so it does not turn into a tom.
+    n = int(rate * 0.40)
+    phase = 0.0
+    noise = Noise(3)
+    out = []
+    for i in range(n):
+        t = i / rate
+        f = 46 + 170 * math.exp(-t * 32)
+        phase += 2 * math.pi * f / rate
+        click = noise.step() * math.exp(-t * 350)
+        amp = math.exp(-t * 7.2)
+        out.append((math.sin(phase) * 0.92 + click * 0.22) * amp)
+    return out
+
+
+def role_snare(rate):
+    n = int(rate * 0.24)
+    noise = Noise(101)
+    out = []
+    prev = 0.0
+    hp = 0.0
+    for i in range(n):
+        t = i / rate
+        nz = noise.step()
+        hp = nz - prev + 0.7 * hp
+        prev = nz
+        body = math.sin(2 * math.pi * 188 * t) * math.exp(-t * 35)
+        out.append(hp * 0.82 * math.exp(-t * 11) + body * 0.18)
+    return out
+
+
+def role_hat(rate, seconds, seed, decay):
+    n = max(8, int(rate * seconds))
+    noise = Noise(seed)
+    out = []
+    prev = 0.0
+    hp = 0.0
+    for i in range(n):
+        t = i / rate
+        nz = noise.step()
+        hp = nz - prev + 0.93 * hp
+        prev = nz
+        metal = math.sin(2 * math.pi * 6500 * t) * math.sin(2 * math.pi * 9100 * t)
+        out.append((hp * 0.78 + metal * 0.22) * math.exp(-t * decay))
+    return out
+
+
+def role_clap(rate):
+    n = int(rate * 0.22)
+    noise = Noise(17)
+    bursts = (0.0, 0.011, 0.023)
+    out = []
+    for i in range(n):
+        t = i / rate
+        env = 0.0
+        for b in bursts:
+            if t >= b:
+                env += math.exp(-(t - b) * 55)
+        out.append(noise.step() * env * 0.45)
+    return out
+
+
+def role_tom(rate, f0, seconds=0.26):
+    n = int(rate * seconds)
+    phase = 0.0
+    out = []
+    for i in range(n):
+        t = i / rate
+        f = f0 * 0.62 + (f0 - f0 * 0.62) * math.exp(-t * 16)
+        phase += 2 * math.pi * f / rate
+        out.append(math.tanh(math.sin(phase) * 1.4) * math.exp(-t * 8))
+    return out
+
+
+def role_rim(rate):
+    n = int(rate * 0.06)
+    noise = Noise(19)
+    out = []
+    for i in range(n):
+        t = i / rate
+        tick = noise.step() * math.exp(-t * 280)
+        wood = math.sin(2 * math.pi * 880 * t) * math.exp(-t * 90)
+        out.append(tick * 0.55 + wood * 0.45)
+    return out
+
+
 def ambient_kit(rate):
+    # One role per pad, recorded pitch only. No shared room tail: that smear
+    # made the kit sound like one tone played in different keys.
     hits = [
-        house_kick(rate),
-        rim(rate),
-        soft_snare(rate),
-        clap(rate),
-        hat(rate, 0.05, 3, True),
-        hat(rate, 0.30, 9, False),
-        perc(rate),
-        tom(rate, 148),
+        role_kick(rate),
+        role_rim(rate),
+        role_snare(rate),
+        role_clap(rate),
+        role_hat(rate, 0.045, 5, 70),
+        role_hat(rate, 0.28, 9, 9),
+        role_tom(rate, 92, 0.30),
+        role_tom(rate, 180, 0.22),
         shaker(rate),
         ride(rate),
         snap(rate),

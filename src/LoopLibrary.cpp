@@ -1,6 +1,6 @@
 #include "LoopLibrary.h"
 #include "SdCard.h"
-#include "WavPcm.h"
+#include "PcmHold.h"
 #include "PluginFormat.h"
 #include "BoardConfig.h"
 #include <Arduino.h>
@@ -20,7 +20,7 @@ bool loopInstrumentHit(int note, LoopHit *out) {
     note = 0;
   }
   const LoopHit &hit = instLoops[note % n];
-  if (!hit.pcm || hit.frames < 2) {
+  if (hit.frames < 2 || (hit.hold <= 0 && !hit.pcm)) {
     return false;
   }
   *out = hit;
@@ -29,11 +29,11 @@ bool loopInstrumentHit(int note, LoopHit *out) {
 
 LoopLibrary loopLibrary;
 
-static const int kLoopCache = 6;
+static const int kLoopCache = 4;
 
 struct LoopCache {
   char key[56];
-  int16_t *pcm;
+  int hold;
   int frames;
   int rate;
   int bpm;
@@ -113,56 +113,6 @@ void LoopLibrary::Scan() {
   }
 }
 
-static bool loadPcm(const char *path, int fallbackRate, int16_t **pcm, int *frames, int *rate, char *err, int errLen) {
-  int capFrames = psramFound() ? 120000 : 16000;
-  int maxBytes = capFrames * 4 + 256;
-  uint8_t *raw = (uint8_t *)deckAlloc((size_t)maxBytes);
-  if (!raw) {
-    setErr(err, errLen, "Out of memory");
-    return false;
-  }
-  int n = 0;
-  if (!sdCard.ReadAll(path, raw, maxBytes, &n)) {
-    deckFree(raw);
-    setErr(err, errLen, "Loop missing or too big");
-    return false;
-  }
-  if (n >= 12 && memcmp(raw, "RIFF", 4) == 0) {
-    WavInfo info;
-    if (!parseWavHeader(raw, n, &info) || info.frames > capFrames) {
-      setErr(err, errLen, info.error[0] ? info.error : "Loop too large");
-      deckFree(raw);
-      return false;
-    }
-    int16_t *dst = (int16_t *)deckAlloc((size_t)info.frames * sizeof(int16_t));
-    if (!dst) {
-      deckFree(raw);
-      setErr(err, errLen, "Out of memory");
-      return false;
-    }
-    int got = decodeWavMono(raw, n, dst, info.frames, &info);
-    deckFree(raw);
-    if (got < 2) {
-      deckFree(dst);
-      setErr(err, errLen, "Loop decode failed");
-      return false;
-    }
-    *pcm = dst;
-    *frames = got;
-    *rate = info.rate;
-    return true;
-  }
-  if ((n % 2) != 0 || n < 4) {
-    deckFree(raw);
-    setErr(err, errLen, "Raw loop too small");
-    return false;
-  }
-  *pcm = (int16_t *)raw;
-  *frames = n / 2;
-  *rate = fallbackRate > 0 ? fallbackRate : 22050;
-  return true;
-}
-
 bool LoopLibrary::LoadEntry(int libIndex, int entryIndex, LoopArm *arm, uint8_t *steps, int *stepCount, bool *pattern, char *err, int errLen) {
   if (pattern) {
     *pattern = false;
@@ -191,6 +141,9 @@ bool LoopLibrary::LoadEntry(int libIndex, int entryIndex, LoopArm *arm, uint8_t 
       setErr(err, errLen, "Loop cache full");
       return false;
     }
+    if (cache[slot].hold > 0) {
+      pcmHoldClose(cache[slot].hold);
+    }
     memset(&cache[slot], 0, sizeof(cache[slot]));
     strncpy(cache[slot].key, key, sizeof(cache[slot].key) - 1);
     cache[slot].bpm = lib.bpm;
@@ -211,14 +164,14 @@ bool LoopLibrary::LoadEntry(int libIndex, int entryIndex, LoopArm *arm, uint8_t 
       cache[slot].stepCount = pf.stepCount;
       memcpy(cache[slot].steps, pf.steps, pf.stepCount);
     } else {
-      int16_t *pcm = nullptr;
       int frames = 0;
       int rate = 0;
-      if (!loadPcm(path, 22050, &pcm, &frames, &rate, err, errLen)) {
+      int hold = pcmHoldOpen(path, &frames, &rate, err, errLen);
+      if (hold <= 0) {
         cache[slot].key[0] = 0;
         return false;
       }
-      cache[slot].pcm = pcm;
+      cache[slot].hold = hold;
       cache[slot].frames = frames;
       cache[slot].rate = rate;
     }
@@ -228,7 +181,8 @@ bool LoopLibrary::LoadEntry(int libIndex, int entryIndex, LoopArm *arm, uint8_t 
   strncpy(arm->name, entry.file, sizeof(arm->name) - 1);
   arm->bpm = cache[slot].bpm > 0 ? cache[slot].bpm : lib.bpm;
   arm->rate = cache[slot].rate;
-  arm->pcm = cache[slot].pcm;
+  arm->pcm = nullptr;
+  arm->hold = cache[slot].hold;
   arm->frames = cache[slot].frames;
   if (cache[slot].isPattern) {
     if (pattern) {
@@ -244,7 +198,7 @@ bool LoopLibrary::LoadEntry(int libIndex, int entryIndex, LoopArm *arm, uint8_t 
     }
     return true;
   }
-  if (!arm->pcm || arm->frames < 2) {
+  if (arm->frames < 2 || (arm->hold <= 0 && !arm->pcm)) {
     setErr(err, errLen, "Empty loop");
     return false;
   }
@@ -352,10 +306,11 @@ int LoopLibrary::PreloadInstrument(char *err, int errLen) {
         }
         continue;
       }
-      if (pattern || !arm.pcm || arm.frames < 2) {
+      if (pattern || arm.frames < 2 || (arm.hold <= 0 && !arm.pcm)) {
         continue;
       }
       next[n].pcm = arm.pcm;
+      next[n].hold = arm.hold;
       next[n].frames = arm.frames;
       next[n].rate = arm.rate;
       next[n].bpm = arm.bpm;
@@ -377,5 +332,5 @@ bool LoopLibrary::TrackArm(int track, LoopArm *arm) const {
     return false;
   }
   *arm = loaded[track];
-  return arm->pcm != nullptr;
+  return arm->pcm != nullptr || arm->hold > 0;
 }

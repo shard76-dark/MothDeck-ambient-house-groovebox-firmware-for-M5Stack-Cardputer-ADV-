@@ -2,6 +2,7 @@
 """Build sd-card-example/ with original synthesized instruments and loops.
 
 Copy the moth/ folder onto a FAT32 card. Nothing here is a recorded sample.
+WAV files are unsigned 8-bit mono at 22050 Hz (128 is silence).
 """
 import math
 import os
@@ -75,7 +76,9 @@ def main():
     inst = os.path.join(OUT, "instruments")
     pluck_dir = os.path.join(inst, "soft-pluck")
     os.makedirs(pluck_dir, exist_ok=True)
-    write_wav(os.path.join(pluck_dir, "sample.wav"), pluck(rate // 2, rate, 261.63), rate)
+    # 3600 frames stays under the 4096-frame plugin cache.
+    frames = 3600
+    write_wav(os.path.join(pluck_dir, "sample.wav"), pluck(frames, rate, 261.63), rate)
     write(
         os.path.join(pluck_dir, "manifest.txt"),
         "\n".join(
@@ -86,8 +89,8 @@ def main():
                 "sample=sample.wav",
                 "root=60",
                 "rate=22050",
-                "loop_start=2000",
-                "loop_end=8000",
+                "loop_start=900",
+                "loop_end=3500",
                 "attack=0",
                 "decay=40",
                 "sustain=70",

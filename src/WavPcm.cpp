@@ -96,6 +96,84 @@ bool parseWavHeader(const uint8_t *data, int len, WavInfo *out) {
   return true;
 }
 
+bool parseWavPrefix(const uint8_t *data, int len, WavInfo *out) {
+  if (!out) {
+    return false;
+  }
+  memset(out, 0, sizeof(*out));
+  if (!data || len < 44) {
+    wavErr(out, "WAV too small");
+    return false;
+  }
+  if (memcmp(data, "RIFF", 4) != 0 || memcmp(data + 8, "WAVE", 4) != 0) {
+    wavErr(out, "Not a WAV");
+    return false;
+  }
+  int pos = 12;
+  bool haveFmt = false;
+  int audioFormat = 0;
+  int channels = 0;
+  int rate = 0;
+  int bits = 0;
+  int dataOff = 0;
+  int dataBytes = 0;
+  while (pos + 8 <= len) {
+    uint32_t chunkSize = ru32(data + pos + 4);
+    if (chunkSize > 0x10000000u) {
+      wavErr(out, "WAV chunk overrun");
+      return false;
+    }
+    if (memcmp(data + pos, "fmt ", 4) == 0) {
+      if (chunkSize < 16 || pos + 8 + 16 > len) {
+        wavErr(out, "WAV fmt short");
+        return false;
+      }
+      audioFormat = ru16(data + pos + 8);
+      channels = ru16(data + pos + 10);
+      rate = (int)ru32(data + pos + 12);
+      bits = ru16(data + pos + 22);
+      haveFmt = true;
+    } else if (memcmp(data + pos, "data", 4) == 0) {
+      dataOff = pos + 8;
+      dataBytes = (int)chunkSize;
+      break;
+    }
+    int step = 8 + (int)chunkSize + ((chunkSize & 1) ? 1 : 0);
+    if (pos + step > len) {
+      wavErr(out, "WAV header truncated");
+      return false;
+    }
+    pos += step;
+  }
+  if (!haveFmt || dataOff == 0) {
+    wavErr(out, "WAV missing fmt or data");
+    return false;
+  }
+  if (audioFormat != 1) {
+    wavErr(out, "WAV is not PCM");
+    return false;
+  }
+  if (!(channels == 1 || channels == 2) || !(bits == 8 || bits == 16)) {
+    wavErr(out, "WAV must be 8/16-bit mono/stereo");
+    return false;
+  }
+  if (rate < 1000 || rate > 96000) {
+    wavErr(out, "WAV rate out of range");
+    return false;
+  }
+  int frameBytes = channels * (bits / 8);
+  if (frameBytes <= 0 || dataBytes < frameBytes) {
+    wavErr(out, "WAV data size mismatch");
+    return false;
+  }
+  out->rate = rate;
+  out->channels = channels;
+  out->bits = bits;
+  out->frames = dataBytes / frameBytes;
+  out->dataOffset = dataOff;
+  return true;
+}
+
 int decodeWavMono(const uint8_t *data, int len, int16_t *dst, int dstFrames, WavInfo *out) {
   WavInfo info;
   WavInfo *w = out ? out : &info;

@@ -1,5 +1,13 @@
 ## 2026-10-05
 
+Built-in drums, built-in sound effects, and the SD pack are unsigned 8-bit mono PCM at 22050 Hz (128 is silence, about 22 KB/s). The mix is still 44100 Hz. 16-bit WAV still loads. `tools/wav_to_instrument.py` and `tools/wav_to_loop.py` write that format. `--raw` stays little-endian int16.
+
+Drums are separate kit pieces again. Each of the twelve pads is its own sound (kick, rim, snare, clap, closed hat, open hat, low tom, tom, shaker, ride, snap, crash), played at the recorded pitch. The octave row no longer speeds the same sample up, which is what made them sound like one hit in different keys. `,` and `/` on the Instrument page load the previous or next kit from `/moth/drums` onto the Drums instrument. The line under the list is the kit name.
+
+Settings used to print free internal heap as a bare `6k`. That number is bytes still free in the internal heap after BLE, the screen buffer, and the audio DMA, divided by 1024. It is not total RAM and not flash. The row is now `free/total` (for example `86/312k`), and the legend is the largest block a load can use.
+
+Card audio no longer copies a whole file into the heap and then copies it again. Drum kits and plugin samples are read straight into a small cache (8000 kit frames, 1800 per pad, 4096 per plugin, four plugins). Loops stream from the card. A load that does not fit says how many kilobytes it needs and how many are free. The screen buffer is 8-bit so that cache has room. The Stamp-S3A cannot grow RAM with a PSRAM chip: those pins are the display, and both SPI buses are already in use. The microSD is the sample memory.
+
 Sound is back on the build that lit the panel. That build set `internal_spk` off so the speaker would not run inside `M5.begin`. On the Cardputer ADV that flag is what assigns I2S (BCLK GPIO41, WS GPIO43, data GPIO42) and registers the ES8311 power-up callback. `Speaker.begin()` later then ran with no data pin, so the codec stayed in reset and nothing reached the NS4150B. GPIO42 is the codec data input, not an amp-enable to drive high. The speaker profile is installed again during display bring-up, and `audioStart()` (still after the splash and the Play frame) writes the ES8311 registers, starts I2S on those pins, and sets the volume to 160.
 
 Boot shows a one-second moth splash with the backlight already on, then the Play page, then the card scan, the speaker, and BLE. The splash does not wait for a key. Regenerate it with `python3 tools/make_splash.py`.

@@ -1,7 +1,6 @@
 #include "InstrumentBank.h"
 #include "SdCard.h"
 #include "PluginFormat.h"
-#include "WavPcm.h"
 #include "SynthRender.h"
 #include "BoardConfig.h"
 #include <Arduino.h>
@@ -10,7 +9,7 @@
 
 InstrumentBank instrumentBank;
 
-static const int kLiveSlots = 8;
+static const int kLiveSlots = 4;
 static const int kCycle = 168;
 
 struct LiveSlot {
@@ -130,60 +129,57 @@ static void scaleGain(int16_t *data, int n, int gain) {
   }
 }
 
+static void oom(char *err, int errLen, int needBytes) {
+  int freeKb = (int)(deckFreeInternal() / 1024);
+  int needKb = (needBytes + 1023) / 1024;
+  if (err && errLen > 0) {
+    snprintf(err, errLen, "Need %dk, %dk free", needKb, freeKb);
+  }
+}
+
 static bool loadAudioFile(const char *path, const InstrumentManifest &man, int16_t **outData, int *outLen, int *outRate, char *err, int errLen) {
-  int capFrames = psramFound() ? 48000 : 8000;
-  int maxBytes = capFrames * 4 + 128;
-  uint8_t *raw = (uint8_t *)deckAlloc((size_t)maxBytes);
-  if (!raw) {
-    setErr(err, errLen, "Out of memory");
-    return false;
-  }
-  int n = 0;
-  if (!sdCard.ReadAll(path, raw, maxBytes, &n)) {
-    deckFree(raw);
-    setErr(err, errLen, "Sample missing or too big");
-    return false;
-  }
-  bool isWav = n >= 12 && memcmp(raw, "RIFF", 4) == 0;
+  int capFrames = psramFound() ? 48000 : 4096;
   int16_t *pcm = nullptr;
   int frames = 0;
   int rate = man.sampleRate > 0 ? man.sampleRate : 22050;
+  bool isWav = false;
+  {
+    uint8_t probe[12];
+    int n = 0;
+    if (sdCard.ReadPrefix(path, probe, 12, &n) && n >= 12 && memcmp(probe, "RIFF", 4) == 0) {
+      isWav = true;
+    }
+  }
   if (isWav) {
-    WavInfo info;
-    if (!parseWavHeader(raw, n, &info)) {
-      setErr(err, errLen, info.error[0] ? info.error : "Bad WAV");
-      deckFree(raw);
-      return false;
-    }
-    if (info.frames > capFrames) {
-      setErr(err, errLen, "Sample too large");
-      deckFree(raw);
-      return false;
-    }
-    pcm = (int16_t *)deckAlloc((size_t)info.frames * sizeof(int16_t));
+    pcm = (int16_t *)deckAlloc((size_t)capFrames * sizeof(int16_t));
     if (!pcm) {
-      setErr(err, errLen, "Out of memory");
-      deckFree(raw);
+      oom(err, errLen, capFrames * (int)sizeof(int16_t));
       return false;
     }
-    int got = decodeWavMono(raw, n, pcm, info.frames, &info);
-    deckFree(raw);
-    if (got < 1) {
+    int got = 0;
+    if (!sdCard.LoadWavMono(path, pcm, capFrames, &got, &rate, err, errLen) || got < 1) {
       deckFree(pcm);
-      setErr(err, errLen, info.error[0] ? info.error : "WAV decode failed");
+      if (err && errLen > 0 && !err[0]) {
+        setErr(err, errLen, "WAV decode failed");
+      }
       return false;
     }
     frames = got;
-    rate = info.rate;
   } else {
-    if ((n % 2) != 0 || n < 4) {
+    int maxBytes = capFrames * 2;
+    uint8_t *raw = (uint8_t *)deckAlloc((size_t)maxBytes);
+    if (!raw) {
+      oom(err, errLen, maxBytes);
+      return false;
+    }
+    int n = 0;
+    if (!sdCard.ReadAll(path, raw, maxBytes, &n) || (n % 2) != 0 || n < 4) {
       deckFree(raw);
       setErr(err, errLen, "Raw sample too small");
       return false;
     }
     frames = n / 2;
     pcm = (int16_t *)raw;
-    raw = nullptr;
   }
   if (man.loopEnd > frames) {
     deckFree(pcm);
@@ -236,7 +232,7 @@ int InstrumentBank::LoadFolder(const char *folder, char *err, int errLen) {
   if (man.kind == INST_SUBTRACTIVE || man.kind == INST_FM) {
     pcm = (int16_t *)deckAlloc(kCycle * sizeof(int16_t));
     if (!pcm) {
-      setErr(err, errLen, "Out of memory");
+      oom(err, errLen, kCycle * (int)sizeof(int16_t));
       return -1;
     }
     if (man.kind == INST_FM) {

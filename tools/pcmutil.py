@@ -4,6 +4,10 @@ import struct
 import wave
 
 
+# Card assets are unsigned 8-bit mono at this rate. 128 is silence.
+ASSET_RATE = 22050
+
+
 def clamp16(x):
     x = int(round(x))
     if x > 32767:
@@ -13,12 +17,46 @@ def clamp16(x):
     return x
 
 
-def write_wav(path, samples, rate):
+def to_u8(sample):
+    # Unsigned 8-bit PCM. 128 is silence. Full-scale 16-bit maps onto 0..255.
+    s = clamp16(sample)
+    v = (s >> 8) + 128
+    if v < 0:
+        return 0
+    if v > 255:
+        return 255
+    return v
+
+
+def resample(samples, src_rate, dst_rate):
+    if src_rate == dst_rate or src_rate <= 0 or not samples:
+        return list(samples)
+    n = max(1, int(round(len(samples) * float(dst_rate) / float(src_rate))))
+    out = []
+    last = len(samples) - 1
+    for i in range(n):
+        pos = i * float(src_rate) / float(dst_rate)
+        i0 = int(pos)
+        if i0 >= last:
+            out.append(samples[last])
+            continue
+        frac = pos - i0
+        out.append(samples[i0] * (1.0 - frac) + samples[i0 + 1] * frac)
+    return out
+
+
+def write_wav(path, samples, rate, bits=8):
+    # Card assets are mono. 8-bit 22050 Hz is the default (about 22 KB/s).
+    # 16-bit is still accepted by the firmware for older files.
     with wave.open(path, "w") as handle:
         handle.setnchannels(1)
-        handle.setsampwidth(2)
         handle.setframerate(rate)
-        handle.writeframes(b"".join(struct.pack("<h", clamp16(s)) for s in samples))
+        if bits == 16:
+            handle.setsampwidth(2)
+            handle.writeframes(b"".join(struct.pack("<h", clamp16(s)) for s in samples))
+        else:
+            handle.setsampwidth(1)
+            handle.writeframes(bytes(to_u8(s) for s in samples))
 
 
 def read_wav_mono(path):

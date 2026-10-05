@@ -62,6 +62,10 @@ fi
 
 (
   cd releases
-  sha256sum mothdeck-cardputer-adv.bin mothdeck-cardputer-adv-full.bin > SHA256SUMS
+  files=(mothdeck-cardputer-adv.bin mothdeck-cardputer-adv-full.bin)
+  if [[ -f mothdeck-sd-pack.zip ]]; then
+    files+=(mothdeck-sd-pack.zip)
+  fi
+  sha256sum "${files[@]}" > SHA256SUMS
 )
 echo "release images are in releases/"

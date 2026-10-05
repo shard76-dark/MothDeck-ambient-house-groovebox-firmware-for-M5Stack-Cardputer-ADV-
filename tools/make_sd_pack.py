@@ -24,26 +24,30 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAGE = os.path.join(ROOT, "build", "sd-pack")
 ZIP_PATH = os.path.join(ROOT, "releases", "mothdeck-sd-pack.zip")
 
-# No-PSRAM limits in the firmware: a plugin sample is 8000 frames, a kit
-# pad is 6000, and a whole kit is 18000. Loops may be 16000 frames.
-KIT_RATE = 16000
+# Unsigned 8-bit mono at 22050 Hz (see pcmutil.ASSET_RATE). Playback stretches
+# that up to the 44100 Hz mix. No-PSRAM limits: a plugin sample is 4096 frames,
+# a kit pad is 1800, and a whole kit is 8000 int16 frames after decode. Pad
+# caps below sum to 6950 so a 22050 Hz kit still fits. Loops are streamed.
+KIT_RATE = 22050
 PAD_CAP = {
-    "kick": 3200,
-    "snare": 2000,
-    "clap": 1600,
-    "hat": 700,
-    "openhat": 1800,
-    "rim": 800,
-    "perc": 1200,
-    "tom": 1600,
-    "shaker": 900,
-    "ride": 1800,
-    "snap": 700,
-    "crash": 1600,
+    "kick": 1500,
+    "snare": 800,
+    "clap": 600,
+    "hat": 350,
+    "openhat": 700,
+    "rim": 250,
+    "perc": 550,
+    "tom": 550,
+    "shaker": 350,
+    "ride": 550,
+    "snap": 200,
+    "crash": 550,
 }
-LOOP_RATE = 8000
+LOOP_RATE = 22050
 LOOP_BPM = 120
-LOOP_FRAMES = 16000  # one bar at LOOP_RATE and LOOP_BPM
+LOOP_FRAMES = 44100  # one bar at LOOP_RATE and LOOP_BPM
+INST_RATE = 22050
+INST_FRAMES = 3600
 
 
 def fit(samples, limit):
@@ -179,8 +183,8 @@ def kit_dir(folder, title, hits):
 
 
 def instrument(folder, name, kind, root, oneshot, loop_at):
-    rate = 12000
-    frames = 6400
+    rate = INST_RATE
+    frames = INST_FRAMES
     data = tone_note(frames, rate, 440.0 * (2 ** ((root - 69) / 12.0)), kind)
     base = os.path.join(STAGE, "moth", "instruments", folder)
     os.makedirs(base, exist_ok=True)
@@ -228,7 +232,7 @@ The built-in drum kit is already **Ambient House** and does not need the card. T
 
 ## Drums
 
-On the Instrument page, Fn+`,` and Fn+`/` change the kit used by the Drums instrument. The first entry is always the built-in Ambient House kit. The card is not erased or rewritten. If a kit is missing or too big for the internal RAM, the page says so and the built-in kit stays selected.
+On the Instrument page, `,` and `/` (or Fn+`,` and Fn+`/`) change the kit used by the Drums instrument. The line under the list shows the kit name. The first entry is always the built-in kit. The card is not erased. If a kit does not fit in free RAM the toast says how many kilobytes it needs and how many are free, and the previous kit stays selected.
 
 Keyboard order for every kit, low octave white keys first:
 
@@ -240,24 +244,24 @@ Keyboard order for every kit, low octave white keys first:
 | D# | Clap |
 | E | Closed hat |
 | F | Open hat |
-| F# | Perc |
+| F# | Low tom |
 | G | Tom |
 | G# | Shaker |
 | A | Ride |
 | A# | Snap |
 | B | Soft crash |
 
-A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines in that order. Audio is 16-bit PCM WAV. On this board each pad must be at most 6000 frames and the twelve together at most 18000 frames. These files are 16000 Hz and already inside that limit.
+A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines in that order. Audio is unsigned 8-bit mono PCM WAV at 22050 Hz (128 is silence, about 22 KB/s). The speaker mix is still 44100 Hz. A 16-bit mono WAV still loads, and stereo is folded to mono. On this board each pad is kept to 1800 frames and the twelve together to 8000 frames, in internal RAM, after the file is expanded to 16-bit. These files are already inside that limit. The low tom is `perc.wav`. Loops are streamed from the card instead of being copied into RAM.
 
 ## Loops instrument
 
-Assign **Loops** (the row after Pad) to a track. Each note starts one of the audio loops in `/moth/loops`, wrapping if there are fewer loops than keys, and lines the loop up with the current bar. Playback follows the project BPM, so a faster song speeds the loop up. The loops in this pack are one bar at 120 BPM, 8000 Hz, 16000 frames, which is the largest loop the board will load without PSRAM.
+Assign **Loops** (the row after Pad) to a track. Each note starts one of the audio loops in `/moth/loops`, wrapping if there are fewer loops than keys, and lines the loop up with the current bar. Playback follows the project BPM, so a faster song speeds the loop up. The loops in this pack are one bar at 120 BPM, unsigned 8-bit mono, 22050 Hz, 44100 frames (about 44 KB each). They stream from the card in a small window, so the whole file is not kept in RAM.
 
 The Loops page can still audition and launch a single loop onto a track. That is separate from the Loops instrument, and both use the same cache.
 
 ## Plugins
 
-Assign a plugin from the Instrument list with Enter. The folder name is what a song remembers. Files follow `mothdeck-instrument 1` (see the firmware docs). Without PSRAM a plugin sample can be at most 8000 frames. These are 12000 Hz and shorter than that, so they load on the Cardputer ADV.
+Assign a plugin from the Instrument list with Enter. The folder name is what a song remembers. Files follow `mothdeck-instrument 1` (see the firmware docs). Without PSRAM a plugin sample can be at most 4096 frames and at most four stay loaded. These are unsigned 8-bit mono, 22050 Hz, 3600 frames, so they load on the Cardputer ADV.
 
 ## Sources and licence
 
