@@ -1,0 +1,14 @@
+mothdeck-instrument 1
+name=soft-pluck
+type=sample
+sample=sample.wav
+root=60
+rate=22050
+loop_start=2000
+loop_end=8000
+attack=0
+decay=40
+sustain=70
+release=30
+gain=90
+oneshot=0

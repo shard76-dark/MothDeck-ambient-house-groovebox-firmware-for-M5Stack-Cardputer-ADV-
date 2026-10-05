@@ -1,0 +1,8 @@
+mothdeck-loops 1
+name=house-120
+bpm=120
+bars=1
+tags=drums,house
+loop=kick.wav
+loop=hats.wav
+pattern=offbeat.pat

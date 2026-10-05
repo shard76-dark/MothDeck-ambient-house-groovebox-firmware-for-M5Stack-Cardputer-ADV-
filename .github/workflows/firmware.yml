@@ -1,0 +1,25 @@
+name: firmware
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host-and-firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: PlatformIO
+        run: pip install platformio 'uv>=0.1.0'
+      - name: Host tests
+        run: bash tools/run_tests.sh
+      - name: Firmware
+        run: pio run -e cardputer-adv
+      - name: Upload application image
+        uses: actions/upload-artifact@v4
+        with:
+          name: mothdeck-cardputer-adv
+          path: .pio/build/cardputer-adv/firmware.bin

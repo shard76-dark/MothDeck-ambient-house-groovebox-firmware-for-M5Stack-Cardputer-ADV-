@@ -1,0 +1,11 @@
+mothdeck-instrument 1
+name=warm-saw
+type=subtractive
+wave=saw
+cutoff=55
+resonance=20
+gain=75
+attack=10
+decay=20
+sustain=80
+release=25

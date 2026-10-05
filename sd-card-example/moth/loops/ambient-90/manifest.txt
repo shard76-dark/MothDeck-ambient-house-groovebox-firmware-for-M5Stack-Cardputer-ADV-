@@ -1,0 +1,6 @@
+mothdeck-loops 1
+name=ambient-90
+bpm=90
+bars=1
+tags=pad,ambient
+loop=pad.wav

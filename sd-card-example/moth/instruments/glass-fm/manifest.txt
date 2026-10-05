@@ -1,0 +1,12 @@
+mothdeck-instrument 1
+name=glass-fm
+type=fm
+wave=sine
+root=60
+fm_ratio=3
+fm_index=35
+gain=80
+attack=5
+decay=30
+sustain=60
+release=40
