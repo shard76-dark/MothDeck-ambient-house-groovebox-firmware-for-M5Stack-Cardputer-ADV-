@@ -1,6 +1,7 @@
 #ifndef MidiMap_h
 #define MidiMap_h
 #include <stdint.h>
+#include "DspHot.h"
 
 // Synth notes are 4 octaves of 12 pitches, anchored at MIDI C2 (note 36).
 
@@ -43,7 +44,8 @@ inline int scaleByBend(int value, int bend14) {
     return value;
   }
   int centered = bend14 - 8192;
-  int scaled = (int)(((int64_t)value * (32768 + centered)) / 32768);
+  // value is a step or a note increment, well under 40000, so the product fits MULL.
+  int scaled = dspMulQ(value, 32768 + centered, 15);
   if (scaled < 1) {
     return 1;
   }

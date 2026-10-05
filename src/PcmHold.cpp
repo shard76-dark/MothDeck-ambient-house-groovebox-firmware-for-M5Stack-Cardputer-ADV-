@@ -1,4 +1,5 @@
 #include "PcmHold.h"
+#include "DspHot.h"
 #include "SdCard.h"
 #include "WavPcm.h"
 #include <Arduino.h>
@@ -58,12 +59,7 @@ static int decodeFrames(const uint8_t *p, int n, int channels, int bits, int16_t
     if (channels == 2) {
       acc /= 2;
     }
-    if (acc > 32767) {
-      acc = 32767;
-    } else if (acc < -32768) {
-      acc = -32768;
-    }
-    dst[i] = (int16_t)acc;
+    dst[i] = (int16_t)dspSat16(acc);
   }
   return n;
 }

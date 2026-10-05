@@ -1,4 +1,5 @@
 #include "ToneSynth.h"
+#include "DspHot.h"
 
 // 512-entry sine. Filled once. The audio path only reads it.
 static int16_t kSine[512];
@@ -53,16 +54,6 @@ static int squareAt(uint32_t phase) {
   return (phase & 0x80000000u) ? 22000 : -22000;
 }
 
-static int lowpass(int *state, int x, int coef) {
-  if (coef < 1) {
-    coef = 1;
-  } else if (coef > 32767) {
-    coef = 32767;
-  }
-  int d = x - *state;
-  *state += (int)(((int64_t)d * coef) >> 15);
-  return *state;
-}
 
 static int noiseAt(uint32_t *state) {
   *state = (*state * 1664525u) + 1013904223u;
@@ -82,15 +73,6 @@ static uint32_t freqInc(int baseFreq) {
   return inc;
 }
 
-static int clamp16(int v) {
-  if (v > 32767) {
-    return 32767;
-  }
-  if (v < -32768) {
-    return -32768;
-  }
-  return v;
-}
 
 void toneNoteOn(ToneVoice *voice, int id) {
   if (!voice) {
@@ -125,11 +107,11 @@ int toneSample(ToneVoice *voice, int id, int baseFreq) {
     case 2: { // Sine. Clean, fast settle. The tracker envelope does the rest.
       y = sineAt(voice->phase);
       int gate = n < 60 ? (n * 32767 / 60) : 32767;
-      y = (int)(((int64_t)y * gate) >> 15);
+      y = dspMulQ(y, gate, 15);
       break;
     }
     case 3: { // Square, rounded so it is a hollow square and not a buzzer.
-      y = lowpass(&voice->lp, squareAt(voice->phase), 6500);
+      y = dspPole(&voice->lp, squareAt(voice->phase), 6500);
       break;
     }
     case 4: { // Saw lead: two saws, a few cents apart, lowpass with the edge left in.
@@ -137,13 +119,13 @@ int toneSample(ToneVoice *voice, int id, int baseFreq) {
       int a = sawAt(voice->phase);
       int b = sawAt(voice->phaseB);
       int raw = (a + b) / 2;
-      int filtered = lowpass(&voice->lp, raw, 16000);
+      int filtered = dspPole(&voice->lp, raw, 16000);
       y = filtered * 2 / 3 + raw / 4;
       voice->phaseB += incB;
       break;
     }
     case 5: { // Triangle. Mellow, almost no harmonics above the third.
-      y = lowpass(&voice->lp, triAt(voice->phase) * 3 / 4, 20000);
+      y = dspPole(&voice->lp, triAt(voice->phase) * 3 / 4, 20000);
       break;
     }
     case 6: { // Organ. Hammond-style drawbars 8' 4' 2 2/3' 2', plus a short click.
@@ -162,11 +144,11 @@ int toneSample(ToneVoice *voice, int id, int baseFreq) {
       if (n < 14000) {
         coef = 14000 - (int)((int64_t)n * 12000 / 14000);
       }
-      y = lowpass(&voice->lp, sawAt(voice->phase), coef);
+      y = dspPole(&voice->lp, sawAt(voice->phase), coef);
       if (n > 80) {
-        voice->amp = (int)(((int64_t)voice->amp * 32758) >> 15);
+        voice->amp = dspMulQ(voice->amp, 32758, 15);
       }
-      y = (int)(((int64_t)y * voice->amp) >> 15);
+      y = dspMulQ(y, voice->amp, 15);
       break;
     }
     case 8: { // Bell. FM, modulator near 3.5, index falls so the clang fades to a sine.
@@ -181,9 +163,9 @@ int toneSample(ToneVoice *voice, int id, int baseFreq) {
       uint32_t car = voice->phase + (uint32_t)(((int64_t)mod * index) >> 15);
       y = sineAt(car);
       if (n > 40) {
-        voice->amp = (int)(((int64_t)voice->amp * 32764) >> 15);
+        voice->amp = dspMulQ(voice->amp, 32764, 15);
       }
-      y = (int)(((int64_t)y * voice->amp) >> 15);
+      y = dspMulQ(y, voice->amp, 15);
       break;
     }
     case 9: { // Flute. Soft sine, a little second harmonic, breath, slow vibrato.
@@ -195,7 +177,7 @@ int toneSample(ToneVoice *voice, int id, int baseFreq) {
       int breath = noiseAt(&voice->noise) / 18;
       y = body + harm + breath;
       int gate = n < 4000 ? (n * 32767 / 4000) : 32767;
-      y = (int)(((int64_t)y * gate) >> 15);
+      y = dspMulQ(y, gate, 15);
       break;
     }
     case 10: { // Bass. Sub sine an octave down plus two detuned saws, lowpassed.
@@ -206,7 +188,7 @@ int toneSample(ToneVoice *voice, int id, int baseFreq) {
       int a = sawAt(voice->phaseB);
       int b = sawAt(voice->phaseC);
       int mix = sub / 2 + a / 6 + b / 6;
-      y = lowpass(&voice->lp, mix, 2600);
+      y = dspPole(&voice->lp, mix, 2600);
       voice->phaseB += incA;
       voice->phaseC += incB;
       break;
@@ -217,9 +199,9 @@ int toneSample(ToneVoice *voice, int id, int baseFreq) {
       int a = triAt(voice->phaseB);
       int b = triAt(voice->phaseC);
       int mix = a / 3 + b / 3 + sineAt(voice->phase) / 6;
-      y = lowpass(&voice->lp, mix, 3200);
-      int gate = n < 12000 ? (int)((int64_t)n * 30000 / 12000) : 30000;
-      y = (int)(((int64_t)y * gate) >> 15);
+      y = dspPole(&voice->lp, mix, 3200);
+      int gate = n < 12000 ? dspMul(n, 30000) / 12000 : 30000;
+      y = dspMulQ(y, gate, 15);
       voice->phaseB += incA;
       voice->phaseC += incB;
       break;
@@ -229,5 +211,5 @@ int toneSample(ToneVoice *voice, int id, int baseFreq) {
       break;
   }
   voice->phase += inc;
-  return clamp16(y);
+  return dspSat16(y);
 }

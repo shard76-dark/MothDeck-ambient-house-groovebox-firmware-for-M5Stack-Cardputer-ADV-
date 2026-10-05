@@ -1,4 +1,5 @@
 #include "Tracker.h"
+#include "DspHot.h"
 #include "PcmHold.h"
 #include "Voice.h"
 #include "MidiMap.h"
@@ -75,23 +76,20 @@ int Tracker::UpdateTracker() {
   const int div = 2 + masterVolume * 5;
   int mix = 0;
   for (int i = 0; i < 4; i++) {
-    int samp;
+    int extra = 0;
     if (loopPlay[i].enabled && loopPlay[i].frames > 1 && (loopPlay[i].pcm || loopPlay[i].hold > 0)) {
-      samp = ReadLoop(&loopPlay[i]) / div;
-    } else {
-      samp = voices[i].UpdateVoice() / div;
+      extra = ReadLoop(&loopPlay[i]);
     }
+    // The loop used to replace the voice, so a sample cut the drums (and
+    // the insert never saw the loop). Both go through the track FX.
+    int samp = voices[i].OutputWith(extra) / div;
     lastSamples[i] = samp;
     mix += samp;
   }
   if (audition.enabled && audition.frames > 1 && (audition.pcm || audition.hold > 0)) {
     mix += ReadLoop(&audition) / (div + 2);
   }
-  if (mix > 32767) {
-    mix = 32767;
-  } else if (mix < -32768) {
-    mix = -32768;
-  }
+  mix = dspSat16(mix);
   sample = mix;
   return mix;
 }
@@ -502,6 +500,7 @@ void Tracker::ClearAll(int val) {
     voices[j].volume = 2;
     voices[j].SetOctave(1);
     voices[j].bend14 = 8192;
+    voices[j].ReleaseShots();
   }
   patternLength = 32 + (32 * val);
   memset(loopPlay, 0, sizeof(loopPlay));
@@ -778,6 +777,7 @@ void Tracker::ApplySong(const SongData &song) {
     voice.bend14 = in.bend14;
     voice.CopyFx(song.fx[t]);
     voice.soloMute = false;
+    voice.ReleaseShots();
   }
   SyncTrackVoicesFromSteps();
   if (selectedTrack < 0 || selectedTrack > 3) {

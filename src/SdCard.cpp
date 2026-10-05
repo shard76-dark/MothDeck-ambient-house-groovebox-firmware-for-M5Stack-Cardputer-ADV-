@@ -1,4 +1,5 @@
 #include "SdCard.h"
+#include "DspHot.h"
 #include "BoardConfig.h"
 #include "DevLog.h"
 #include "WavPcm.h"
@@ -193,12 +194,7 @@ static int decodeChunk(const uint8_t *p, int frames, int channels, int bits, int
     if (channels == 2) {
       acc /= 2;
     }
-    if (acc > 32767) {
-      acc = 32767;
-    } else if (acc < -32768) {
-      acc = -32768;
-    }
-    dst[i] = (int16_t)acc;
+    dst[i] = (int16_t)dspSat16(acc);
   }
   return frames;
 }
