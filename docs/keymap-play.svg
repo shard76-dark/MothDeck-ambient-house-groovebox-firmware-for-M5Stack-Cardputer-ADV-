@@ -1,0 +1,225 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="906" viewBox="0 0 1600 906">
+<style>text { font-family: 'DejaVu Sans', 'Liberation Sans', sans-serif; }</style>
+<rect width="100%" height="100%" fill="#121418"/>
+<text x="28" y="40" fill="#f2efe8" font-size="28" font-weight="700">MothDeck  Play / Tracker</text>
+<text x="28" y="66" fill="#9aa3ad" font-size="15">Cardputer ADV  4×14  TCA8418 order from M5Cardputer Keyboard.h</text>
+<rect x="28.0" y="78.0" width="103.8" height="112.0" rx="8" fill="#3a78d4"/>
+<text x="36.0" y="96.0" fill="#f4f8ff" font-size="13" opacity="0.72">`</text>
+<text x="36.0" y="124.0" fill="#f4f8ff" font-size="14" font-weight="700">Page list</text>
+<text x="36.0" y="180.0" fill="#f4f8ff" font-size="11" opacity="0.9">hold: Exit</text>
+<rect x="138.8" y="78.0" width="103.8" height="112.0" rx="8" fill="#e2aa22"/>
+<text x="146.8" y="96.0" fill="#1c1403" font-size="13" opacity="0.72">1</text>
+<text x="146.8" y="124.0" fill="#1c1403" font-size="14" font-weight="700">Track 1</text>
+<rect x="249.6" y="78.0" width="103.8" height="112.0" rx="8" fill="#e2aa22"/>
+<text x="257.6" y="96.0" fill="#1c1403" font-size="13" opacity="0.72">2</text>
+<text x="257.6" y="124.0" fill="#1c1403" font-size="14" font-weight="700">Track 2</text>
+<rect x="360.4" y="78.0" width="103.8" height="112.0" rx="8" fill="#e2aa22"/>
+<text x="368.4" y="96.0" fill="#1c1403" font-size="13" opacity="0.72">3</text>
+<text x="368.4" y="124.0" fill="#1c1403" font-size="14" font-weight="700">Track 3</text>
+<rect x="471.1" y="78.0" width="103.8" height="112.0" rx="8" fill="#e2aa22"/>
+<text x="479.1" y="96.0" fill="#1c1403" font-size="13" opacity="0.72">4</text>
+<text x="479.1" y="124.0" fill="#1c1403" font-size="14" font-weight="700">Track 4</text>
+<rect x="581.9" y="78.0" width="103.8" height="112.0" rx="8" fill="#6c5ce7"/>
+<text x="589.9" y="96.0" fill="#f6f3ff" font-size="13" opacity="0.72">5</text>
+<text x="589.9" y="124.0" fill="#f6f3ff" font-size="14" font-weight="700">Pattern 1</text>
+<rect x="692.7" y="78.0" width="103.8" height="112.0" rx="8" fill="#6c5ce7"/>
+<text x="700.7" y="96.0" fill="#f6f3ff" font-size="13" opacity="0.72">6</text>
+<text x="700.7" y="124.0" fill="#f6f3ff" font-size="14" font-weight="700">Pattern 2</text>
+<rect x="803.5" y="78.0" width="103.8" height="112.0" rx="8" fill="#6c5ce7"/>
+<text x="811.5" y="96.0" fill="#f6f3ff" font-size="13" opacity="0.72">7</text>
+<text x="811.5" y="124.0" fill="#f6f3ff" font-size="14" font-weight="700">Pattern 3</text>
+<rect x="914.3" y="78.0" width="103.8" height="112.0" rx="8" fill="#6c5ce7"/>
+<text x="922.3" y="96.0" fill="#f6f3ff" font-size="13" opacity="0.72">8</text>
+<text x="922.3" y="124.0" fill="#f6f3ff" font-size="14" font-weight="700">Pattern 4</text>
+<rect x="1025.1" y="78.0" width="103.8" height="112.0" rx="8" fill="#148f86"/>
+<text x="1033.1" y="96.0" fill="#f2fffd" font-size="13" opacity="0.72">9</text>
+<text x="1033.1" y="124.0" fill="#f2fffd" font-size="14" font-weight="700">BPM slot −</text>
+<rect x="1135.9" y="78.0" width="103.8" height="112.0" rx="8" fill="#148f86"/>
+<text x="1143.9" y="96.0" fill="#f2fffd" font-size="13" opacity="0.72">0</text>
+<text x="1143.9" y="124.0" fill="#f2fffd" font-size="14" font-weight="700">BPM slot +</text>
+<rect x="1246.6" y="78.0" width="103.8" height="112.0" rx="8" fill="#148f86"/>
+<text x="1254.6" y="96.0" fill="#f2fffd" font-size="13" opacity="0.72">-</text>
+<text x="1254.6" y="124.0" fill="#f2fffd" font-size="14" font-weight="700">BPM −1</text>
+<text x="1254.6" y="180.0" fill="#f2fffd" font-size="11" opacity="0.9">Fn: quieter</text>
+<rect x="1357.4" y="78.0" width="103.8" height="112.0" rx="8" fill="#148f86"/>
+<text x="1365.4" y="96.0" fill="#f2fffd" font-size="13" opacity="0.72">=</text>
+<text x="1365.4" y="124.0" fill="#f2fffd" font-size="14" font-weight="700">BPM +1</text>
+<text x="1365.4" y="180.0" fill="#f2fffd" font-size="11" opacity="0.9">Fn: louder</text>
+<rect x="1468.2" y="78.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="1476.2" y="96.0" fill="#1a0e06" font-size="13" opacity="0.72">Del</text>
+<text x="1476.2" y="124.0" fill="#1a0e06" font-size="14" font-weight="700">Clear step</text>
+<rect x="28.0" y="197.0" width="103.8" height="112.0" rx="8" fill="#3a78d4"/>
+<text x="36.0" y="215.0" fill="#f4f8ff" font-size="13" opacity="0.72">Tab</text>
+<text x="36.0" y="243.0" fill="#f4f8ff" font-size="14" font-weight="700">Next page</text>
+<text x="36.0" y="299.0" fill="#f4f8ff" font-size="11" opacity="0.9">Shift/Ctrl: prev</text>
+<rect x="138.8" y="197.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="146.8" y="215.0" fill="#1b1814" font-size="13" opacity="0.72">Q</text>
+<text x="146.8" y="243.0" fill="#1b1814" font-size="14" font-weight="700">C +oct</text>
+<rect x="249.6" y="197.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="257.6" y="215.0" fill="#f4efe6" font-size="13" opacity="0.72">W</text>
+<text x="257.6" y="243.0" fill="#f4efe6" font-size="14" font-weight="700">C# +oct</text>
+<rect x="360.4" y="197.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="368.4" y="215.0" fill="#1b1814" font-size="13" opacity="0.72">E</text>
+<text x="368.4" y="243.0" fill="#1b1814" font-size="14" font-weight="700">D +oct</text>
+<rect x="471.1" y="197.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="479.1" y="215.0" fill="#f4efe6" font-size="13" opacity="0.72">R</text>
+<text x="479.1" y="243.0" fill="#f4efe6" font-size="14" font-weight="700">D# +oct</text>
+<rect x="581.9" y="197.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="589.9" y="215.0" fill="#1b1814" font-size="13" opacity="0.72">T</text>
+<text x="589.9" y="243.0" fill="#1b1814" font-size="14" font-weight="700">E +oct</text>
+<rect x="692.7" y="197.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="700.7" y="215.0" fill="#1b1814" font-size="13" opacity="0.72">Y</text>
+<text x="700.7" y="243.0" fill="#1b1814" font-size="14" font-weight="700">F +oct</text>
+<rect x="803.5" y="197.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="811.5" y="215.0" fill="#f4efe6" font-size="13" opacity="0.72">U</text>
+<text x="811.5" y="243.0" fill="#f4efe6" font-size="14" font-weight="700">F# +oct</text>
+<rect x="914.3" y="197.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="922.3" y="215.0" fill="#1b1814" font-size="13" opacity="0.72">I</text>
+<text x="922.3" y="243.0" fill="#1b1814" font-size="14" font-weight="700">G +oct</text>
+<rect x="1025.1" y="197.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="1033.1" y="215.0" fill="#f4efe6" font-size="13" opacity="0.72">O</text>
+<text x="1033.1" y="243.0" fill="#f4efe6" font-size="14" font-weight="700">G# +oct</text>
+<rect x="1135.9" y="197.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="1143.9" y="215.0" fill="#1b1814" font-size="13" opacity="0.72">P</text>
+<text x="1143.9" y="243.0" fill="#1b1814" font-size="14" font-weight="700">A +oct</text>
+<rect x="1246.6" y="197.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="1254.6" y="215.0" fill="#f4efe6" font-size="13" opacity="0.72">[</text>
+<text x="1254.6" y="243.0" fill="#f4efe6" font-size="14" font-weight="700">A# +oct</text>
+<rect x="1357.4" y="197.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="1365.4" y="215.0" fill="#1b1814" font-size="13" opacity="0.72">]</text>
+<text x="1365.4" y="243.0" fill="#1b1814" font-size="14" font-weight="700">B +oct</text>
+<rect x="1468.2" y="197.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="1476.2" y="215.0" fill="#1a0e06" font-size="13" opacity="0.72">\</text>
+<text x="1476.2" y="243.0" fill="#1a0e06" font-size="14" font-weight="700">Octave</text>
+<text x="1476.2" y="299.0" fill="#1a0e06" font-size="11" opacity="0.9">cycle 0–3</text>
+<rect x="28.0" y="316.0" width="103.8" height="112.0" rx="8" fill="#1a6a82"/>
+<text x="36.0" y="334.0" fill="#e8f7fb" font-size="13" opacity="0.72">Fn</text>
+<text x="36.0" y="362.0" fill="#e8f7fb" font-size="14" font-weight="700">Fn layer</text>
+<rect x="138.8" y="316.0" width="103.8" height="112.0" rx="8" fill="#4c5562"/>
+<text x="146.8" y="334.0" fill="#eef2f6" font-size="13" opacity="0.72">Shift</text>
+<text x="146.8" y="362.0" fill="#eef2f6" font-size="14" font-weight="700">+1 octave</text>
+<text x="146.8" y="418.0" fill="#eef2f6" font-size="11" opacity="0.9">letter notes</text>
+<rect x="249.6" y="316.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="257.6" y="334.0" fill="#1a0e06" font-size="13" opacity="0.72">A</text>
+<text x="257.6" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Low pass</text>
+<rect x="360.4" y="316.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="368.4" y="334.0" fill="#f4efe6" font-size="13" opacity="0.72">S</text>
+<text x="368.4" y="362.0" fill="#f4efe6" font-size="14" font-weight="700">C#</text>
+<rect x="471.1" y="316.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="479.1" y="334.0" fill="#f4efe6" font-size="13" opacity="0.72">D</text>
+<text x="479.1" y="362.0" fill="#f4efe6" font-size="14" font-weight="700">D#</text>
+<rect x="581.9" y="316.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="589.9" y="334.0" fill="#1a0e06" font-size="13" opacity="0.72">F</text>
+<text x="589.9" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Retrig</text>
+<rect x="692.7" y="316.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="700.7" y="334.0" fill="#f4efe6" font-size="13" opacity="0.72">G</text>
+<text x="700.7" y="362.0" fill="#f4efe6" font-size="14" font-weight="700">F#</text>
+<rect x="803.5" y="316.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="811.5" y="334.0" fill="#f4efe6" font-size="13" opacity="0.72">H</text>
+<text x="811.5" y="362.0" fill="#f4efe6" font-size="14" font-weight="700">G#</text>
+<rect x="914.3" y="316.0" width="103.8" height="112.0" rx="8" fill="#2b3344"/>
+<text x="922.3" y="334.0" fill="#f4efe6" font-size="13" opacity="0.72">J</text>
+<text x="922.3" y="362.0" fill="#f4efe6" font-size="14" font-weight="700">A#</text>
+<rect x="1025.1" y="316.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="1033.1" y="334.0" fill="#1a0e06" font-size="13" opacity="0.72">K</text>
+<text x="1033.1" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Wobble</text>
+<rect x="1135.9" y="316.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="1143.9" y="334.0" fill="#1a0e06" font-size="13" opacity="0.72">L</text>
+<text x="1143.9" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Echo</text>
+<rect x="1246.6" y="316.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="1254.6" y="334.0" fill="#1a0e06" font-size="13" opacity="0.72">;</text>
+<text x="1254.6" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Note len</text>
+<text x="1254.6" y="418.0" fill="#1a0e06" font-size="11" opacity="0.9">Fn: list −</text>
+<rect x="1357.4" y="316.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="1365.4" y="334.0" fill="#1a0e06" font-size="13" opacity="0.72">'</text>
+<text x="1365.4" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Sampler</text>
+<rect x="1468.2" y="316.0" width="103.8" height="112.0" rx="8" fill="#262b32"/>
+<text x="1476.2" y="334.0" fill="#8b939c" font-size="13" opacity="0.72">Enter</text>
+<text x="1476.2" y="362.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
+<text x="1476.2" y="418.0" fill="#8b939c" font-size="11" opacity="0.9">Enter unused</text>
+<rect x="28.0" y="435.0" width="103.8" height="112.0" rx="8" fill="#4c5562"/>
+<text x="36.0" y="453.0" fill="#eef2f6" font-size="13" opacity="0.72">Ctrl</text>
+<text x="36.0" y="481.0" fill="#eef2f6" font-size="14" font-weight="700">Ctrl</text>
+<text x="36.0" y="537.0" fill="#eef2f6" font-size="11" opacity="0.9">N: new song</text>
+<rect x="138.8" y="435.0" width="103.8" height="112.0" rx="8" fill="#4c5562"/>
+<text x="146.8" y="453.0" fill="#eef2f6" font-size="13" opacity="0.72">Opt</text>
+<text x="146.8" y="481.0" fill="#eef2f6" font-size="14" font-weight="700">−1 octave</text>
+<text x="146.8" y="537.0" fill="#eef2f6" font-size="11" opacity="0.9">letter notes</text>
+<rect x="249.6" y="435.0" width="103.8" height="112.0" rx="8" fill="#4c5562"/>
+<text x="257.6" y="453.0" fill="#eef2f6" font-size="13" opacity="0.72">Alt</text>
+<text x="257.6" y="481.0" fill="#eef2f6" font-size="14" font-weight="700">+1 octave</text>
+<text x="257.6" y="537.0" fill="#eef2f6" font-size="11" opacity="0.9">with Shift</text>
+<rect x="360.4" y="435.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="368.4" y="453.0" fill="#1b1814" font-size="13" opacity="0.72">Z</text>
+<text x="368.4" y="481.0" fill="#1b1814" font-size="14" font-weight="700">C</text>
+<rect x="471.1" y="435.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="479.1" y="453.0" fill="#1b1814" font-size="13" opacity="0.72">X</text>
+<text x="479.1" y="481.0" fill="#1b1814" font-size="14" font-weight="700">D</text>
+<rect x="581.9" y="435.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="589.9" y="453.0" fill="#1b1814" font-size="13" opacity="0.72">C</text>
+<text x="589.9" y="481.0" fill="#1b1814" font-size="14" font-weight="700">E</text>
+<rect x="692.7" y="435.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="700.7" y="453.0" fill="#1b1814" font-size="13" opacity="0.72">V</text>
+<text x="700.7" y="481.0" fill="#1b1814" font-size="14" font-weight="700">F</text>
+<rect x="803.5" y="435.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="811.5" y="453.0" fill="#1b1814" font-size="13" opacity="0.72">B</text>
+<text x="811.5" y="481.0" fill="#1b1814" font-size="14" font-weight="700">G</text>
+<rect x="914.3" y="435.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="922.3" y="453.0" fill="#1b1814" font-size="13" opacity="0.72">N</text>
+<text x="922.3" y="481.0" fill="#1b1814" font-size="14" font-weight="700">A</text>
+<rect x="1025.1" y="435.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="1033.1" y="453.0" fill="#1b1814" font-size="13" opacity="0.72">M</text>
+<text x="1033.1" y="481.0" fill="#1b1814" font-size="14" font-weight="700">B</text>
+<rect x="1135.9" y="435.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
+<text x="1143.9" y="453.0" fill="#1b1814" font-size="13" opacity="0.72">,</text>
+<text x="1143.9" y="481.0" fill="#1b1814" font-size="14" font-weight="700">C +oct</text>
+<text x="1143.9" y="537.0" fill="#1b1814" font-size="11" opacity="0.9">Shift is &lt;</text>
+<rect x="1246.6" y="435.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="1254.6" y="453.0" fill="#1a0e06" font-size="13" opacity="0.72">.</text>
+<text x="1254.6" y="481.0" fill="#1a0e06" font-size="14" font-weight="700">Copy pat</text>
+<text x="1254.6" y="537.0" fill="#1a0e06" font-size="11" opacity="0.9">Fn: list +</text>
+<rect x="1357.4" y="435.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
+<text x="1365.4" y="453.0" fill="#1a0e06" font-size="13" opacity="0.72">/</text>
+<text x="1365.4" y="481.0" fill="#1a0e06" font-size="14" font-weight="700">Paste pat</text>
+<text x="1365.4" y="537.0" fill="#1a0e06" font-size="11" opacity="0.9">Fn: idle</text>
+<rect x="1468.2" y="435.0" width="103.8" height="112.0" rx="8" fill="#2b9d55"/>
+<text x="1476.2" y="453.0" fill="#f3fff7" font-size="13" opacity="0.72">Space</text>
+<text x="1476.2" y="481.0" fill="#f3fff7" font-size="14" font-weight="700">Play / Stop</text>
+<text x="28" y="578" fill="#c5ccd3" font-size="13" font-weight="700">Legend</text>
+<rect x="28" y="588" width="88" height="26" rx="5" fill="#f4efe6"/>
+<text x="36" y="605" fill="#1b1814" font-size="12">White note</text>
+<rect x="124" y="588" width="88" height="26" rx="5" fill="#2b3344"/>
+<text x="132" y="605" fill="#f4efe6" font-size="12">Black note</text>
+<rect x="220" y="588" width="109" height="26" rx="5" fill="#d86a28"/>
+<text x="228" y="605" fill="#1a0e06" font-size="12">Effect / edit</text>
+<rect x="337" y="588" width="109" height="26" rx="5" fill="#e2aa22"/>
+<text x="345" y="605" fill="#1c1403" font-size="12">Track or slot</text>
+<rect x="454" y="588" width="67" height="26" rx="5" fill="#6c5ce7"/>
+<text x="462" y="605" fill="#f6f3ff" font-size="12">Pattern</text>
+<rect x="529" y="588" width="53" height="26" rx="5" fill="#148f86"/>
+<text x="537" y="605" fill="#f2fffd" font-size="12">Tempo</text>
+<rect x="590" y="588" width="81" height="26" rx="5" fill="#2b9d55"/>
+<text x="598" y="605" fill="#f3fff7" font-size="12">Transport</text>
+<rect x="679" y="588" width="46" height="26" rx="5" fill="#3a78d4"/>
+<text x="687" y="605" fill="#f4f8ff" font-size="12">Page</text>
+<rect x="733" y="588" width="46" height="26" rx="5" fill="#c44747"/>
+<text x="741" y="605" fill="#fff6f6" font-size="12">Exit</text>
+<rect x="787" y="588" width="81" height="26" rx="5" fill="#c44784"/>
+<text x="795" y="605" fill="#fff5fa" font-size="12">This page</text>
+<rect x="876" y="588" width="74" height="26" rx="5" fill="#1a6a82"/>
+<text x="884" y="605" fill="#e8f7fb" font-size="12">Fn layer</text>
+<rect x="958" y="588" width="74" height="26" rx="5" fill="#4c5562"/>
+<text x="966" y="605" fill="#eef2f6" font-size="12">Modifier</text>
+<rect x="1040" y="588" width="81" height="26" rx="5" fill="#262b32"/>
+<text x="1048" y="605" fill="#8b939c" font-size="12">No action</text>
+<text x="28" y="630" fill="#c5ccd3" font-size="13">Bottom letters are the current octave. Q through ] is the next octave, chromatic. Comma is the C above that row.</text>
+<text x="28" y="650" fill="#c5ccd3" font-size="13">Shift or Alt adds an octave on letter notes. Opt subtracts one. They stack and clamp to MIDI C2–B5.</text>
+<text x="28" y="670" fill="#c5ccd3" font-size="13">Fn+; and Fn+. change page only while the page list is open. Fn+, and Fn+/ do nothing on Play. Other Fn chords</text>
+<text x="28" y="690" fill="#c5ccd3" font-size="13">still do the key's normal action.</text>
+<text x="28" y="710" fill="#c5ccd3" font-size="13">Fn+− and Fn+= change speaker volume on every page (step 12). Hold ` or the front button about 0.7s to exit.</text>
+<text x="28" y="730" fill="#c5ccd3" font-size="13">; sends note-length L with the stored length, and does not step it. The voice stores 4 minus that value. Enter</text>
+<text x="28" y="750" fill="#c5ccd3" font-size="13">does nothing on Play.</text>
+<text x="28" y="770" fill="#c5ccd3" font-size="13">Ctrl or Shift sends the shifted glyph, then the UI lowercases it. Digits and punctuation no longer match, so</text>
+<text x="28" y="790" fill="#c5ccd3" font-size="13">Ctrl+1–8 (!@#$%^&amp;*) does not clear a track or pattern, and Shift+, is &lt; rather than high C. Ctrl+N still starts</text>
+<text x="28" y="810" fill="#c5ccd3" font-size="13">a new song.</text>
+</svg>

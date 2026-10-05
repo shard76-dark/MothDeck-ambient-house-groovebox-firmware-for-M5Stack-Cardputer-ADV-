@@ -54,50 +54,99 @@ Hold Esc (`` ` ``) or the front button for about 0.7 seconds, or confirm the Exi
 
 ## Keyboard
 
-Esc is the `` ` `` key. Arrows are the silkscreen keys while Fn is held: `;` up, `,` left, `.` down, `/` right. Fn+`-` and Fn+`=` change speaker volume from any page.
+The drawings follow `src/Ui.cpp` and the 4×14 matrix in M5Cardputer `Keyboard.h`. Regenerate them with `python3 tools/make_keymap.py` (needs CairoSVG). Each key shows the unshifted action. A caption on the key is the Fn action where that differs.
+
+![Play / Tracker](docs/keymap-play.png)
+
+![Instrument](docs/keymap-inst.png)
+
+![Mixer](docs/keymap-mixer.png)
+
+![Song](docs/keymap-song.png)
+
+![Loops](docs/keymap-loops.png)
+
+![MIDI](docs/keymap-midi.png)
+
+![Settings](docs/keymap-settings.png)
+
+![Exit](docs/keymap-exit.png)
+
+Esc is the grave key. The arrow legends are `;` up, `,` left, `.` down, `/` right, and they only move something while Fn is held. Fn+`-` and Fn+`=` change speaker volume by 12 on every page. Fn plus any other key still does that key's normal action.
+
+Ctrl or Shift substitutes the key's shifted glyph before the UI lowercases it. Letter commands still match. Digit and punctuation commands do not: Ctrl+1–8 is `!@#$%^&*` and does not clear a track or pattern, and Shift+`,` is `<` rather than the high C. Ctrl+N still starts a new song.
 
 | Keys | Action |
 | --- | --- |
-| Tab / Shift-Tab | Next / previous page |
-| Space | Play / stop |
-| `` ` `` tap | Page list on Play, or back to Play |
-| `` ` `` or front button, hold | Exit to Launcher |
-| 1–4 | Select track. On Song, select a slot |
-| 5–8 | Select pattern |
-| 9 / 0 | Previous / next instrument on the Instrument page, otherwise cycle the BPM slot |
-| `-` / `=` | Nudge the current BPM slot by 1 |
-| Ctrl+1–4 | Clear that track |
-| Ctrl+5–8 | Clear that pattern |
-| Ctrl+N | New song |
+| Tab | Next page. Shift+Tab or Ctrl+Tab goes to the previous page. Either clears the page list and leaves BLE naming |
+| Space | Play / stop, including while a BLE name is being typed |
+| `` ` `` tap | On Play, toggle the page list. On any other page, return to Play. Ignored while Fn is held or a name is being typed |
+| `` ` `` or the front button, held ~0.7s | Exit to Launcher, including during boot |
+| 1–4 | Select track. On Song, select a slot and report full or empty |
+| 5–8 | Select pattern. On Song, these keys do nothing |
+| 9 / 0 | On Instrument, previous / next instrument. Elsewhere, previous / next BPM slot |
+| `-` / `=` | Nudge the current BPM slot by 1 (40–240). With Fn, speaker volume ±12 |
+| Backspace | On Play, clear the step under the cursor. While naming, delete one character. Otherwise return to Play |
+| Ctrl+N | New song at the current length, without advancing that length |
 
 ### Play
 
-The bottom letter row is a piano for the current octave. `Z X C V B N M ,` are C D E F G A B C. `S D G H J` are the black keys. `Q` through `]` is the next octave, chromatic. Shift adds an octave, Alt adds another, Opt subtracts one, clamped to four octaves (MIDI C2–B5).
+`Z X C V B N M ,` are C D E F G A B C for the current octave. Comma is the C above that octave. `S D G H J` are C# D# F# G# A#. `Q` through `]` is the next octave, chromatic. Shift adds an octave on letter notes, Alt adds another, Opt subtracts one. They stack and clamp to four octaves, MIDI C2–B5.
 
 | Key | Action |
 | --- | --- |
-| A | Low pass |
-| F | Retrig |
-| K | Phaser |
-| L | Echo |
-| `;` | Note length |
-| `'` | Sampler mode |
-| `\` | Octave |
-| `.` | Copy pattern |
-| `/` | Paste pattern |
-| Backspace | Clear the step under the cursor |
+| A | Low pass, cycles 0–2 |
+| F | Retrig, cycles 0–2 |
+| K | Wobble, cycles 0–2 |
+| L | Echo, cycles 0–2 |
+| `;` | Sends note-length `L` with the stored length. It does not step. The voice stores 4 minus that value. Fn+`;` moves the page list up when the list is open |
+| `'` | Toggle sampler mode |
+| `\` | Cycle the octave |
+| `.` | Copy pattern. Fn+`.` moves the page list down when the list is open |
+| `/` | Paste pattern. Fn+`/` does nothing on Play |
+| Enter | No action |
 
 Played keys are also sent as BLE MIDI note-on on the selected track's channel.
 
-### Other pages
+### Instrument
 
-- **Instrument.** Fn-arrows move. Enter assigns the row to the selected track and loads it if it is a plugin. `R` rescans the card. `9` / `0` move as well.
-- **Mixer.** 13 rows for the selected track: volume, mute, solo, drive, low pass, retrig, wobble, echo, arp, whoosh, pitch, envelope, note length. Fn-left / Fn-right or Enter change the row.
-- **Song.** `S` save, `L` load, `X` delete, `T` slot status, `N` new song (length cycles 32/64/96/128), `C` copy, `V` paste, `G` paste all, `M` song/pattern, `H` master, `B` next BPM slot. Enter loads the selected slot.
-- **Loops.** Enter launches onto the selected track with the current quantize. `A` auditions. `Q` cycles quantize (now, beat, bar). `S` stops the track's loop. `R` rescans. Fn-left / Fn-right change library.
-- **MIDI.** Connection, advertised name, and the map below. `E` jumps to the name field.
-- **Settings.** Speaker volume, backlight, BLE name (Enter to edit, Enter to apply and restart advertising), battery, heap, card.
-- **Exit.** Enter confirms.
+`9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track and loads it when it is a plugin. `R` rescans `/moth/instruments`. 1–4 still select the track and 5–8 the pattern.
+
+### Mixer
+
+Thirteen rows for the selected track: volume, mute, solo, drive, low pass, retrig, wobble, echo, arp, whoosh, pitch, envelope, note length. Fn+`;` and Fn+`.` move the row. Fn+`,`, Fn+`/`, and Enter change the value. Effect rows cycle 0–2; a downward step sends the command twice so the value wraps backward. Note length sends `L` as shown-length minus 1, clamped to 1–4.
+
+### Song
+
+| Key | Action |
+| --- | --- |
+| 1–4 | Select the slot |
+| 5–8 | No action |
+| S / L / X / T | Save, load, delete, slot status |
+| N | Advance the length (32, 64, 96, 128) and start a new song. From boot the first press is 64 steps |
+| C / V / G | Copy pattern, paste pattern, paste all patterns |
+| M | Toggle song mode and pattern mode |
+| H | Toggle master volume |
+| B | Next BPM slot |
+| Enter | Load the selected slot |
+
+`9` and `0` still move the BPM slot. Ctrl+N starts a new song at the current length and does not advance it.
+
+### Loops
+
+Enter launches the row onto the selected track. `A` auditions. `Q` cycles quantize: now, beat, bar. `S` stops the loop on the track. `R` rescans `/moth/loops`. Fn+`;` moves the row up and will not pass row 8. Fn+`.` moves down to the last entry. Fn+`,` and Fn+`/` change library.
+
+### MIDI
+
+The page shows connection, the advertised name, and the channel map. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
+
+### Settings
+
+Rows: speaker, brightness, BLE name, battery, memory, card. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). Enter on the BLE name row starts typing; Enter again applies the name and restarts advertising. On any other row, Enter does nothing. While naming, glyphs are lowercased and appended, up to 16, including grave. Space still play/stops and is not typed.
+
+### Exit
+
+Enter clears the OTA boot selection and restarts toward Launcher. A short grave returns to Play.
 
 ## MIDI
 
