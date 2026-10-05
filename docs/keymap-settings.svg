@@ -214,6 +214,6 @@
 <text x="28" y="650" fill="#c5ccd3" font-size="13">Fn+, and Fn+/ change speaker volume or brightness when that row is selected.</text>
 <text x="28" y="670" fill="#c5ccd3" font-size="13">Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising. On any other</text>
 <text x="28" y="690" fill="#c5ccd3" font-size="13">row, Enter does nothing.</text>
-<text x="28" y="710" fill="#c5ccd3" font-size="13">While naming, glyphs are lowercased and appended (16 max), including grave. Space still play/stops and is not</text>
-<text x="28" y="730" fill="#c5ccd3" font-size="13">typed. Backspace deletes one character, or returns to Play when the field is empty.</text>
+<text x="28" y="710" fill="#c5ccd3" font-size="13">While the name editor is open it takes every key. Glyphs are lowercased and appended (16 max). Backspace deletes</text>
+<text x="28" y="730" fill="#c5ccd3" font-size="13">one character. ` cancels. Space does not play and is not typed.</text>
 </svg>

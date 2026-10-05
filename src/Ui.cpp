@@ -1,4 +1,5 @@
 #include "Ui.h"
+#include "ModalInput.h"
 #include "AudioEngine.h"
 #include "InstrumentBank.h"
 #include "LoopLibrary.h"
@@ -590,7 +591,7 @@ static void drawSettings() {
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(4, 108);
   canvas->printf("v%s  %s", MOTHDECK_VERSION, BOARD_NAME);
-  legend(naming ? "Type name  Ent apply  Bksp" : "Lf/Rt change  Ent name");
+  legend(naming ? "Ent apply  Bksp  ` cancel" : "Lf/Rt change  Ent name");
 }
 
 static void drawExit() {
@@ -753,8 +754,6 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         loopRow = clampi(loopRow - 1, 0, 7);
       } else if (page == 6) {
         cursor = clampi(cursor - 1, 0, 5);
-      } else if (overlay) {
-        page = (page + kPageCount - 1) % kPageCount;
       }
       return;
     }
@@ -771,8 +770,6 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         loopRow = clampi(loopRow + 1, 0, n < 0 ? 0 : n);
       } else if (page == 6) {
         cursor = clampi(cursor + 1, 0, 5);
-      } else if (overlay) {
-        page = (page + 1) % kPageCount;
       }
       return;
     }
@@ -818,18 +815,6 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       toastSet(c == '-' ? "Quieter" : "Louder");
       return;
     }
-  }
-
-  if (naming) {
-    if (c == ' ') {
-      return;
-    }
-    int n = (int)strlen(edit);
-    if (n < 16) {
-      edit[n] = c;
-      edit[n + 1] = 0;
-    }
-    return;
   }
 
   if (ctrl && c >= '1' && c <= '4') {
@@ -960,7 +945,71 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
   }
 }
 
+static KeyEvent eventFrom(const Keyboard_Class::KeysState &st) {
+  KeyEvent ev;
+  memset(&ev, 0, sizeof(ev));
+  ev.tab = st.tab;
+  ev.enter = st.enter;
+  ev.del = st.del;
+  ev.space = st.space;
+  ev.fn = st.fn;
+  ev.shift = st.shift;
+  ev.ctrl = st.ctrl;
+  ev.alt = st.alt;
+  ev.opt = st.opt;
+  for (char raw : st.word) {
+    if (raw == ' ') {
+      continue;
+    }
+    ev.ch = (char)tolower((unsigned char)raw);
+    break;
+  }
+  return ev;
+}
+
+static void applyModal(const ModalAction &action, char typed, BleMidi &ble) {
+  if (action.pageDelta) {
+    page = (page + action.pageDelta + kPageCount) % kPageCount;
+  }
+  if (action.cancelToPlay) {
+    page = 0;
+    overlay = false;
+    naming = false;
+  }
+  if (action.closeMenu) {
+    overlay = false;
+  }
+  if (action.backspace && edit[0]) {
+    edit[strlen(edit) - 1] = 0;
+  }
+  if (action.append && typed && typed != ' ') {
+    int n = (int)strlen(edit);
+    if (n < 16) {
+      edit[n] = typed;
+      edit[n + 1] = 0;
+    }
+  }
+  if (action.cancelName) {
+    naming = false;
+  }
+  if (action.applyName) {
+    if (edit[0]) {
+      snprintf(bleName, sizeof(bleName), "%s", edit);
+      savePrefs();
+      ble.Restart(bleName);
+      toastSet("BLE name set");
+    }
+    naming = false;
+  }
+  if (action.confirmExit) {
+    requestExit();
+  }
+}
+
 static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
+  if (activeModal(overlay, naming, page == 7) != MODAL_NONE) {
+    return;
+  }
   if (st.tab) {
     if (st.shift || st.ctrl) {
       page = (page + kPageCount - 1) % kPageCount;
@@ -972,37 +1021,17 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
     return;
   }
   if (st.enter) {
-    if (overlay) {
-      overlay = false;
-      return;
-    }
     if (page == 1) assignInstrument();
     else if (page == 2) tweakMix(1);
     else if (page == 3) doLoad();
     else if (page == 4) launchLoop(false);
     else if (page == 6 && cursor == 2) {
-      if (!naming) {
-        naming = true;
-        snprintf(edit, sizeof(edit), "%s", bleName);
-      } else {
-        if (edit[0]) {
-          snprintf(bleName, sizeof(bleName), "%s", edit);
-          savePrefs();
-          ble.Restart(bleName);
-          toastSet("BLE name set");
-        }
-        naming = false;
-      }
-    } else if (page == 7) {
-      requestExit();
+      naming = true;
+      snprintf(edit, sizeof(edit), "%s", bleName);
     }
     return;
   }
   if (st.del) {
-    if (naming && edit[0]) {
-      edit[strlen(edit) - 1] = 0;
-      return;
-    }
     if (page == 0) {
       audioCommand('_', 0);
     } else if (page != 0) {
@@ -1043,7 +1072,15 @@ void uiPoll(BleMidi &ble) {
   }
   if (kb.isChange() && kb.isPressed()) {
     Keyboard_Class::KeysState st = kb.keysState();
-    if (st.word.size() == 1 && st.word[0] == '`' && !st.fn && !naming) {
+    KeyEvent ev = eventFrom(st);
+    ModalKind kind = activeModal(overlay, naming, page == 7);
+    if (kind != MODAL_NONE) {
+      ModalAction action;
+      dispatchModal(kind, ev, &action);
+      applyModal(action, ev.ch, ble);
+      return;
+    }
+    if (ev.ch == '`' && !ev.fn) {
       if (page == 0) {
         overlay = !overlay;
       } else {

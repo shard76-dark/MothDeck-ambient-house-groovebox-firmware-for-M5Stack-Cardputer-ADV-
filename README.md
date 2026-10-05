@@ -78,15 +78,15 @@ Ctrl or Shift substitutes the key's shifted glyph before the UI lowercases it. L
 
 | Keys | Action |
 | --- | --- |
-| Tab | Next page. Shift+Tab or Ctrl+Tab goes to the previous page. Either clears the page list and leaves BLE naming |
-| Space | Play / stop, including while a BLE name is being typed |
-| `` ` `` tap | On Play, toggle the page list. On any other page, return to Play. Ignored while Fn is held or a name is being typed |
+| Tab | Next page. Shift+Tab or Ctrl+Tab goes to the previous page. While the page list is open, Tab moves the highlight and leaves the list up |
+| Space | Play / stop. While a menu is open, Space does nothing |
+| `` ` `` tap | On Play, toggle the page list. On any other page, return to Play. While the page list, name editor, or Exit confirm is open, `` ` `` cancels that menu |
 | `` ` `` or the front button, held ~0.7s | Exit to Launcher, including during boot |
 | 1–4 | Select track. On Song, select a slot and report full or empty |
 | 5–8 | Select pattern. On Song, these keys do nothing |
 | 9 / 0 | On Instrument, previous / next instrument. Elsewhere, previous / next BPM slot |
 | `-` / `=` | Nudge the current BPM slot by 1 (40–240). With Fn, speaker volume ±12 |
-| Backspace | On Play, clear the step under the cursor. While naming, delete one character. Otherwise return to Play |
+| Backspace | On Play, clear the step under the cursor. In the name editor, delete one character. On the page list or Exit confirm, cancel back to Play. On any other page, return to Play |
 | Ctrl+N | New song at the current length, without advancing that length |
 
 ### Play
@@ -107,6 +107,8 @@ Ctrl or Shift substitutes the key's shifted glyph before the UI lowercases it. L
 | Enter | No action |
 
 Played keys are also sent as BLE MIDI note-on on the selected track's channel.
+
+While the page list is open it takes every key. Fn+`;` and Fn+`.` move the highlight, Tab does the same, Enter stays on the highlighted page, and `` ` `` or Backspace returns to Play. Notes, space, track, pattern, and BPM keys do nothing until the list closes.
 
 ### Instrument
 
@@ -142,11 +144,11 @@ The page shows connection, the advertised name, and the channel map. `E` jumps t
 
 ### Settings
 
-Rows: speaker, brightness, BLE name, battery, memory, card. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). Enter on the BLE name row starts typing; Enter again applies the name and restarts advertising. On any other row, Enter does nothing. While naming, glyphs are lowercased and appended, up to 16, including grave. Space still play/stops and is not typed.
+Rows: speaker, brightness, BLE name, battery, memory, card. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising. On any other row, Enter does nothing. While the name editor is open it takes every key: glyphs are lowercased and appended, up to 16, Backspace deletes one character, and `` ` `` cancels. Space does not play and is not typed.
 
 ### Exit
 
-Enter clears the OTA boot selection and restarts toward Launcher. A short grave returns to Play.
+The Exit page is a confirm. Enter clears the OTA boot selection and restarts toward Launcher. `` ` `` or Backspace returns to Play. Notes, space, track, pattern, and BPM keys do nothing on this page. Holding `` ` `` or the front button still exits from any screen.
 
 ## MIDI
 

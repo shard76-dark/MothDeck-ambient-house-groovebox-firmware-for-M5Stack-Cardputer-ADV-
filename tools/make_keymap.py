@@ -225,6 +225,7 @@ PAGES = [
             "Shift or Alt adds an octave on letter notes. Opt subtracts one. They stack and clamp to MIDI C2–B5.",
             "Fn+; and Fn+. change page only while the page list is open. Fn+, and Fn+/ do nothing on Play. Other Fn chords still do the key's normal action.",
             "Fn+− and Fn+= change speaker volume on every page (step 12). Hold ` or the front button about 0.7s to exit.",
+            "While the page list is open it takes every key. Fn+; , Fn+. , and Tab move the highlight. Enter stays there. ` or Backspace returns to Play. Notes, space, and track keys do nothing.",
             "; sends note-length L with the stored length, and does not step it. The voice stores 4 minus that value. Enter does nothing on Play.",
             "Ctrl or Shift sends the shifted glyph, then the UI lowercases it. Digits and punctuation no longer match, so Ctrl+1–8 (!@#$%^&*) does not clear a track or pattern, and Shift+, is < rather than high C. Ctrl+N still starts a new song.",
         ],
@@ -286,7 +287,7 @@ PAGES = [
             "Rows: Speaker, Brightness, BLE name, Battery, Memory, Card. Fn+; and Fn+. move the row.",
             "Fn+, and Fn+/ change speaker volume or brightness when that row is selected.",
             "Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising. On any other row, Enter does nothing.",
-            "While naming, glyphs are lowercased and appended (16 max), including grave. Space still play/stops and is not typed. Backspace deletes one character, or returns to Play when the field is empty.",
+            "While the name editor is open it takes every key. Glyphs are lowercased and appended (16 max). Backspace deletes one character. ` cancels. Space does not play and is not typed.",
         ],
     ),
     (
@@ -294,8 +295,8 @@ PAGES = [
         "Exit",
         paint_exit,
         [
-            "Enter clears the OTA boot selection and restarts toward Launcher.",
-            "A short ` returns to Play. Hold ` or the front button 0.7s to exit from any page, including boot.",
+            "Exit is a confirm. Enter clears the OTA boot selection and restarts toward Launcher. Other keys do not change playback.",
+            "` or Backspace returns to Play. Hold ` or the front button 0.7s to exit from any page, including boot.",
         ],
     ),
 ]
