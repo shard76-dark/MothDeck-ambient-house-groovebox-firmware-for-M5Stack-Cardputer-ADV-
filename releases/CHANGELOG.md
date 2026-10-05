@@ -1,5 +1,7 @@
 ## 2026-10-05
 
+Flash `releases/mothdeck-cardputer-adv.bin` (1,129,152 bytes, magic `E9`, chip `0x0009`, SHA-256 `ac13390947360fa20de01e39a5ceb9e564af5612c051aa9a440c347dc976dc72`). That image is the build below. Host tests passed. It has not been listened to on a Cardputer. Use earphones.
+
 Drums, sound effects, and one-shot samples on one track overlap. A new hit used to restart the only playback cursor, so a hat cut a kick that was still ringing. Each track keeps eight one-shots and mixes them. A loop on that track is mixed with the voice and then runs through the insert, instead of replacing the voice.
 
 The insert was stair-stepped. The delay line kept every other sample, so delay, chorus, and reverb aliased. Chorus and tremolo ran their LFOs at audio rate. The filter moved in whole samples, so a dark cutoff stuck and then jumped. The line is full rate now (about 186 ms; a 1/8 delay clamps to that instead of folding). Chorus and tremolo are slow sines, the filter keeps a fractional state, and delay and reverb lowpass their tails. Bitcrush is still the control that is supposed to sound lo-fi. On the ESP32-S3 the output clamp, the delay and reverb poles, and the fractional delay read use CLAMPS and MULL. The same helpers cover the rest of the sample loop where the product still fits in 32 bits: shot interpolation, drive gain, chorus and tremolo, the synth lowpass and amplitude, pitch bend, and the PCM saturator. The filter's fractional state stays a wide multiply.
