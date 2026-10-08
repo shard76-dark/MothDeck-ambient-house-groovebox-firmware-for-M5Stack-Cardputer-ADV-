@@ -74,71 +74,6 @@ class MidiServerCallbacks : public BLEServerCallbacks {
   }
 };
 
-// The library starts advertising when the primary payload is committed.
-// That payload already has the name and the MIDI UUID. The hook then pauses
-// once, writes the scan response (full name, appearance, connection
-// interval), and lets the library start advertising again. A later
-// disconnect restart leaves both payloads in place.
-enum AdvPhase : uint8_t {
-  ADV_IDLE = 0,
-  ADV_NEED_SCAN = 1,
-  ADV_STOPPING = 2,
-  ADV_SCAN_CFG = 3,
-  ADV_DONE = 4
-};
-
-static volatile AdvPhase advPhase = ADV_IDLE;
-static SemaphoreHandle_t advReady = nullptr;
-static uint8_t scanRsp[kBleAdvMax];
-static uint8_t scanRspLen = 0;
-
-static void giveAdvReady() {
-  if (advReady) {
-    xSemaphoreGive(advReady);
-  }
-}
-
-static void onGap(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
-  if (event == ESP_GAP_BLE_ADV_START_COMPLETE_EVT) {
-    if (!param || param->adv_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
-      return;
-    }
-    if (advPhase == ADV_NEED_SCAN) {
-      advPhase = ADV_STOPPING;
-      if (!BLEDevice::getAdvertising()->stop()) {
-        advPhase = ADV_DONE;
-        giveAdvReady();
-      }
-      return;
-    }
-    if (advPhase == ADV_DONE) {
-      giveAdvReady();
-    }
-    return;
-  }
-
-  if (event == ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT && advPhase == ADV_STOPPING) {
-    advPhase = ADV_SCAN_CFG;
-    BLEAdvertisementData scan;
-    scan.addData((char *)scanRsp, scanRspLen);
-    if ((int)scan.getPayload().length() != (int)scanRspLen || !BLEDevice::getAdvertising()->setScanResponseData(scan)) {
-      advPhase = ADV_DONE;
-      BLEDevice::startAdvertising();
-    }
-    return;
-  }
-
-  if (event == ESP_GAP_BLE_SCAN_RSP_DATA_RAW_SET_COMPLETE_EVT && advPhase == ADV_SCAN_CFG) {
-    if (!param || param->scan_rsp_data_raw_cmpl.status != ESP_BT_STATUS_SUCCESS) {
-      advPhase = ADV_DONE;
-      BLEDevice::startAdvertising();
-      return;
-    }
-    // The library handler already queued the restart.
-    advPhase = ADV_DONE;
-  }
-}
-
 static void logBytes(const char *label, const uint8_t *data, int len) {
   Serial.printf("%s (%d):", label, len);
   for (int i = 0; i < len; i++) {
@@ -147,49 +82,59 @@ static void logBytes(const char *label, const uint8_t *data, int len) {
   Serial.println();
 }
 
+static bool payloadFits(BLEAdvertisementData &data, const uint8_t *bytes, int len) {
+  data.addData((char *)bytes, (size_t)len);
+  return (int)data.getPayload().length() == len;
+}
+
 static void configureSecurity() {
   // Bond + LE Secure Connections, no MITM. With no keyboard and no display
   // this is Just Works: the MPC, iOS, and Android can pair without a PIN.
-  // Encryption is not required to move MIDI bytes. A host that sends a pair
-  // request is bonded; a host that never pairs still connects.
+  // The host starts pairing. MIDI bytes are not gated on encryption, so a
+  // host that never pairs still connects. NimBLE would otherwise begin
+  // security during service discovery.
   BLESecurity::setAuthenticationMode(true, false, true);
   BLESecurity::setCapability(ESP_IO_CAP_NONE);
   BLESecurity::setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
   BLESecurity::setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+  BLESecurity::setForceAuthentication(false);
 }
 
+// This firmware's cardputer-adv build uses NimBLE. ble_gap_adv_set_data is
+// synchronous, so both payloads are committed before start(). The library's
+// own builder moves a name that does not fit into the scan response and
+// leaves the primary packet unnamed. Hardware hosts that do not read the
+// scan response then never list the device.
 static void startAdvert(const BleAdvertPackets &pkts) {
-  if (!advReady) {
-    advReady = xSemaphoreCreateBinary();
-  }
-  memcpy(scanRsp, pkts.scan, (size_t)pkts.scanLen);
-  scanRspLen = (uint8_t)pkts.scanLen;
-  advPhase = ADV_NEED_SCAN;
-  xSemaphoreTake(advReady, 0);
-
-  BLEDevice::setCustomGapHandler(onGap);
   BLEAdvertising *advertising = BLEDevice::getAdvertising();
-  advertising->setScanResponse(false);
-  advertising->setAdvertisementType(ADV_TYPE_IND);
   advertising->setMinInterval(kAdvIntervalMin);
   advertising->setMaxInterval(kAdvIntervalMax);
-  advertising->setAdvertisementChannelMap(ADV_CHNL_ALL);
 
   BLEAdvertisementData primary;
-  primary.addData((char *)pkts.adv, (size_t)pkts.advLen);
-  bool payloadOk = (int)primary.getPayload().length() == pkts.advLen;
-  bool queued = payloadOk && advertising->setAdvertisementData(primary);
-  if (!queued) {
-    Serial.println("BLE advert payload rejected; using service UUID only");
-    advPhase = ADV_DONE;
+  if (!payloadFits(primary, pkts.adv, pkts.advLen)) {
+    // The length check failed before any custom payload was committed, so
+    // the library builder can still run. Scan response is off, which makes
+    // that builder shorten the name into the primary packet instead of
+    // dropping it.
+    Serial.println("BLE advert payload truncated; shortening the name");
     advertising->addServiceUUID(kMidiServiceUuid);
     advertising->setScanResponse(false);
-    advertising->start();
+    if (!advertising->start()) {
+      Serial.println("BLE advertising failed to start");
+    }
     return;
   }
-  if (xSemaphoreTake(advReady, pdMS_TO_TICKS(1000)) != pdTRUE) {
-    Serial.println("BLE advert setup timed out");
-    advertising->start();
+  if (!advertising->setAdvertisementData(primary)) {
+    Serial.println("BLE advert config rejected");
+  }
+
+  BLEAdvertisementData scan;
+  if (!payloadFits(scan, pkts.scan, pkts.scanLen) || !advertising->setScanResponseData(scan)) {
+    Serial.println("BLE scan response rejected");
+  }
+  advertising->setScanResponse(true);
+  if (!advertising->start()) {
+    Serial.println("BLE advertising failed to start");
   }
 }
 
@@ -205,8 +150,9 @@ bool BleMidi::Begin(const char *name) {
   buildBleMidiAdvert(name, MOTHDECK_BLE_NAME_DEFAULT, &pkts);
   memset(&running, 0, sizeof(running));
   BLEDevice::init(pkts.gapName);
-  BLEDevice::setMTU(185);
-  BLEDevice::setPower(ESP_PWR_LVL_P9);
+  BLEDevice::setMTU(256);
+  BLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
+  BLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_ADV);
   configureSecurity();
   BLEServer *server = BLEDevice::createServer();
   if (!server) {
@@ -235,7 +181,6 @@ bool BleMidi::Begin(const char *name) {
 }
 
 bool BleMidi::Restart(const char *name) {
-  advPhase = ADV_IDLE;
   if (started) {
     BLEDevice::deinit(true);
     started = false;
