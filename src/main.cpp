@@ -131,6 +131,15 @@ static void showSplash() {
 }
 
 void setup() {
+  // USB CDC is on from boot. The name is in NVS, which Arduino has already
+  // opened. BLE has to come up before the 64KB sprite and the I2S DMA:
+  // NimBLE takes its controller memory from internal SRAM, and this module
+  // has no PSRAM. After those allocations the largest free block is often
+  // too small, init returns false, and nothing goes on the air.
+  Serial.begin(115200);
+  Serial.println("MothDeck BLE boot");
+  uiLoadPrefs();
+  ble.Begin(uiBleName());
   bringUpDisplay();
   showSplash();
   uiBegin();
@@ -138,11 +147,12 @@ void setup() {
   bootExitChord();
   uiMountStorage();
   audioStart();
-  ble.Begin(uiBleName());
+  ble.RecommitAfter("audio");
 }
 
 void loop() {
   M5Cardputer.update();
+  ble.Maintain();
   uiPoll(ble);
 
   MidiEvent incoming[8];

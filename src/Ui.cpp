@@ -165,15 +165,12 @@ const char *uiBleName() {
   return bleName;
 }
 
-void uiBegin() {
-  canvas = new M5Canvas(&M5Cardputer.Display);
-  // Stay on RGB565. An 8-bit sprite has to be expanded to the panel on every
-  // push, and that path reset the ADV once I2S DMA started after the first
-  // Play frame. The extra 32KB is the cost of a boot that stays up.
-  canvas->setColorDepth(16);
-  canvas->createSprite(240, 135);
-  canvas->setTextSize(1);
-  canvas->setTextColor(COL_TEXT);
+static bool prefsLoaded = false;
+
+void uiLoadPrefs() {
+  if (prefsLoaded) {
+    return;
+  }
   prefs.begin("mothdeck", false);
   outVol = prefs.getUChar("vol", 160);
   bright = prefs.getUChar("bri", 180);
@@ -182,6 +179,19 @@ void uiBegin() {
   if (!bleName[0]) {
     snprintf(bleName, sizeof(bleName), "%s", MOTHDECK_BLE_NAME_DEFAULT);
   }
+  prefsLoaded = true;
+}
+
+void uiBegin() {
+  uiLoadPrefs();
+  canvas = new M5Canvas(&M5Cardputer.Display);
+  // Stay on RGB565. An 8-bit sprite has to be expanded to the panel on every
+  // push, and that path reset the ADV once I2S DMA started after the first
+  // Play frame. The extra 32KB is the cost of a boot that stays up.
+  canvas->setColorDepth(16);
+  canvas->createSprite(240, 135);
+  canvas->setTextSize(1);
+  canvas->setTextColor(COL_TEXT);
   M5Cardputer.Display.setBrightness(bright);
   audioSetSpeakerVolume(outVol);
   launcherOk = launcherInstalled();
@@ -598,11 +608,21 @@ static void drawLoops() {
 }
 
 static void drawMidi(BleMidi &ble) {
-  canvas->setTextColor(COL_AMBER);
+  bool onAir = ble.Advertising();
+  if (ble.Connected()) {
+    canvas->setTextColor(COL_PLAY);
+  } else if (onAir) {
+    canvas->setTextColor(COL_AMBER);
+  } else {
+    canvas->setTextColor(COL_WARN);
+  }
   canvas->setCursor(2, 16);
-  canvas->print(ble.Connected() ? "MIDI connected" : "MIDI advertising");
+  canvas->print(ble.StatusLine());
+  canvas->setTextColor(COL_DIM);
+  canvas->setCursor(2, 28);
+  canvas->print(ble.DiagLine());
   canvas->setTextColor(COL_TEXT);
-  canvas->setCursor(2, 30);
+  canvas->setCursor(2, 40);
   BleAdvertPackets advert;
   buildBleMidiAdvert(bleName, MOTHDECK_BLE_NAME_DEFAULT, &advert);
   if (advert.nameShortened) {
@@ -611,17 +631,17 @@ static void drawMidi(BleMidi &ble) {
     canvas->printf("Name %s", bleName);
   }
   canvas->setTextColor(COL_DIM);
-  canvas->setCursor(2, 46);
+  canvas->setCursor(2, 54);
   canvas->print("Ch 1-4 = tracks");
-  canvas->setCursor(2, 58);
+  canvas->setCursor(2, 66);
   canvas->print("Notes 36-83  C2-B5");
-  canvas->setCursor(2, 70);
+  canvas->setCursor(2, 78);
   canvas->print("CC0/32 bank  CC1 low pass");
-  canvas->setCursor(2, 82);
+  canvas->setCursor(2, 90);
   canvas->print("CC7/39 volume  bend pitch");
-  canvas->setCursor(2, 94);
+  canvas->setCursor(2, 102);
   canvas->print("Keys send Note On");
-  canvas->setCursor(2, 106);
+  canvas->setCursor(2, 114);
   canvas->print("Bank 12-63 = SD plugins");
   legend("E edit name in Settings");
 }
