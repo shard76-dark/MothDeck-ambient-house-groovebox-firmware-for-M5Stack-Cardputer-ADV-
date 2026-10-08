@@ -2,6 +2,14 @@
 #define BleMidi_h
 #include "MidiProtocol.h"
 
+struct MidiCounters {
+  uint32_t packets;
+  uint32_t messages;
+  uint32_t clocks;
+  uint32_t notes;
+  uint32_t overflows;
+};
+
 class BleMidi {
 public:
   BleMidi();
@@ -20,6 +28,9 @@ public:
   // Live free internal heap, largest free block, and whether advertising
   // is active. Fits on the MIDI page and does not need a serial cable.
   const char *DiagLine();
+  void CopyCounters(MidiCounters *out) const;
+  // One screen line: packets, messages, clocks, notes, overflows.
+  const char *CounterLine();
   int Poll(MidiEvent *out, int maxOut);
   int ConsumeConnectEdge();
   void Send(const MidiEvent &event);

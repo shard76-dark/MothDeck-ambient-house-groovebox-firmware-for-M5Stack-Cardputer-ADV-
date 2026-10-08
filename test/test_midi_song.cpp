@@ -90,6 +90,62 @@ static void testMsbLsb() {
   expect(parseBleMidiPacket(badHeader, 4, &state, &parsed) == 0, "missing timestamp MSB is rejected");
 }
 
+static int countType(const MidiParseResult &parsed, MidiMsgType type) {
+  int n = 0;
+  for (int i = 0; i < parsed.count; i++) {
+    if (parsed.events[i].type == type) {
+      n++;
+    }
+  }
+  return n;
+}
+
+static void testClockAndNotes() {
+  MidiRunningState state;
+  zeroState(&state);
+  MidiParseResult parsed;
+
+  const uint8_t vel0[] = {0x80, 0x80, 0x90, 60, 0};
+  int count = parseBleMidiPacket(vel0, (int)sizeof(vel0), &state, &parsed);
+  expect(count == 1 && parsed.events[0].type == MIDI_MSG_NOTE_OFF && parsed.events[0].number == 60, "note on velocity 0 is note off");
+
+  // Timestamp, clock, timestamp, note, running-status note, timestamp, clock.
+  const uint8_t mixed[] = {
+    0x80, 0x80, 0xF8, 0x81, 0x90, 60, 100, 0x82, 62, 110, 0x83, 0xF8
+  };
+  count = parseBleMidiPacket(mixed, (int)sizeof(mixed), &state, &parsed);
+  expect(count == 4, "clocks and both notes are kept");
+  expect(countType(parsed, MIDI_MSG_CLOCK) == 2, "two clocks in one packet");
+  expect(parsed.events[1].type == MIDI_MSG_NOTE_ON && parsed.events[1].number == 60 && parsed.events[1].value == 100, "note after a leading clock");
+  expect(parsed.events[2].type == MIDI_MSG_NOTE_ON && parsed.events[2].number == 62 && parsed.events[2].value == 110, "running status note between clocks");
+
+  // A clock byte between the two data bytes of a note.
+  const uint8_t mid[] = {0x80, 0x81, 0x90, 60, 0xF8, 100};
+  count = parseBleMidiPacket(mid, (int)sizeof(mid), &state, &parsed);
+  expect(count == 2 && countType(parsed, MIDI_MSG_CLOCK) == 1, "clock between note data bytes");
+  expect(parsed.events[0].type == MIDI_MSG_CLOCK || parsed.events[1].type == MIDI_MSG_NOTE_ON, "clock does not erase the note");
+  bool noteOk = false;
+  for (int i = 0; i < parsed.count; i++) {
+    if (parsed.events[i].type == MIDI_MSG_NOTE_ON && parsed.events[i].number == 60 && parsed.events[i].value == 100) {
+      noteOk = true;
+    }
+  }
+  expect(noteOk, "note split by a clock keeps pitch and velocity");
+
+  const uint8_t spp[] = {0x80, 0x80, 0xF2, 0x06, 0x00, 0x81, 0xFA, 0x82, 0xFB, 0x83, 0xFC};
+  count = parseBleMidiPacket(spp, (int)sizeof(spp), &state, &parsed);
+  expect(count == 4, "song position and transport");
+  expect(parsed.events[0].type == MIDI_MSG_SONG_POS && parsed.events[0].value14 == 6, "song position is six 16ths");
+  expect(parsed.events[1].type == MIDI_MSG_START && parsed.events[2].type == MIDI_MSG_CONTINUE && parsed.events[3].type == MIDI_MSG_STOP, "start, continue, stop");
+
+  const uint8_t sysex1[] = {0x80, 0x80, 0xF0, 0x01, 0x02};
+  count = parseBleMidiPacket(sysex1, (int)sizeof(sysex1), &state, &parsed);
+  expect(count == 0 && state.sysex == 1, "unterminated sysex spans the packet");
+  const uint8_t sysex2[] = {0x80, 0x03, 0xF7, 0x84, 0x90, 40, 20};
+  count = parseBleMidiPacket(sysex2, (int)sizeof(sysex2), &state, &parsed);
+  expect(state.sysex == 0 && count == 1 && parsed.events[0].type == MIDI_MSG_NOTE_ON && parsed.events[0].number == 40, "note after a continued sysex");
+}
+
 static void testMapping() {
   int pitch = -1;
   int octave = -1;
@@ -317,6 +373,7 @@ int main() {
   testTimestamp();
   testNoteRoundTrip();
   testMsbLsb();
+  testClockAndNotes();
   testMapping();
   testSongFile();
   testSongV2();

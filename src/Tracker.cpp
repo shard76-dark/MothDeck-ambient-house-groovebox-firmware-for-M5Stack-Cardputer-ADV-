@@ -21,6 +21,12 @@ Tracker::Tracker() {
   memset(loopPlay, 0, sizeof(loopPlay));
   memset(&audition, 0, sizeof(audition));
   bpmSlot = 0;
+  extSync = false;
+  clockCount = 0;
+  lastClockTs = 0;
+  haveClockTs = 0;
+  tempoMs = 0;
+  tempoClocks = 0;
   bpms[0] = 120;
   bpms[1] = 140;
   bpms[2] = 95;
@@ -29,48 +35,141 @@ Tracker::Tracker() {
   SetBPM(0);
 }
 
+void Tracker::AdvanceStep() {
+  barCount++;
+  if (barCount > 3) {
+    tempoBlink = 30;
+    barCount = 0;
+    if (!pressedOnce) {
+      SetNote(7, 0);
+    }
+  }
+
+  int local = trackIndex - patternLength * currentPattern;
+  if (local < 0) {
+    local = 0;
+  }
+  LaunchPending(local);
+
+  for (int i = 0; i < 4; i++) {
+    int note = tracks[i][trackIndex];
+    if (note > 0) {
+      int inst = trackInstruments[i][trackIndex];
+      if (inst == kLoopsVoice) {
+        TriggerLoopVoice(i, note - 1);
+      }
+      voices[i].SetNote(note - 1, false, trackOctaves[i][trackIndex], inst);
+    }
+  }
+
+  trackIndex++;
+  int patternEnd = patternLength * (currentPattern + 1);
+  if (trackIndex >= patternEnd) {
+    if (allPatternPlay) {
+      currentPattern++;
+      if (currentPattern > 3) {
+        currentPattern = 0;
+      }
+    }
+    trackIndex = patternLength * currentPattern;
+  }
+}
+
+void Tracker::ApplyExternalBpm(int bpm) {
+  if (bpm < 40) {
+    bpm = 40;
+  } else if (bpm > 240) {
+    bpm = 240;
+  }
+  if (bpms[bpmSlot] == (uint8_t)bpm) {
+    return;
+  }
+  bpms[bpmSlot] = (uint8_t)bpm;
+  SetBPM(bpmSlot);
+  SetHintF("BPM: %d", bpm);
+}
+
+void Tracker::MidiStart() {
+  extSync = true;
+  isPlaying = true;
+  pressedOnce = true;
+  clockCount = 0;
+  stepSampleCount = 0;
+  barCount = 0;
+  currentPattern = 0;
+  trackIndex = 0;
+  AdvanceStep();
+  SetHint("MIDI Start");
+}
+
+void Tracker::MidiContinue() {
+  extSync = true;
+  isPlaying = true;
+  pressedOnce = true;
+  clockCount = 0;
+  SetHint("MIDI Cont");
+}
+
+void Tracker::MidiStop() {
+  isPlaying = false;
+  extSync = false;
+  clockCount = 0;
+  SetHint("MIDI Stop");
+}
+
+void Tracker::MidiClock(uint16_t timestamp13) {
+  if (haveClockTs) {
+    uint16_t delta = (uint16_t)((timestamp13 - lastClockTs) & 0x1FFF);
+    if (delta > 0 && delta < 2000) {
+      tempoMs += delta;
+      tempoClocks++;
+      if (tempoClocks >= 24) {
+        int bpm = (int)(60000.0f / (float)tempoMs + 0.5f);
+        ApplyExternalBpm(bpm);
+        tempoMs = 0;
+        tempoClocks = 0;
+      }
+    }
+  }
+  lastClockTs = timestamp13 & 0x1FFF;
+  haveClockTs = 1;
+  if (!extSync || !isPlaying) {
+    return;
+  }
+  clockCount++;
+  // 24 clocks per quarter note, and a pattern step is a 16th, so 6 clocks.
+  if (clockCount >= 6) {
+    clockCount = 0;
+    stepSampleCount = 0;
+    AdvanceStep();
+  }
+}
+
+void Tracker::MidiSongPosition(int sixteenth) {
+  if (sixteenth < 0) {
+    sixteenth = 0;
+  }
+  int span = patternLength > 0 ? patternLength : 1;
+  int pos = sixteenth % (span * 4);
+  currentPattern = pos / span;
+  trackIndex = currentPattern * span + (pos % span);
+  clockCount = 0;
+  stepSampleCount = 0;
+  SetHint("MIDI Pos");
+}
+
 int Tracker::UpdateTracker() {
   tempoBlink = 0;
 
-  if (++stepSampleCount >= samplesPerStep) {
+  if (extSync) {
+    // Keep loop phase moving inside the current step, but do not start the
+    // next step from the sample counter. The clock does that.
+    if (samplesPerStep > 1 && stepSampleCount + 1 < samplesPerStep) {
+      stepSampleCount++;
+    }
+  } else if (++stepSampleCount >= samplesPerStep) {
     stepSampleCount = 0;
-    barCount++;
-    if (barCount > 3) {
-      tempoBlink = 30;
-      barCount = 0;
-      if (!pressedOnce) {
-        SetNote(7, 0);
-      }
-    }
-
-    int local = trackIndex - patternLength * currentPattern;
-    if (local < 0) {
-      local = 0;
-    }
-    LaunchPending(local);
-
-    for (int i = 0; i < 4; i++) {
-      int note = tracks[i][trackIndex];
-      if (note > 0) {
-        int inst = trackInstruments[i][trackIndex];
-        if (inst == kLoopsVoice) {
-          TriggerLoopVoice(i, note - 1);
-        }
-        voices[i].SetNote(note - 1, false, trackOctaves[i][trackIndex], inst);
-      }
-    }
-
-    trackIndex++;
-    int patternEnd = patternLength * (currentPattern + 1);
-    if (trackIndex >= patternEnd) {
-      if (allPatternPlay) {
-        currentPattern++;
-        if (currentPattern > 3) {
-          currentPattern = 0;
-        }
-      }
-      trackIndex = patternLength * currentPattern;
-    }
+    AdvanceStep();
   }
 
   const int div = 2 + masterVolume * 5;
@@ -445,6 +544,9 @@ void Tracker::ClearPatternNum(int val) {
 }
 
 void Tracker::TogglePlayStop() {
+  // The keyboard transport is the internal clock. MIDI Start turns
+  // external sync back on.
+  extSync = false;
   isPlaying = !isPlaying;
 }
 
@@ -483,6 +585,8 @@ void Tracker::ClearAll(int val) {
   selectedTrack = 0;
   currentPattern = 0;
   isPlaying = true;
+  extSync = false;
+  clockCount = 0;
   pressedOnce = false;
   allPatternPlay = false;
   currentVoice = 0;
@@ -675,6 +779,27 @@ void Tracker::ApplyController(const MidiEvent &event) {
 }
 
 void Tracker::HandleMidi(const MidiEvent &event) {
+  switch (event.type) {
+    case MIDI_MSG_CLOCK:
+      MidiClock(event.value14);
+      return;
+    case MIDI_MSG_START:
+      MidiStart();
+      return;
+    case MIDI_MSG_CONTINUE:
+      MidiContinue();
+      return;
+    case MIDI_MSG_STOP:
+      MidiStop();
+      return;
+    case MIDI_MSG_SONG_POS:
+      MidiSongPosition((int)event.value14);
+      return;
+    default:
+      break;
+  }
+  // Channels 1-4 (status nibble 0-3) are the four tracks. Any other
+  // channel plays whichever track is already selected.
   if (event.channel < 4) {
     selectedTrack = event.channel;
   }

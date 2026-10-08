@@ -149,6 +149,7 @@ void setup() {
   bringUpDisplay();
   logHeap("after display");
   showSplash();
+  audioBindMidi(&ble);
   audioStart();
   uiBegin();
   uiDraw(ble);
@@ -162,12 +163,6 @@ void loop() {
   M5Cardputer.update();
   ble.Maintain();
   uiPoll(ble);
-
-  MidiEvent incoming[8];
-  int count = ble.Poll(incoming, 8);
-  for (int i = 0; i < count; i++) {
-    audioMidi(incoming[i]);
-  }
 
   MidiEvent outgoing;
   while (audioPopMidi(&outgoing)) {

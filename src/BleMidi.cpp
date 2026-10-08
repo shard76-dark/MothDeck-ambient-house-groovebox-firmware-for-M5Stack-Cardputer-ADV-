@@ -15,7 +15,9 @@
 
 static const char *kMidiServiceUuid = "03B80E5A-EDE8-4B33-A751-6CE34EC4C700";
 static const char *kMidiCharUuid = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
-static const int kQueueLen = 16;
+// One slot stays empty so head == tail means empty. The producer is the
+// NimBLE host task and the consumer is the audio task.
+static const int kQueueLen = 128;
 
 // Legacy connectable advertising interval, units of 0.625 ms. 0x20..0x40 is
 // 20..40 ms, the range Apple scans for and hardware hosts still catch.
@@ -36,13 +38,22 @@ static const uint16_t kAdvIntervalMax = 0x40;
 static const uint32_t kBleMinLargest = 36 * 1024;
 
 static BLECharacteristic *midiChar = nullptr;
+static BLEServer *midiServer = nullptr;
 static portMUX_TYPE midiMux = portMUX_INITIALIZER_UNLOCKED;
 static MidiEvent midiQueue[kQueueLen];
-static int qHead = 0;
-static int qTail = 0;
+static uint32_t qHead = 0;
+static uint32_t qTail = 0;
+static uint32_t statPackets = 0;
+static uint32_t statMessages = 0;
+static uint32_t statClocks = 0;
+static uint32_t statNotes = 0;
+static uint32_t statOverflow = 0;
 static volatile bool connected = false;
 static volatile int connectEdge = 0;
+static uint16_t connHandle = 0xFFFF;
+static bool connParamsPending = false;
 static MidiRunningState running;
+static MidiParseResult parsed;
 
 static BleAdvertPackets pkts;
 static bool initOk = false;
@@ -51,22 +62,33 @@ static char failReason[24] = "not started";
 static uint32_t heapFreeAtInit = 0;
 static uint32_t heapLargestAtInit = 0;
 static uint32_t lastMaintainMs = 0;
+static uint32_t lastStatMs = 0;
 static uint32_t lastAdvQueryMs = 0;
 static bool lastAdvActive = false;
 static char statusBuf[44];
 static char diagBuf[44];
+static char counterBuf[44];
 
 static bool pushEvent(const MidiEvent &event) {
-  portENTER_CRITICAL(&midiMux);
-  int next = (qHead + 1) % kQueueLen;
-  if (next == qTail) {
-    portEXIT_CRITICAL(&midiMux);
+  uint32_t head = __atomic_load_n(&qHead, __ATOMIC_RELAXED);
+  uint32_t tail = __atomic_load_n(&qTail, __ATOMIC_ACQUIRE);
+  uint32_t next = (head + 1) % kQueueLen;
+  if (next == tail) {
+    __atomic_fetch_add(&statOverflow, 1, __ATOMIC_RELAXED);
     return false;
   }
-  midiQueue[qHead] = event;
-  qHead = next;
-  portEXIT_CRITICAL(&midiMux);
+  midiQueue[head] = event;
+  __atomic_store_n(&qHead, next, __ATOMIC_RELEASE);
   return true;
+}
+
+static void countParsed(const MidiEvent &event) {
+  __atomic_fetch_add(&statMessages, 1, __ATOMIC_RELAXED);
+  if (event.type == MIDI_MSG_CLOCK) {
+    __atomic_fetch_add(&statClocks, 1, __ATOMIC_RELAXED);
+  } else if (event.type == MIDI_MSG_NOTE_ON || event.type == MIDI_MSG_NOTE_OFF) {
+    __atomic_fetch_add(&statNotes, 1, __ATOMIC_RELAXED);
+  }
 }
 
 class MidiCharCallbacks : public BLECharacteristicCallbacks {
@@ -79,13 +101,28 @@ class MidiCharCallbacks : public BLECharacteristicCallbacks {
     if (!data || len == 0) {
       return;
     }
-    MidiParseResult parsed;
+    __atomic_fetch_add(&statPackets, 1, __ATOMIC_RELAXED);
     parseBleMidiPacket(data, (int)len, &running, &parsed);
+    if (parsed.overflow > 0) {
+      __atomic_fetch_add(&statOverflow, (uint32_t)parsed.overflow, __ATOMIC_RELAXED);
+    }
     for (int i = 0; i < parsed.count; i++) {
+      countParsed(parsed.events[i]);
       pushEvent(parsed.events[i]);
     }
   }
 };
+
+static void requestShortInterval(BLEServer *server, uint16_t handle) {
+  if (!server || handle == 0xFFFF) {
+    return;
+  }
+  // Interval units are 1.25 ms. 6..12 is 7.5..15 ms. Timeout is in 10 ms
+  // units, and it has to be longer than the interval.
+  bool ok = server->requestConnParams(handle, 6, 12, 0, 500);
+  Serial.printf("BLE: conn interval request 7.5-15ms handle=%u ok=%d\n", handle, ok ? 1 : 0);
+  connParamsPending = !ok;
+}
 
 class MidiServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *server) override {
@@ -94,12 +131,35 @@ class MidiServerCallbacks : public BLEServerCallbacks {
     connectEdge = 1;
   }
 
+  void onConnect(BLEServer *server, ble_gap_conn_desc *desc) override {
+    connected = true;
+    connectEdge = 1;
+    if (desc) {
+      connHandle = desc->conn_handle;
+      requestShortInterval(server, connHandle);
+    }
+  }
+
   void onDisconnect(BLEServer *server) override {
     (void)server;
     connected = false;
     connectEdge = -1;
+    connParamsPending = false;
+    connHandle = 0xFFFF;
+    running.sysex = 0;
     BLESecurity::resetSecurity();
     BLEDevice::startAdvertising();
+  }
+
+  void onConnParamsUpdate(uint16_t conn_handle, uint16_t interval, uint16_t latency, uint16_t timeout, uint8_t status) override {
+    Serial.printf(
+      "BLE: conn params handle=%u interval=%u (%.1fms) latency=%u timeout=%u status=%u\n",
+      conn_handle,
+      interval,
+      (double)interval * 1.25,
+      latency,
+      timeout,
+      status);
   }
 };
 
@@ -293,6 +353,7 @@ bool BleMidi::Begin(const char *name) {
     Serial.println("BLE: init failed (no server)");
     return false;
   }
+  midiServer = server;
   server->setCallbacks(new MidiServerCallbacks());
   BLEService *service = server->createService(kMidiServiceUuid);
   if (!service) {
@@ -309,6 +370,7 @@ bool BleMidi::Begin(const char *name) {
     return false;
   }
   midiChar->setCallbacks(new MidiCharCallbacks());
+  Serial.println("BLE: write and write-without-response enabled");
   service->start();
   serverOk = true;
   failReason[0] = 0;
@@ -368,10 +430,26 @@ void BleMidi::RecommitAfter(const char *where) {
 }
 
 void BleMidi::Maintain() {
+  uint32_t now = millis();
+  if (initOk && (uint32_t)(now - lastStatMs) >= 1000) {
+    lastStatMs = now;
+    uint32_t packets = __atomic_load_n(&statPackets, __ATOMIC_RELAXED);
+    if (connected || packets != 0) {
+      Serial.printf(
+        "MIDI: pk=%lu msg=%lu clk=%lu note=%lu ovf=%lu\n",
+        (unsigned long)packets,
+        (unsigned long)__atomic_load_n(&statMessages, __ATOMIC_RELAXED),
+        (unsigned long)__atomic_load_n(&statClocks, __ATOMIC_RELAXED),
+        (unsigned long)__atomic_load_n(&statNotes, __ATOMIC_RELAXED),
+        (unsigned long)__atomic_load_n(&statOverflow, __ATOMIC_RELAXED));
+    }
+    if (connected && connParamsPending) {
+      requestShortInterval(midiServer, connHandle);
+    }
+  }
   if (!initOk || !serverOk || connected) {
     return;
   }
-  uint32_t now = millis();
   if ((uint32_t)(now - lastMaintainMs) < 1000) {
     return;
   }
@@ -440,17 +518,44 @@ bool BleMidi::Connected() const {
   return connected;
 }
 
+void BleMidi::CopyCounters(MidiCounters *out) const {
+  if (!out) {
+    return;
+  }
+  out->packets = __atomic_load_n(&statPackets, __ATOMIC_RELAXED);
+  out->messages = __atomic_load_n(&statMessages, __ATOMIC_RELAXED);
+  out->clocks = __atomic_load_n(&statClocks, __ATOMIC_RELAXED);
+  out->notes = __atomic_load_n(&statNotes, __ATOMIC_RELAXED);
+  out->overflows = __atomic_load_n(&statOverflow, __ATOMIC_RELAXED);
+}
+
+const char *BleMidi::CounterLine() {
+  MidiCounters c;
+  CopyCounters(&c);
+  snprintf(
+    counterBuf,
+    sizeof(counterBuf),
+    "p%lu m%lu c%lu n%lu o%lu",
+    (unsigned long)c.packets,
+    (unsigned long)c.messages,
+    (unsigned long)c.clocks,
+    (unsigned long)c.notes,
+    (unsigned long)c.overflows);
+  return counterBuf;
+}
+
 int BleMidi::Poll(MidiEvent *out, int maxOut) {
   if (!out || maxOut <= 0) {
     return 0;
   }
+  uint32_t tail = __atomic_load_n(&qTail, __ATOMIC_RELAXED);
+  uint32_t head = __atomic_load_n(&qHead, __ATOMIC_ACQUIRE);
   int count = 0;
-  portENTER_CRITICAL(&midiMux);
-  while (qTail != qHead && count < maxOut) {
-    out[count++] = midiQueue[qTail];
-    qTail = (qTail + 1) % kQueueLen;
+  while (tail != head && count < maxOut) {
+    out[count++] = midiQueue[tail];
+    tail = (tail + 1) % kQueueLen;
   }
-  portEXIT_CRITICAL(&midiMux);
+  __atomic_store_n(&qTail, tail, __ATOMIC_RELEASE);
   return count;
 }
 

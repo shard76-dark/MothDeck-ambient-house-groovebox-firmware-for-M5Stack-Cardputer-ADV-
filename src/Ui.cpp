@@ -703,9 +703,11 @@ static void drawMidi(BleMidi &ble) {
   canvas->setCursor(2, 90);
   canvas->print("CC7/39 volume  bend pitch");
   canvas->setCursor(2, 102);
-  canvas->print("Keys send Note On");
+  MidiCounters ctr;
+  ble.CopyCounters(&ctr);
+  canvas->printf("pk %lu  msg %lu  ovf %lu", (unsigned long)ctr.packets, (unsigned long)ctr.messages, (unsigned long)ctr.overflows);
   canvas->setCursor(2, 114);
-  canvas->print("Bank 12-63 = SD plugins");
+  canvas->printf("clk %lu  note %lu", (unsigned long)ctr.clocks, (unsigned long)ctr.notes);
   legend("E edit name in Settings");
 }
 
@@ -754,6 +756,8 @@ static void drawSettings(BleMidi &ble) {
     }
   }
   canvas->setTextColor(COL_DIM);
+  canvas->setCursor(4, 96);
+  canvas->print(ble.CounterLine());
   canvas->setCursor(4, 108);
   canvas->printf("v%s  %s", MOTHDECK_VERSION, BOARD_NAME);
   if (!naming && cursor == 4) {

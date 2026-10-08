@@ -79,6 +79,14 @@ private:
   uint32_t samplesPerStep;
   uint32_t stepSampleCount;
   int barCount;
+  // Set by MIDI Start/Continue. Steps then move on clock (6 clocks = one
+  // 16th), and the internal sample counter does not also advance them.
+  bool extSync;
+  int clockCount;
+  uint16_t lastClockTs;
+  uint8_t haveClockTs;
+  uint32_t tempoMs;
+  int tempoClocks;
   uint8_t bpms[4];
   uint8_t bpmSlot;
   uint8_t ccMsb[32];
@@ -96,6 +104,13 @@ private:
   int InferTrackVoice(int track) const;
   void ArmTransport();
   void QueueMidi(MidiMsgType type, uint8_t channel, uint8_t number, uint8_t value);
+  void AdvanceStep();
+  void MidiStart();
+  void MidiContinue();
+  void MidiStop();
+  void MidiClock(uint16_t timestamp13);
+  void MidiSongPosition(int sixteenth);
+  void ApplyExternalBpm(int bpm);
   void QueueBankMidi();
   void QueueVolumeMidi();
   void ApplyController(const MidiEvent &event);

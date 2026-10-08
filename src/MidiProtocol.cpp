@@ -33,9 +33,26 @@ static int expectedDataBytes(uint8_t status) {
 
 static void pushEvent(MidiParseResult *out, const MidiEvent &event) {
   if (out->count >= kMidiMaxEvents) {
+    out->overflow++;
     return;
   }
   out->events[out->count++] = event;
+}
+
+static void emitRealtime(uint8_t status, uint16_t timestamp, MidiParseResult *out) {
+  MidiEvent event;
+  event.channel = 0;
+  event.number = 0;
+  event.value = 0;
+  event.value14 = timestamp;
+  switch (status) {
+    case 0xF8: event.type = MIDI_MSG_CLOCK; break;
+    case 0xFA: event.type = MIDI_MSG_START; break;
+    case 0xFB: event.type = MIDI_MSG_CONTINUE; break;
+    case 0xFC: event.type = MIDI_MSG_STOP; break;
+    default: return;
+  }
+  pushEvent(out, event);
 }
 
 static void emitMessage(uint8_t status, const uint8_t *data, MidiRunningState *state, MidiParseResult *out) {
@@ -143,63 +160,178 @@ int buildBleMidiPacket(uint8_t *buf, int bufLen, uint16_t millis13, MidiMsgType 
   return 5;
 }
 
+// Remember the low 7 bits. If they wrap inside this packet, the high half
+// ticks forward the way the BLE-MIDI spec tells the receiver to.
+static uint16_t noteTimestamp(uint16_t *cursor, uint8_t timestampByte) {
+  uint16_t low = (uint16_t)(timestampByte & 0x7F);
+  uint16_t prevLow = (uint16_t)(*cursor & 0x7F);
+  uint16_t high = (uint16_t)(*cursor & 0x1F80);
+  if (low < prevLow) {
+    high = (uint16_t)((high + 0x80) & 0x1F80);
+  }
+  *cursor = (uint16_t)(high | low);
+  return *cursor;
+}
+
+static bool readDataBytes(const uint8_t *data, int len, int *i, uint8_t *raw, int needed, uint16_t timestamp, MidiParseResult *out) {
+  int got = 0;
+  while (got < needed && *i < len) {
+    uint8_t b = data[*i];
+    if (b >= 0xF8) {
+      emitRealtime(b, timestamp, out);
+      (*i)++;
+      continue;
+    }
+    if (b & 0x80) {
+      return false;
+    }
+    raw[got++] = b;
+    (*i)++;
+  }
+  return got == needed;
+}
+
 int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, MidiParseResult *out) {
   if (!out) {
     return 0;
   }
   out->count = 0;
+  out->overflow = 0;
   if (!data || !state || len < 2 || (data[0] & 0x80) == 0) {
     return 0;
   }
 
+  uint16_t timestamp = (uint16_t)((data[0] & 0x3F) << 7);
   int i = 1;
   uint8_t running = 0;
-  bool sysex = false;
-  while (i < len && out->count < kMidiMaxEvents) {
-    uint8_t b = data[i];
+  bool sysex = state->sysex != 0;
+
+  // The byte after the header is a timestamp, unless this packet is the
+  // continuation of a SysEx, in which case it is raw SysEx data.
+  if ((data[i] & 0x80) == 0 && sysex) {
+    // continued SysEx, data[i] stays for the loop
+  } else if (data[i] & 0x80) {
+    noteTimestamp(&timestamp, data[i]);
+    i++;
+  } else {
+    state->sysex = 0;
+    return 0;
+  }
+
+  while (i < len) {
     if (sysex) {
-      i++;
-      if (b == 0xF7) {
-        sysex = false;
+      bool ended = false;
+      while (i < len) {
+        uint8_t b = data[i];
+        if (b == 0xF7) {
+          sysex = false;
+          ended = true;
+          i++;
+          break;
+        }
+        if (b >= 0xF8) {
+          emitRealtime(b, timestamp, out);
+          i++;
+          continue;
+        }
+        if (b & 0x80) {
+          if (i + 1 >= len || (data[i + 1] & 0x80) == 0 || data[i + 1] == 0xF7 || data[i + 1] >= 0xF8) {
+            noteTimestamp(&timestamp, b);
+            i++;
+            continue;
+          }
+          sysex = false;
+          break;
+        }
+        i++;
       }
-      continue;
-    }
-    if (b >= 0xF8) {
-      i++;
-      continue;
-    }
-    if (b & 0x80) {
-      if (i + 1 < len && (data[i + 1] & 0x80) && data[i + 1] < 0xF8) {
-        i++;
-        running = data[i];
-        i++;
-      } else if (i + 1 < len && (data[i + 1] & 0x80) == 0 && running != 0) {
-        i++;
-      } else {
-        running = b;
-        i++;
-      }
-      if (running == 0xF0) {
-        sysex = true;
-        continue;
-      }
-    }
-    int needed = expectedDataBytes(running);
-    if (needed <= 0 || i + needed > len) {
-      break;
-    }
-    bool dataOk = true;
-    for (int k = 0; k < needed; k++) {
-      if (data[i + k] & 0x80) {
-        dataOk = false;
+      if (!ended && sysex) {
         break;
       }
+      if (i < len && (data[i] & 0x80) && data[i] < 0xF8) {
+        noteTimestamp(&timestamp, data[i]);
+        i++;
+      }
+      continue;
     }
-    if (!dataOk) {
+
+    uint8_t b = data[i];
+    bool usingRunning = false;
+    if (b >= 0xF8) {
+      emitRealtime(b, timestamp, out);
+      i++;
+      if (i < len && (data[i] & 0x80) && data[i] < 0xF8) {
+        noteTimestamp(&timestamp, data[i]);
+        i++;
+      }
+      continue;
+    }
+    if ((b & 0x80) == 0) {
+      if (running == 0) {
+        i++;
+        continue;
+      }
+      usingRunning = true;
+      b = running;
+    } else {
+      i++;
+    }
+
+    if (b == 0xF0) {
+      sysex = true;
+      continue;
+    }
+    if ((b & 0xF0) == 0xF0 && b < 0xF8 && expectedDataBytes(b) == 0) {
+      if (i < len && (data[i] & 0x80) && data[i] < 0xF8) {
+        noteTimestamp(&timestamp, data[i]);
+        i++;
+      }
+      continue;
+    }
+
+    int needed = expectedDataBytes(b);
+    if (needed <= 0) {
       break;
     }
-    emitMessage(running, data + i, state, out);
-    i += needed;
+    uint8_t raw[2];
+    int dataAt = i;
+    if (!readDataBytes(data, len, &i, raw, needed, timestamp, out)) {
+      if (i >= len) {
+        break;
+      }
+      // A timestamp (or a new status) arrived before this message finished.
+      // Leave that byte for the next pass when it is a status; consume it
+      // when the byte after it is also a status, because then it is the
+      // timestamp the spec puts in front of the next message.
+      if (!usingRunning && dataAt == i) {
+        // The status itself was followed immediately by another status.
+      }
+      if ((data[i] & 0x80) && data[i] < 0xF8 && i + 1 < len && (data[i + 1] & 0x80) && data[i + 1] < 0xF8) {
+        noteTimestamp(&timestamp, data[i]);
+        i++;
+      }
+      continue;
+    }
+
+    if (b == 0xF2) {
+      MidiEvent event;
+      event.type = MIDI_MSG_SONG_POS;
+      event.channel = 0;
+      event.number = (uint8_t)(raw[0] & 0x7F);
+      event.value = (uint8_t)(raw[1] & 0x7F);
+      event.value14 = (uint16_t)((event.number) | ((uint16_t)event.value << 7));
+      pushEvent(out, event);
+    } else if (b < 0xF0) {
+      running = b;
+      emitMessage(b, raw, state, out);
+    }
+
+    if (i < len && (data[i] & 0x80) && data[i] < 0xF8) {
+      noteTimestamp(&timestamp, data[i]);
+      i++;
+    }
   }
+
+  state->sysex = sysex ? 1 : 0;
   return out->count;
 }

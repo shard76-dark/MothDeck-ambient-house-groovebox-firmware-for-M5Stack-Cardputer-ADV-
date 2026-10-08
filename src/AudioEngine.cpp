@@ -4,6 +4,7 @@
 #include "BoardConfig.h"
 #include "DevLog.h"
 #include "LoopFormat.h"
+#include "BleMidi.h"
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <atomic>
@@ -12,6 +13,7 @@
 #include <string.h>
 
 static Tracker tracker;
+static BleMidi *midiIn = nullptr;
 static QueueHandle_t cmdQ = nullptr;
 static QueueHandle_t midiOutQ = nullptr;
 static TaskHandle_t audioTaskHandle = nullptr;
@@ -94,7 +96,26 @@ static void drainSide() {
   }
 }
 
+static void drainMidi() {
+  if (!midiIn) {
+    return;
+  }
+  // The UI loop draws and then waits. MIDI is read here, once per audio
+  // block, so a chord-plus-clock packet is not stuck behind that wait.
+  MidiEvent ev[12];
+  for (int pass = 0; pass < 6; pass++) {
+    int n = midiIn->Poll(ev, 12);
+    if (n <= 0) {
+      return;
+    }
+    for (int i = 0; i < n; i++) {
+      tracker.HandleMidi(ev[i]);
+    }
+  }
+}
+
 static void renderBlock(int16_t *dst) {
+  drainMidi();
   drainSide();
   int peak[4] = {0, 0, 0, 0};
   for (int i = 0; i < kBlock; i++) {
@@ -153,6 +174,10 @@ static void logAudioHeap(const char *tag) {
   uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   Serial.printf("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
+}
+
+void audioBindMidi(BleMidi *ble) {
+  midiIn = ble;
 }
 
 void audioStart() {
