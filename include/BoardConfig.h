@@ -10,7 +10,7 @@
 
 #define BOARD_NAME "Cardputer ADV"
 #define MOTHDECK_VERSION "1.0.0"
-#define MOTHDECK_BLE_NAME_DEFAULT "MothSynth"
+#define MOTHDECK_BLE_NAME_DEFAULT "MothDeck"
 
 // 1 compiles serial-monitor logs for the SD card and the speaker.
 // 0 omits those Serial statements. Override with -DMOTHOS_DEV_LOG=1.

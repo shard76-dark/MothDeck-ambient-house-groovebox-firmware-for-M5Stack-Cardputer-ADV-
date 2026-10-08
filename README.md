@@ -254,7 +254,7 @@ Described above. Fn+`;` moves the row up and will not pass row 8. Fn+`.` moves d
 
 ### MIDI
 
-The page shows connection, the advertised name, and the channel map. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
+The page shows connection, the stored name, and the channel map. A stored name longer than 8 characters is shortened in the advertising packet, and the page shows that shorter name in parentheses. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
 
 ### Settings
 
@@ -266,7 +266,7 @@ The Exit page is a confirm, and it is in the page list only when a Launcher imag
 
 ## MIDI
 
-Advertised as a BLE MIDI peripheral. The default name is `MothSynth`. Change it on Settings. The name is stored in NVS. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
+Advertised as a BLE MIDI peripheral on legacy connectable advertising. The default name is `MothDeck`. Change it on Settings. The name is stored in NVS. The primary advertising packet is general-discoverable and carries both the name and the 128-bit MIDI service UUID. A stored name longer than 8 characters is shortened there; the full name is in the scan response. Pairing is Just Works with bonding and no passkey. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
 
 | Message | Map |
 | --- | --- |

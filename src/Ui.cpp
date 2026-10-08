@@ -7,6 +7,7 @@
 #include "SdStorage.h"
 #include "SdCard.h"
 #include "LauncherExit.h"
+#include "BleAdvert.h"
 #include "BleMidi.h"
 #include "BoardConfig.h"
 #include <M5Cardputer.h>
@@ -602,7 +603,13 @@ static void drawMidi(BleMidi &ble) {
   canvas->print(ble.Connected() ? "MIDI connected" : "MIDI advertising");
   canvas->setTextColor(COL_TEXT);
   canvas->setCursor(2, 30);
-  canvas->printf("Name %s", bleName);
+  BleAdvertPackets advert;
+  buildBleMidiAdvert(bleName, MOTHDECK_BLE_NAME_DEFAULT, &advert);
+  if (advert.nameShortened) {
+    canvas->printf("Name %s (%s)", bleName, advert.advName);
+  } else {
+    canvas->printf("Name %s", bleName);
+  }
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(2, 46);
   canvas->print("Ch 1-4 = tracks");
