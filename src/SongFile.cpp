@@ -364,7 +364,7 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
     if (i != payload) {
       return false;
     }
-    if (song->patternLength == 0 || (uint32_t)song->patternLength * 4 > (uint32_t)kSongSteps) {
+    if (song->patternLength == 0 || song->patternLength > (uint16_t)kSongSteps) {
       return false;
     }
     if (song->bpmSlot > 3 || song->selectedTrack > 3 || song->currentPattern > 3 || song->currentVoice > 11) {
@@ -447,7 +447,7 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
   if (i != payload) {
     return false;
   }
-  if (song->patternLength == 0 || (uint32_t)song->patternLength * 4 > (uint32_t)kSongSteps) {
+  if (song->patternLength == 0 || song->patternLength > (uint16_t)kSongSteps) {
     return false;
   }
   if (song->bpmSlot > 3 || song->selectedTrack > 3 || song->currentPattern > 3 || song->currentVoice > 63) {

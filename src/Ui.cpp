@@ -81,7 +81,6 @@ static uint8_t bright = 180;
 static uint32_t escSince = 0;
 static bool escDown = false;
 static bool escFired = false;
-static int lengthChoice = 0;
 static Snap snap;
 static SdStorage storage;
 
@@ -385,8 +384,10 @@ static void drawPlay() {
   }
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(2, 82);
-  canvas->printf("Step %u/%u  Oct %u  %s", (unsigned)(snap.step % (snap.patternLength ? snap.patternLength : 1)) + 1,
-                 snap.patternLength, snap.octave, snap.songMode ? "Song" : "Patt");
+  unsigned bars = snap.barCount ? snap.barCount : 1;
+  unsigned bar = snap.barIndex ? snap.barIndex : 1;
+  canvas->printf("B%u/%u  P%u  Oct %u  %s", bar, bars, (unsigned)snap.pattern + 1, snap.octave,
+                 snap.songMode ? "Song" : "Patt");
   canvas->setCursor(2, 94);
   canvas->setTextColor(COL_TEXT);
   canvas->print(snap.hint);
@@ -396,7 +397,7 @@ static void drawPlay() {
   if (audioFaultText()[0] && strcmp(audioFaultText(), "audio ok") != 0) {
     legend(audioFaultText());
   } else {
-    legend("Spc play  Tab page  ` hold exit");
+    legend("Spc play  Fn ,/ bar  Tab page");
   }
 }
 
@@ -615,7 +616,8 @@ static void drawSong() {
   }
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(4, 92);
-  canvas->printf("Len %u  %s  Mstr %u", snap.patternLength, snap.songMode ? "song" : "patt", 2 - snap.masterVolume);
+  canvas->printf("Bars %u/8  %s  Mstr %u", snap.barCount ? snap.barCount : 1, snap.songMode ? "song" : "patt",
+                 2 - snap.masterVolume);
   canvas->setCursor(4, 104);
   canvas->print("S save L load X del T stat");
   legend("N new  C copy  V paste  G all");
@@ -715,11 +717,11 @@ static void drawSettings(BleMidi &ble) {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   canvas->print("Settings");
-  const char *rows[] = {"Speaker", "Brightness", "BLE name", "Battery", "Free RAM", "Card"};
+  const char *rows[] = {"Speaker", "Brightness", "BLE name", "Battery", "Free RAM", "Card", "Bars"};
   int top = cursor > 3 ? cursor - 3 : 0;
   for (int i = 0; i < 5; i++) {
     int idx = top + i;
-    if (idx > 5) {
+    if (idx > 6) {
       break;
     }
     int y = 30 + i * 12;
@@ -751,8 +753,10 @@ static void drawSettings(BleMidi &ble) {
       unsigned blkKb = (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
       const char *bleWord = ble.Connected() ? "conn" : (ble.Advertising() ? "adv" : "off");
       canvas->printf("%uk blk %uk %s", freeKb, blkKb, bleWord);
-    } else {
+    } else if (idx == 5) {
       canvas->print(sdCard.Mounted() ? "mounted" : "none");
+    } else {
+      canvas->printf("%u", snap.barCount ? snap.barCount : 1);
     }
   }
   canvas->setTextColor(COL_DIM);
@@ -763,7 +767,7 @@ static void drawSettings(BleMidi &ble) {
   if (!naming && cursor == 4) {
     legend(ble.StatusLine());
   } else {
-    legend(naming ? "Ent apply  Bksp  ` cancel" : "Lf/Rt change  Ent name");
+    legend(naming ? "Ent apply  Bksp  ` cancel" : (cursor == 6 ? "Fn ,/ bars" : "Lf/Rt change  Ent name"));
   }
 }
 
@@ -984,7 +988,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       } else if (page == kLoopsPage) {
         loopRow = clampi(loopRow - 1, 0, 7);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor - 1, 0, 5);
+        cursor = clampi(cursor - 1, 0, 6);
       }
       return;
     }
@@ -1002,7 +1006,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         }
         loopRow = clampi(loopRow + 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor + 1, 0, 5);
+        cursor = clampi(cursor + 1, 0, 6);
       }
       return;
     }
@@ -1024,6 +1028,11 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         bright = (uint8_t)clampi((int)bright - 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
+      } else if (page == kSettingsPage && cursor == 6) {
+        int bars = snap.barCount ? (int)snap.barCount : 1;
+        audioCommand('Y', clampi(bars - 1, 1, 8));
+      } else if (page == 0) {
+        audioCommand('W', -1);
       }
       return;
     }
@@ -1045,6 +1054,11 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         bright = (uint8_t)clampi((int)bright + 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
+      } else if (page == kSettingsPage && cursor == 6) {
+        int bars = snap.barCount ? (int)snap.barCount : 1;
+        audioCommand('Y', clampi(bars + 1, 1, 8));
+      } else if (page == 0) {
+        audioCommand('W', 1);
       }
       return;
     }
@@ -1067,7 +1081,8 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     return;
   }
   if (ctrl && c == 'n') {
-    audioCommand('X', lengthChoice & 3);
+    int bars = snap.barCount ? (int)snap.barCount : 1;
+    audioCommand('X', bars - 1);
     toastSet("New song");
     return;
   }
@@ -1162,8 +1177,9 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         toastSet(SdStorage::ResultText(st, songSlot));
       }
     } else if (c == 'n') {
-      lengthChoice = (lengthChoice + 1) & 3;
-      audioCommand('X', lengthChoice);
+      int bars = snap.barCount ? (int)snap.barCount : 1;
+      bars = bars >= 8 ? 1 : bars + 1;
+      audioCommand('X', bars - 1);
       toastSet("New song");
     } else if (c == 'c') audioCommand('*', 0);
     else if (c == 'v') audioCommand('*', 1);

@@ -41,7 +41,7 @@ static Shot shoot(const Tracker &tracker) {
   shot.bpm = tracker.Bpm();
   shot.playing = tracker.isPlaying;
   for (int i = 0; i < 4; i++) {
-    shot.steps[i] = tracker.tracks[i][0];
+    shot.steps[i] = tracker.NoteAt(i, 0);
     shot.voices[i] = tracker.trackVoice[i];
   }
   return shot;

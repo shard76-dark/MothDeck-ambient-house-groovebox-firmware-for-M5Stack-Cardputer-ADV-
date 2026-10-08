@@ -238,6 +238,16 @@ static void testSongFile() {
   buf[kSongFileBytes - 1] = (uint8_t)((sum >> 8) & 0xFF);
   expect(!songDecode(buf, n, &loaded), "zero pattern length is rejected");
   expect(songDecode(buf, n - 1, &loaded) == false, "truncated song is rejected");
+
+  song.patternLength = 16;
+  n = songEncode(song, buf, kSongFileBytes);
+  expect(songDecode(buf, n, &loaded) && loaded.patternLength == 16, "a 16-step song still decodes as one bar");
+  song.patternLength = 128;
+  n = songEncode(song, buf, kSongFileBytes);
+  expect(n == kSongFileBytes && songDecode(buf, n, &loaded) && loaded.patternLength == 128, "an 8-bar song stays a version 1 file");
+  song.patternLength = 32;
+  n = songEncode(song, buf, kSongFileBytes);
+  expect(songDecode(buf, n, &loaded) && loaded.patternLength == 32, "a 32-step song still decodes unchanged");
 }
 
 static void testSongV2() {

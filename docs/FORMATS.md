@@ -16,7 +16,7 @@ A song that only uses the built-in instruments, and no loop assignment, is versi
 | --- | --- | --- |
 | 0 | 4 | ASCII `MOTH` |
 | 4 | 1 | version `1` |
-| 5 | 2 | pattern length, uint16 little-endian, multiple of 4, 4..256 |
+| 5 | 2 | pattern length in steps, uint16 little-endian. This firmware writes 16, 32, 48, 64, 80, 96, 112, or 128 (1–8 bars of 16). Older files with any length 1..256 still load; the tracker rounds that length up to a whole bar and caps it at 8 bars. A stored 16 is one bar, and a stored 32 stays two bars. The 256-step grid is unchanged, so fewer than four patterns fit once a pattern is longer than 64 steps |
 | 7 | 1 | master volume |
 | 8 | 1 | bpm slot 0..3 |
 | 9 | 4 | four BPM values |

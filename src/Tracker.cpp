@@ -27,12 +27,200 @@ Tracker::Tracker() {
   haveClockTs = 0;
   tempoMs = 0;
   tempoClocks = 0;
+  clocksSinceZero = 0;
+  blockLearn = false;
+  autoLength = true;
+  editBar = 0;
+  followView = true;
+  patternCopyLen = 0;
   bpms[0] = 120;
   bpms[1] = 140;
   bpms[2] = 95;
   bpms[3] = 180;
   ClearAll(0);
   SetBPM(0);
+}
+
+uint16_t Tracker::PackStep(uint8_t note, int8_t oct, uint8_t inst) {
+  if (note > 15) {
+    note = 15;
+  }
+  int biased = (int)oct + 8;
+  if (biased < 0) {
+    biased = 0;
+  } else if (biased > 15) {
+    biased = 15;
+  }
+  if (inst > 63) {
+    inst = 63;
+  }
+  return (uint16_t)((note & 0x0F) | ((biased & 0x0F) << 4) | ((inst & 0x3F) << 8));
+}
+
+uint16_t Tracker::EmptyStep() {
+  return PackStep(0, 0, 0);
+}
+
+uint16_t Tracker::CellAt(int track, int step) const {
+  if (track < 0 || track > 3 || step < 0 || step >= kMaxSteps) {
+    return EmptyStep();
+  }
+  return steps[track][step];
+}
+
+void Tracker::SetCell(int track, int step, uint8_t note, int8_t oct, uint8_t inst) {
+  if (track < 0 || track > 3 || step < 0 || step >= kMaxSteps) {
+    return;
+  }
+  steps[track][step] = PackStep(note, oct, inst);
+}
+
+void Tracker::ClearNote(int track, int step) {
+  uint16_t cell = CellAt(track, step);
+  SetCell(track, step, 0, (int8_t)(((cell >> 4) & 0x0F) - 8), (uint8_t)((cell >> 8) & 0x3F));
+}
+
+uint8_t Tracker::NoteAt(int track, int step) const {
+  return (uint8_t)(CellAt(track, step) & 0x0F);
+}
+
+int8_t Tracker::OctaveAt(int track, int step) const {
+  return (int8_t)(((CellAt(track, step) >> 4) & 0x0F) - 8);
+}
+
+uint8_t Tracker::InstAt(int track, int step) const {
+  return (uint8_t)((CellAt(track, step) >> 8) & 0x3F);
+}
+
+int Tracker::PatternSlots() const {
+  int len = patternLength >= kStepsPerBar ? patternLength : kStepsPerBar;
+  int slots = kMaxSteps / len;
+  if (slots < 1) {
+    slots = 1;
+  } else if (slots > 4) {
+    slots = 4;
+  }
+  return slots;
+}
+
+int Tracker::Bars() const {
+  int bars = patternLength / kStepsPerBar;
+  if (bars < 1) {
+    return 1;
+  }
+  if (bars > kMaxBars) {
+    return kMaxBars;
+  }
+  return bars;
+}
+
+static int barsFromSteps(int steps) {
+  if (steps < 1) {
+    return 1;
+  }
+  int bars = (steps + Tracker::kStepsPerBar - 1) / Tracker::kStepsPerBar;
+  if (bars < 1) {
+    bars = 1;
+  } else if (bars > Tracker::kMaxBars) {
+    bars = Tracker::kMaxBars;
+  }
+  return bars;
+}
+
+void Tracker::ClampTransport() {
+  int slots = PatternSlots();
+  if (currentPattern < 0 || currentPattern >= slots) {
+    currentPattern = slots - 1;
+    if (currentPattern < 0) {
+      currentPattern = 0;
+    }
+  }
+  int start = patternLength * currentPattern;
+  int end = start + patternLength;
+  if (start < 0) {
+    start = 0;
+  }
+  if (end > kMaxSteps) {
+    end = kMaxSteps;
+  }
+  if (trackIndex < start || trackIndex >= end) {
+    trackIndex = start;
+  }
+  int bars = Bars();
+  if (editBar < 0) {
+    editBar = 0;
+  } else if (editBar >= bars) {
+    editBar = bars - 1;
+  }
+}
+
+void Tracker::SetBars(int bars) {
+  if (bars < 1) {
+    bars = 1;
+  } else if (bars > kMaxBars) {
+    bars = kMaxBars;
+  }
+  patternLength = bars * kStepsPerBar;
+  ClampTransport();
+}
+
+void Tracker::SyncEditBar() {
+  if (!followView) {
+    return;
+  }
+  int start = patternLength * currentPattern;
+  int local = trackIndex - start;
+  if (local < 0) {
+    local = 0;
+  }
+  int bar = local / kStepsPerBar;
+  int bars = Bars();
+  if (bar >= bars) {
+    bar = bars - 1;
+  }
+  if (bar < 0) {
+    bar = 0;
+  }
+  editBar = bar;
+}
+
+void Tracker::NudgeEditBar(int dir) {
+  followView = false;
+  int bars = Bars();
+  int bar = editBar + (dir < 0 ? -1 : 1);
+  if (bar < 0) {
+    bar = 0;
+  } else if (bar >= bars) {
+    bar = bars - 1;
+  }
+  editBar = bar;
+  SetHintF("Bar %d", editBar + 1);
+}
+
+bool Tracker::LearnLoopLength() {
+  int clocks = clocksSinceZero;
+  clocksSinceZero = 0;
+  if (blockLearn || !autoLength) {
+    blockLearn = false;
+    return false;
+  }
+  if (clocks < kStepsPerBar * 6) {
+    return false;
+  }
+  int nearest = (clocks + 48) / 96;
+  int err = clocks - nearest * 96;
+  if (err < 0) {
+    err = -err;
+  }
+  if (nearest < 1 || err > 12) {
+    return false;
+  }
+  if (nearest > kMaxBars) {
+    nearest = kMaxBars;
+  }
+  int before = patternLength;
+  SetBars(nearest);
+  return patternLength != before;
 }
 
 void Tracker::AdvanceStep() {
@@ -45,6 +233,7 @@ void Tracker::AdvanceStep() {
     }
   }
 
+  ClampTransport();
   int local = trackIndex - patternLength * currentPattern;
   if (local < 0) {
     local = 0;
@@ -52,27 +241,28 @@ void Tracker::AdvanceStep() {
   LaunchPending(local);
 
   for (int i = 0; i < 4; i++) {
-    int note = tracks[i][trackIndex];
+    int note = NoteAt(i, trackIndex);
     if (note > 0) {
-      int inst = trackInstruments[i][trackIndex];
+      int inst = InstAt(i, trackIndex);
       if (inst == kLoopsVoice) {
         TriggerLoopVoice(i, note - 1);
       }
-      voices[i].SetNote(note - 1, false, trackOctaves[i][trackIndex], inst);
+      voices[i].SetNote(note - 1, false, OctaveAt(i, trackIndex), inst);
     }
   }
 
   trackIndex++;
   int patternEnd = patternLength * (currentPattern + 1);
-  if (trackIndex >= patternEnd) {
+  if (trackIndex >= patternEnd || trackIndex >= kMaxSteps) {
     if (allPatternPlay) {
       currentPattern++;
-      if (currentPattern > 3) {
+      if (currentPattern >= PatternSlots()) {
         currentPattern = 0;
       }
     }
     trackIndex = patternLength * currentPattern;
   }
+  SyncEditBar();
 }
 
 void Tracker::ApplyExternalBpm(int bpm) {
@@ -90,16 +280,23 @@ void Tracker::ApplyExternalBpm(int bpm) {
 }
 
 void Tracker::MidiStart() {
+  bool learned = LearnLoopLength();
   extSync = true;
   isPlaying = true;
   pressedOnce = true;
   clockCount = 0;
   stepSampleCount = 0;
   barCount = 0;
-  currentPattern = 0;
-  trackIndex = 0;
+  followView = true;
+  editBar = 0;
+  ClampTransport();
+  trackIndex = patternLength * currentPattern;
   AdvanceStep();
-  SetHint("MIDI Start");
+  if (learned) {
+    SetHintF("Bars %d", Bars());
+  } else {
+    SetHint("MIDI Start");
+  }
 }
 
 void Tracker::MidiContinue() {
@@ -114,6 +311,8 @@ void Tracker::MidiStop() {
   isPlaying = false;
   extSync = false;
   clockCount = 0;
+  clocksSinceZero = 0;
+  blockLearn = true;
   SetHint("MIDI Stop");
 }
 
@@ -136,6 +335,7 @@ void Tracker::MidiClock(uint16_t timestamp13) {
   if (!extSync || !isPlaying) {
     return;
   }
+  clocksSinceZero++;
   clockCount++;
   // 24 clocks per quarter note, and a pattern step is a 16th, so 6 clocks.
   if (clockCount >= 6) {
@@ -149,13 +349,28 @@ void Tracker::MidiSongPosition(int sixteenth) {
   if (sixteenth < 0) {
     sixteenth = 0;
   }
-  int span = patternLength > 0 ? patternLength : 1;
-  int pos = sixteenth % (span * 4);
-  currentPattern = pos / span;
-  trackIndex = currentPattern * span + (pos % span);
+  bool learned = false;
+  if (sixteenth == 0) {
+    learned = LearnLoopLength();
+  } else {
+    clocksSinceZero = 0;
+    blockLearn = true;
+  }
+  int span = patternLength > 0 ? patternLength : kStepsPerBar;
+  int local = sixteenth % span;
+  ClampTransport();
+  trackIndex = currentPattern * span + local;
+  if (trackIndex >= kMaxSteps) {
+    trackIndex = currentPattern * span;
+  }
   clockCount = 0;
   stepSampleCount = 0;
-  SetHint("MIDI Pos");
+  SyncEditBar();
+  if (learned) {
+    SetHintF("Bars %d", Bars());
+  } else {
+    SetHint("MIDI Pos");
+  }
 }
 
 int Tracker::UpdateTracker() {
@@ -275,7 +490,7 @@ void Tracker::SetCommand(char command, int val) {
       break;
     case '$':
       SetPatternNum(val);
-      SetHintF("Pattern: %d", val + 1);
+      SetHintF("Pattern: %d", currentPattern + 1);
       break;
     case '#':
       ClearPatternNum(val);
@@ -283,7 +498,14 @@ void Tracker::SetCommand(char command, int val) {
       break;
     case 'X':
       ClearAll(val);
-      SetHintF("New Song: %d", 32 * (val + 1));
+      SetHintF("Bars %d", Bars());
+      break;
+    case 'Y':
+      SetBars(val);
+      SetHintF("Bars %d", Bars());
+      break;
+    case 'W':
+      NudgeEditBar(val);
       break;
     case 'P':
       TogglePlayStop();
@@ -324,9 +546,7 @@ void Tracker::SetCommand(char command, int val) {
       AdjustFx(val);
       break;
     case '_':
-      if (trackIndex >= 0 && trackIndex < kMaxSteps) {
-        tracks[selectedTrack][trackIndex] = 0;
-      }
+      ClearNote(selectedTrack, trackIndex);
       SetHint("Step clr");
       break;
     case 'b':
@@ -496,10 +716,13 @@ void Tracker::SetNote(int val, int track) {
   }
   int inst = trackVoice[track];
   if (isPlaying && pressedOnce) {
-    tracks[track][trackIndex] = val + 1;
-    trackOctaves[track][trackIndex] = voices[selectedTrack].octave;
-    trackInstruments[track][trackIndex] = (uint8_t)inst;
-    lastNoteTrackIndex = trackIndex % patternLength;
+    uint8_t note = 0;
+    if (val >= 0) {
+      note = (uint8_t)(val + 1);
+    }
+    SetCell(track, trackIndex, note, voices[selectedTrack].octave, (uint8_t)inst);
+    int span = patternLength > 0 ? patternLength : 1;
+    lastNoteTrackIndex = trackIndex % span;
   } else {
     voices[track].SetNote(val, false, -1, inst);
     if (inst == kLoopsVoice) {
@@ -520,62 +743,131 @@ void Tracker::SetTrackNum(int val) {
 }
 
 void Tracker::ClearTrackNum(int val) {
+  if (val < 0 || val > 3) {
+    return;
+  }
   int start = patternLength * currentPattern;
   int end = start + patternLength;
+  if (end > kMaxSteps) {
+    end = kMaxSteps;
+  }
   for (int i = start; i < end; i++) {
-    tracks[val][i] = 0;
+    ClearNote(val, i);
   }
 }
 
 void Tracker::SetPatternNum(int val) {
-  trackIndex = trackIndex - (patternLength * currentPattern) + (patternLength * val);
+  int slots = PatternSlots();
+  if (val < 0) {
+    val = 0;
+  } else if (val >= slots) {
+    val = slots - 1;
+  }
+  int local = trackIndex - (patternLength * currentPattern);
+  if (local < 0) {
+    local = 0;
+  } else if (local >= patternLength) {
+    local = 0;
+  }
   currentPattern = val;
+  trackIndex = patternLength * currentPattern + local;
+  if (trackIndex >= kMaxSteps) {
+    trackIndex = patternLength * currentPattern;
+  }
+  SyncEditBar();
 }
 
 void Tracker::ClearPatternNum(int val) {
   (void)val;
   int start = patternLength * currentPattern;
   int end = start + patternLength;
+  if (end > kMaxSteps) {
+    end = kMaxSteps;
+  }
   for (int j = 0; j < 4; j++) {
     for (int i = start; i < end; i++) {
-      tracks[j][i] = 0;
+      ClearNote(j, i);
     }
   }
 }
 
 void Tracker::TogglePlayStop() {
   // The keyboard transport is the internal clock. MIDI Start turns
-  // external sync back on.
+  // external sync back on. Drop any half-measured external loop so the
+  // next Start does not resize the pattern.
   extSync = false;
+  clocksSinceZero = 0;
+  blockLearn = true;
   isPlaying = !isPlaying;
+  if (isPlaying) {
+    followView = true;
+    SyncEditBar();
+  }
 }
 
 void Tracker::CopyPattern() {
   int start = patternLength * currentPattern;
+  int n = patternLength;
+  if (n > kMaxPatternSteps) {
+    n = kMaxPatternSteps;
+  }
+  if (start < 0) {
+    start = 0;
+  }
+  patternCopyLen = n;
+  uint16_t empty = EmptyStep();
   for (int j = 0; j < 4; j++) {
-    memcpy(patternCopy[j], &tracks[j][start], patternLength);
-    memcpy(patternCopyInstruments[j], &trackInstruments[j][start], patternLength);
-    memcpy(patternCopyOctaves[j], &trackOctaves[j][start], patternLength);
+    for (int i = 0; i < kMaxPatternSteps; i++) {
+      if (i < n && start + i < kMaxSteps) {
+        patternCopy[j][i] = steps[j][start + i];
+      } else {
+        patternCopy[j][i] = empty;
+      }
+    }
   }
 }
 
 void Tracker::PastePattern() {
   int start = patternLength * currentPattern;
+  int n = patternCopyLen > 0 ? patternCopyLen : patternLength;
+  if (n > patternLength) {
+    n = patternLength;
+  }
+  if (start < 0) {
+    return;
+  }
+  uint16_t empty = EmptyStep();
+  int limit = patternCopyLen > 0 ? n : patternLength;
   for (int j = 0; j < 4; j++) {
-    memcpy(&tracks[j][start], patternCopy[j], patternLength);
-    memcpy(&trackInstruments[j][start], patternCopyInstruments[j], patternLength);
-    memcpy(&trackOctaves[j][start], patternCopyOctaves[j], patternLength);
+    for (int i = 0; i < limit; i++) {
+      int idx = start + i;
+      if (idx < 0 || idx >= kMaxSteps) {
+        break;
+      }
+      steps[j][idx] = patternCopyLen > 0 ? patternCopy[j][i] : empty;
+    }
   }
   SyncTrackVoicesFromSteps();
 }
 
 void Tracker::PastePatternAll() {
-  for (int r = 0; r < 4; r++) {
+  int n = patternCopyLen > 0 ? patternCopyLen : patternLength;
+  if (n > patternLength) {
+    n = patternLength;
+  }
+  uint16_t empty = EmptyStep();
+  int limit = patternCopyLen > 0 ? n : patternLength;
+  int slots = PatternSlots();
+  for (int r = 0; r < slots; r++) {
     int start = patternLength * r;
     for (int j = 0; j < 4; j++) {
-      memcpy(&tracks[j][start], patternCopy[j], patternLength);
-      memcpy(&trackInstruments[j][start], patternCopyInstruments[j], patternLength);
-      memcpy(&trackOctaves[j][start], patternCopyOctaves[j], patternLength);
+      for (int i = 0; i < limit; i++) {
+        int idx = start + i;
+        if (idx < 0 || idx >= kMaxSteps) {
+          break;
+        }
+        steps[j][idx] = patternCopyLen > 0 ? patternCopy[j][i] : empty;
+      }
     }
   }
   SyncTrackVoicesFromSteps();
@@ -593,9 +885,6 @@ void Tracker::ClearAll(int val) {
   trackIndex = 0;
   stepSampleCount = 0;
   barCount = 0;
-  memset(tracks, 0, sizeof(tracks));
-  memset(trackInstruments, 0, sizeof(trackInstruments));
-  memset(trackOctaves, 0, sizeof(trackOctaves));
   memset(trackVoice, 0, sizeof(trackVoice));
   RememberVoiceLabel(0);
   for (int j = 0; j < 4; j++) {
@@ -606,7 +895,28 @@ void Tracker::ClearAll(int val) {
     voices[j].bend14 = 8192;
     voices[j].ReleaseShots();
   }
-  patternLength = 32 + (32 * val);
+  int bars = val + 1;
+  if (bars < 1) {
+    bars = 1;
+  } else if (bars > kMaxBars) {
+    bars = kMaxBars;
+  }
+  patternLength = bars * kStepsPerBar;
+  editBar = 0;
+  followView = true;
+  clocksSinceZero = 0;
+  blockLearn = true;
+  autoLength = true;
+  patternCopyLen = 0;
+  uint16_t empty = EmptyStep();
+  for (int t = 0; t < 4; t++) {
+    for (int s = 0; s < kMaxSteps; s++) {
+      steps[t][s] = empty;
+    }
+    for (int s = 0; s < kMaxPatternSteps; s++) {
+      patternCopy[t][s] = empty;
+    }
+  }
   memset(loopPlay, 0, sizeof(loopPlay));
   memset(&audition, 0, sizeof(audition));
 }
@@ -636,10 +946,10 @@ int Tracker::InferTrackVoice(int track) const {
   if (track < 0 || track > 3) {
     return 0;
   }
-  uint8_t first = trackInstruments[track][0];
+  uint8_t first = InstAt(track, 0);
   bool same = true;
   for (int s = 1; s < kMaxSteps; s++) {
-    if (trackInstruments[track][s] != first) {
+    if (InstAt(track, s) != first) {
       same = false;
       break;
     }
@@ -648,8 +958,8 @@ int Tracker::InferTrackVoice(int track) const {
     return first;
   }
   for (int s = 0; s < kMaxSteps; s++) {
-    if (tracks[track][s] > 0) {
-      return trackInstruments[track][s];
+    if (NoteAt(track, s) > 0) {
+      return InstAt(track, s);
     }
   }
   return 0;
@@ -676,7 +986,8 @@ void Tracker::SetInstrument(int val) {
   }
   trackVoice[selectedTrack] = (uint8_t)val;
   for (int i = 0; i < kMaxSteps; i++) {
-    trackInstruments[selectedTrack][i] = (uint8_t)val;
+    uint16_t cell = steps[selectedTrack][i];
+    SetCell(selectedTrack, i, (uint8_t)(cell & 0x0F), (int8_t)(((cell >> 4) & 0x0F) - 8), (uint8_t)val);
   }
   if (val != kLoopsVoice) {
     StopLoop(selectedTrack);
@@ -838,9 +1149,11 @@ void Tracker::CaptureSong(SongData *song) const {
   song->currentPattern = (uint8_t)currentPattern;
   song->allPatternPlay = allPatternPlay ? 1 : 0;
   for (int t = 0; t < 4; t++) {
-    memcpy(song->tracks[t], tracks[t], kMaxSteps);
-    memcpy(song->octaves[t], trackOctaves[t], kMaxSteps);
-    memcpy(song->instruments[t], trackInstruments[t], kMaxSteps);
+    for (int s = 0; s < kMaxSteps; s++) {
+      song->tracks[t][s] = NoteAt(t, s);
+      song->octaves[t][s] = OctaveAt(t, s);
+      song->instruments[t][s] = InstAt(t, s);
+    }
     const Voice &voice = voices[t];
     SongVoice &out = song->voices[t];
     out.volume = voice.volume;
@@ -867,7 +1180,7 @@ void Tracker::CaptureSong(SongData *song) const {
 }
 
 void Tracker::ApplySong(const SongData &song) {
-  patternLength = song.patternLength;
+  patternLength = barsFromSteps(song.patternLength) * kStepsPerBar;
   masterVolume = song.masterVolume;
   memcpy(bpms, song.bpms, sizeof(bpms));
   currentPattern = song.currentPattern;
@@ -881,9 +1194,13 @@ void Tracker::ApplySong(const SongData &song) {
   allPatternPlay = song.allPatternPlay != 0;
   solo = false;
   for (int t = 0; t < 4; t++) {
-    memcpy(tracks[t], song.tracks[t], kMaxSteps);
-    memcpy(trackOctaves[t], song.octaves[t], kMaxSteps);
-    memcpy(trackInstruments[t], song.instruments[t], kMaxSteps);
+    for (int s = 0; s < kMaxSteps; s++) {
+      uint8_t note = song.tracks[t][s];
+      if (note > 15) {
+        note = 0;
+      }
+      SetCell(t, s, note, song.octaves[t][s], song.instruments[t][s]);
+    }
     Voice &voice = voices[t];
     const SongVoice &in = song.voices[t];
     voice.volume = in.volume;
@@ -910,7 +1227,7 @@ void Tracker::ApplySong(const SongData &song) {
   }
   bool selectedHasNotes = false;
   for (int s = 0; s < kMaxSteps; s++) {
-    if (tracks[selectedTrack][s] > 0) {
+    if (NoteAt(selectedTrack, s) > 0) {
       selectedHasNotes = true;
       break;
     }
@@ -925,6 +1242,11 @@ void Tracker::ApplySong(const SongData &song) {
     trackVoice[selectedTrack] = (uint8_t)voice;
   }
   RememberVoiceLabel(trackVoice[selectedTrack]);
+  editBar = 0;
+  followView = true;
+  clocksSinceZero = 0;
+  blockLearn = true;
+  ClampTransport();
   trackIndex = patternLength * currentPattern;
   stepSampleCount = 0;
   pressedOnce = true;
@@ -1150,9 +1472,10 @@ void Tracker::WritePattern(int track, const uint8_t *steps, int count) {
     if (note > 12) {
       note = 0;
     }
-    tracks[track][start + i] = note;
-    trackOctaves[track][start + i] = voices[track].octave;
-    trackInstruments[track][start + i] = trackVoice[track];
+    if (start + i >= kMaxSteps) {
+      break;
+    }
+    SetCell(track, start + i, note, voices[track].octave, trackVoice[track]);
   }
   SetHint("Pattern put");
 }
@@ -1185,16 +1508,25 @@ void Tracker::FillSnap(Snap *snap) const {
   strncpy(snap->inst, oledInstString, sizeof(snap->inst) - 1);
   memset(snap->hint, 0, sizeof(snap->hint));
   strncpy(snap->hint, hint, sizeof(snap->hint) - 1);
-  int origin = (shown / 16) * 16;
   int patStart = patternLength * currentPattern;
-  int patEnd = patStart + patternLength;
-  if (origin < patStart) {
-    origin = patStart;
+  int bars = Bars();
+  int bar = editBar;
+  if (bar < 0) {
+    bar = 0;
+  } else if (bar >= bars) {
+    bar = bars - 1;
   }
-  if (origin + 16 > patEnd && patEnd >= 16) {
-    origin = patEnd - 16;
+  int origin = patStart + bar * kStepsPerBar;
+  if (origin < 0) {
+    origin = 0;
+  }
+  if (origin >= kMaxSteps) {
+    origin = patStart > 0 ? patStart : 0;
   }
   snap->barOrigin = (uint16_t)origin;
+  snap->barIndex = (uint8_t)(bar + 1);
+  snap->barCount = (uint8_t)bars;
+  snap->patternSlots = (uint8_t)PatternSlots();
   for (int t = 0; t < 4; t++) {
     snap->level[t] = (int16_t)lastSamples[t];
     snap->vol[t] = voices[t].volume;
@@ -1225,7 +1557,7 @@ void Tracker::FillSnap(Snap *snap) const {
     }
     for (int s = 0; s < 16; s++) {
       int idx = origin + s;
-      snap->notes[t][s] = (idx >= 0 && idx < kMaxSteps) ? tracks[t][idx] : 0;
+      snap->notes[t][s] = (idx >= 0 && idx < kMaxSteps) ? NoteAt(t, idx) : 0;
     }
   }
 }
