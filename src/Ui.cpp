@@ -13,6 +13,7 @@
 #include <M5Cardputer.h>
 #include <Preferences.h>
 #include <ctype.h>
+#include <esp_heap_caps.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -52,6 +53,15 @@ static const PianoKey kPiano[] = {
 };
 
 static M5Canvas *canvas = nullptr;
+// rgb332 rows are expanded here and pushed as RGB565. Keeping the strip in
+// BSS means the panel update never mallocs a second full frame. An 8-bit
+// pushSprite does that (LovyanGFX grows a DMA buffer toward 240*135*2) and
+// that allocation reset the ADV once I2S DMA was running.
+static const int kSpriteW = 240;
+static const int kSpriteH = 135;
+static const int kBlitRows = 8;
+static uint16_t blitBuf[kSpriteW * kBlitRows];
+static void pushCanvas();
 static Preferences prefs;
 static int page = 0;
 static int cursor = 0;
@@ -153,7 +163,7 @@ static void requestExit() {
   canvas->println("Clears the boot slot");
   canvas->setCursor(8, 68);
   canvas->println("Press Enter on splash");
-  canvas->pushSprite(0, 0);
+  pushCanvas();
   delay(500);
   if (!exitToLauncher()) {
     launcherOk = false;
@@ -182,14 +192,63 @@ void uiLoadPrefs() {
   prefsLoaded = true;
 }
 
+static uint16_t rgb332to565(uint8_t c) {
+  uint32_t r3 = c >> 5;
+  uint32_t g3 = (c >> 2) & 7;
+  uint32_t b2 = c & 3;
+  uint32_t r5 = (r3 << 2) | (r3 >> 1);
+  uint32_t g6 = (g3 << 3) | g3;
+  uint32_t b5 = (b2 << 3) | (b2 << 1) | (b2 >> 1);
+  return (uint16_t)((r5 << 11) | (g6 << 5) | b5);
+}
+
+static void pushCanvas() {
+  if (!canvas || !canvas->getBuffer()) {
+    return;
+  }
+  const uint8_t *src = static_cast<const uint8_t *>(canvas->getBuffer());
+  bool prev = M5Cardputer.Display.getSwapBytes();
+  M5Cardputer.Display.setSwapBytes(true);
+  M5Cardputer.Display.startWrite();
+  for (int y = 0; y < kSpriteH; y += kBlitRows) {
+    int rows = kSpriteH - y;
+    if (rows > kBlitRows) {
+      rows = kBlitRows;
+    }
+    for (int row = 0; row < rows; row++) {
+      const uint8_t *in = src + (size_t)(y + row) * kSpriteW;
+      uint16_t *out = blitBuf + row * kSpriteW;
+      for (int x = 0; x < kSpriteW; x++) {
+        out[x] = rgb332to565(in[x]);
+      }
+    }
+    M5Cardputer.Display.pushImage(0, y, kSpriteW, rows, blitBuf);
+  }
+  M5Cardputer.Display.endWrite();
+  M5Cardputer.Display.setSwapBytes(prev);
+}
+
+static void logUiHeap(const char *tag) {
+  uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  Serial.printf("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
+}
+
 void uiBegin() {
   uiLoadPrefs();
+  logUiHeap("before sprite");
   canvas = new M5Canvas(&M5Cardputer.Display);
-  // Stay on RGB565. An 8-bit sprite has to be expanded to the panel on every
-  // push, and that path reset the ADV once I2S DMA started after the first
-  // Play frame. The extra 32KB is the cost of a boot that stays up.
-  canvas->setColorDepth(16);
-  canvas->createSprite(240, 135);
+  // rgb332, 240*135 = 32400 bytes, half of the RGB565 canvas. The strip
+  // blit above is what makes that safe next to I2S: pushSprite would
+  // allocate another ~32KB DMA buffer to expand the frame.
+  canvas->setColorDepth(static_cast<uint8_t>(8));
+  void *buf = canvas->createSprite(kSpriteW, kSpriteH);
+  if (!buf) {
+    Serial.println("UI: sprite alloc failed");
+  } else {
+    Serial.printf("UI: sprite 8-bit bytes=%u\n", (unsigned)(kSpriteW * kSpriteH));
+  }
+  logUiHeap("after sprite");
   canvas->setTextSize(1);
   canvas->setTextColor(COL_TEXT);
   M5Cardputer.Display.setBrightness(bright);
@@ -334,7 +393,11 @@ static void drawPlay() {
   canvas->setCursor(2, 106);
   canvas->setTextColor(COL_DIM);
   canvas->print("Z row piano   Q row +oct");
-  legend("Spc play  Tab page  ` hold exit");
+  if (audioFaultText()[0] && strcmp(audioFaultText(), "audio ok") != 0) {
+    legend(audioFaultText());
+  } else {
+    legend("Spc play  Tab page  ` hold exit");
+  }
 }
 
 static int instCount() {
@@ -646,7 +709,7 @@ static void drawMidi(BleMidi &ble) {
   legend("E edit name in Settings");
 }
 
-static void drawSettings() {
+static void drawSettings(BleMidi &ble) {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   canvas->print("Settings");
@@ -682,12 +745,10 @@ static void drawSettings() {
         canvas->printf("%dmV %d%%", mv, pct);
       }
     } else if (idx == 4) {
-      unsigned freeKb = (unsigned)(ESP.getFreeHeap() / 1024);
-      unsigned totalKb = (unsigned)(ESP.getHeapSize() / 1024);
-      canvas->printf("%u/%uk", freeKb, totalKb);
-      if (psramFound()) {
-        canvas->printf(" P%uk", (unsigned)(ESP.getFreePsram() / 1024));
-      }
+      unsigned freeKb = (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
+      unsigned blkKb = (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
+      const char *bleWord = ble.Connected() ? "conn" : (ble.Advertising() ? "adv" : "off");
+      canvas->printf("%uk blk %uk %s", freeKb, blkKb, bleWord);
     } else {
       canvas->print(sdCard.Mounted() ? "mounted" : "none");
     }
@@ -696,9 +757,7 @@ static void drawSettings() {
   canvas->setCursor(4, 108);
   canvas->printf("v%s  %s", MOTHDECK_VERSION, BOARD_NAME);
   if (!naming && cursor == 4) {
-    char line[40];
-    snprintf(line, sizeof(line), "free/total  largest %uk", (unsigned)(ESP.getMaxAllocHeap() / 1024));
-    legend(line);
+    legend(ble.StatusLine());
   } else {
     legend(naming ? "Ent apply  Bksp  ` cancel" : "Lf/Rt change  Ent name");
   }
@@ -780,7 +839,7 @@ void uiDraw(BleMidi &ble) {
     case kSongPage: drawSong(); break;
     case kLoopsPage: drawLoops(); break;
     case kMidiPage: drawMidi(ble); break;
-    case kSettingsPage: drawSettings(); break;
+    case kSettingsPage: drawSettings(ble); break;
     default: drawExit(); break;
   }
   drawToast();
@@ -788,7 +847,7 @@ void uiDraw(BleMidi &ble) {
     drawOverlay();
   }
   if (canvas->getBuffer()) {
-    canvas->pushSprite(0, 0);
+    pushCanvas();
   }
 }
 
@@ -1227,6 +1286,9 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
     return;
   }
   if (st.space) {
+    if (!audioRunning()) {
+      toastSet(audioFaultText());
+    }
     audioCommand('P', 0);
     return;
   }

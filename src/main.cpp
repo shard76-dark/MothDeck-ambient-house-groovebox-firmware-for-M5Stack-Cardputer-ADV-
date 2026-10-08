@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <M5Cardputer.h>
+#include <esp_heap_caps.h>
 #include "AudioEngine.h"
 #include "BleMidi.h"
 #include "BoardConfig.h"
@@ -130,24 +131,31 @@ static void showSplash() {
   }
 }
 
+static void logHeap(const char *tag) {
+  uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  Serial.printf("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
+}
+
 void setup() {
-  // USB CDC is on from boot. The name is in NVS, which Arduino has already
-  // opened. BLE has to come up before the 64KB sprite and the I2S DMA:
-  // NimBLE takes its controller memory from internal SRAM, and this module
-  // has no PSRAM. After those allocations the largest free block is often
-  // too small, init returns false, and nothing goes on the air.
+  // USB CDC is on from boot. Playback is first: the speaker DMA and the
+  // audio task take their internal RAM before the sprite and before BLE.
+  // BLE is last, and Begin() refuses to touch the controller when the
+  // largest free block is under 36KB, so a failed radio alloc cannot
+  // take the memory the tracker is already using.
   Serial.begin(115200);
   Serial.println("MothDeck BLE boot");
   uiLoadPrefs();
-  ble.Begin(uiBleName());
   bringUpDisplay();
+  logHeap("after display");
   showSplash();
+  audioStart();
   uiBegin();
   uiDraw(ble);
   bootExitChord();
+  ble.Begin(uiBleName());
   uiMountStorage();
-  audioStart();
-  ble.RecommitAfter("audio");
+  logHeap("after storage");
 }
 
 void loop() {

@@ -266,7 +266,7 @@ The Exit page is a confirm, and it is in the page list only when a Launcher imag
 
 ## MIDI
 
-Advertised as a BLE MIDI peripheral on legacy connectable advertising. The stack is NimBLE, and its controller memory is internal RAM. The Stamp-S3A has no PSRAM, so BLE is started before the screen sprite and the audio engine. The default name is `MothDeck`. Change it on Settings. The name is stored in NVS. The primary advertising packet is general-discoverable and carries both the name and the 128-bit MIDI service UUID. A stored name longer than 8 characters is shortened there; the full name is in the scan response. Pairing is Just Works with bonding and no passkey. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
+Advertised as a BLE MIDI peripheral on legacy connectable advertising. The stack is NimBLE, and its controller memory is internal RAM. The Stamp-S3A has no PSRAM. Audio starts before the screen sprite, and BLE starts only if a contiguous internal block of at least 36KB is still free; otherwise the MIDI page says init failed and playback keeps running. The sprite is rgb332 (32,400 bytes) and is expanded to the panel eight rows at a time, so the blit does not allocate a second full frame. The default name is `MothDeck`. Change it on Settings. The name is stored in NVS. The primary advertising packet is general-discoverable and carries both the name and the 128-bit MIDI service UUID. A stored name longer than 8 characters is shortened there; the full name is in the scan response. Pairing is Just Works with bonding and no passkey. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
 
 | Message | Map |
 | --- | --- |

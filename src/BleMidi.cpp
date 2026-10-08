@@ -27,7 +27,13 @@ static const uint16_t kAdvIntervalMax = 0x40;
 // A largest free block under this size is reported as "no mem": the
 // controller wants one contiguous internal block, and init returns false
 // rather than advertising.
-static const uint32_t kBleMinLargest = 64 * 1024;
+// Below this, nimble_port_init is not called. A failed controller alloc can
+// still consume the largest internal block, and playback is already using
+// its own. 36KB is the floor at which the prebuilt NimBLE image is worth
+// attempting; the Arduino libs ship with the pool sizes baked in
+// (3 connections, internal RAM only) and those CONFIG_BT_NIMBLE_* values
+// cannot be trimmed without rebuilding libbt.a.
+static const uint32_t kBleMinLargest = 36 * 1024;
 
 static BLECharacteristic *midiChar = nullptr;
 static portMUX_TYPE midiMux = portMUX_INITIALIZER_UNLOCKED;
@@ -225,6 +231,18 @@ bool BleMidi::Begin(const char *name) {
     ctrlName(ctrl),
     psramFound() ? 1 : 0);
 
+  if (heapLargestAtInit < kBleMinLargest) {
+    snprintf(failReason, sizeof(failReason), "no mem");
+    initOk = false;
+    Serial.printf(
+      "BLE: init failed (no mem) free=%u largest=%u ctrl=%s\n",
+      (unsigned)heapFreeAtInit,
+      (unsigned)heapLargestAtInit,
+      ctrlName(ctrl));
+    Serial.println("BLE: skipped init, largest block below 36k");
+    return false;
+  }
+
   if (btMemReleased(BT_MODE_BLE)) {
     snprintf(failReason, sizeof(failReason), "mem released");
     initOk = false;
@@ -406,12 +424,14 @@ const char *BleMidi::StatusLine() {
 }
 
 const char *BleMidi::DiagLine() {
+  uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   snprintf(
     diagBuf,
     sizeof(diagBuf),
     "heap %uk blk %uk adv %s",
-    (unsigned)(heapFreeAtInit / 1024),
-    (unsigned)(heapLargestAtInit / 1024),
+    (unsigned)(freeB / 1024),
+    (unsigned)(largest / 1024),
     Advertising() ? "on" : "off");
   return diagBuf;
 }

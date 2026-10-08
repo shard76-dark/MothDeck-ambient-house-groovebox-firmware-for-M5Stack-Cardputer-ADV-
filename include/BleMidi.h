@@ -17,8 +17,8 @@ public:
   // Fits a 40-column screen. "MIDI advertising" only while the controller
   // is actually advertising. Otherwise "BLE off: ..." with the reason.
   const char *StatusLine();
-  // Free internal heap and largest block measured just before BLE init,
-  // plus whether advertising is active now.
+  // Live free internal heap, largest free block, and whether advertising
+  // is active. Fits on the MIDI page and does not need a serial cable.
   const char *DiagLine();
   int Poll(MidiEvent *out, int maxOut);
   int ConsumeConnectEdge();
