@@ -55,6 +55,13 @@ struct Snap {
   uint8_t fxDrive;
   uint8_t fxChorus;
   uint8_t fxTrem;
+  uint8_t scaleMode;
+  uint8_t scaleRoot;
+  uint8_t arpMode;
+  uint8_t osc2Wave;
+  int8_t osc2Coarse;
+  uint8_t blend;
+  uint16_t glideMs;
   uint8_t barIndex;
   uint8_t barCount;
   uint8_t patternSlots;

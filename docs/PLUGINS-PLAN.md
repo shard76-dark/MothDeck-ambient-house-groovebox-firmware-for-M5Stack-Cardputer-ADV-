@@ -1,6 +1,6 @@
 # SD-loadable plugins
 
-Design note only. No firmware in this change. Implementation waits until Chris approves this revision.
+1.2.0 implements this note: `mothdeck-patch 1` loads from `/moth/instruments/<folder>/`, and the three blocks that were flagged (scale lock, held-note arp, live second oscillator plus glide) are in the firmware. Controls are Enter on the Instrument page and the Scale, Root, Arp, Glide, Osc2, Blend, and Coarse rows on the FX page. Scale lock is a function over the pitch class, not a 128-byte table. Sentences below that say a key fails until a block exists describe the plan before that approval. The hat in section 6 was not built.
 
 Chris chose option (b). A plugin is a text file on the microSD card. It names a sound MothDeck already plays and the voice and FX numbers that already exist, and the firmware applies those numbers. The card never supplies code. A RAM hat on the expansion header is an optional extra, written up in section 6. The patch format does not depend on it.
 
@@ -135,7 +135,7 @@ As of 1.1.2 the radio is off at boot. Turning it on unloads streaming loop windo
 
 Header `mothdeck-patch 1`, same folder as today: `/moth/instruments/<folder>/manifest.txt`. One file is one preset. It selects one source and then sets the voice and FX fields above. Keys are `name=value`, integers except `name`, `builtin`, `wave`, and `sample`. Names follow `docs/FORMATS.md`: no slashes, no `..`. The text stays inside the 1024-byte read the loader already uses.
 
-Unknown keys are a failed load. The previous instrument stays, and the toast names the key. That is how `scale`, `glide`, and a second oscillator stay out until their blocks exist.
+Unknown keys are a failed load. The previous instrument stays, and the toast names the key. `scale`, `glide`, and `osc2` are known keys as of 1.2.0.
 
 ### Source, one of these
 
@@ -196,7 +196,7 @@ A patch adds no interpreter and no per-sample node walk. The cycles are whatever
 | Delay, chorus, reverb | The 8192-sample history already on each voice. No second line. |
 | BLE | No loop-pool allocation. No buffer bigger than one plugin sample. |
 
-If the three small blocks below are approved later, their state is a 128-byte scale map plus a handful of notes and a glide phase per track. That stays under a few hundred bytes and does not touch the BLE block.
+The three blocks shipped in 1.2.0. Scale lock is a function, not a 128-byte map. Each voice keeps eight held notes, a glide ramp, and a second phase. That is a few dozen bytes per voice in static RAM, not the loop pool, and it does not touch the BLE block.
 
 ### Native code stays out
 
@@ -208,9 +208,9 @@ An ELF or position-independent blob needs executable RAM. This chip has no PSRAM
 
 No block remaps notes. A patch cannot express this.
 
-The block, when added, is a 128-byte table from incoming note to scale note, chosen root, modes limited to major, minor, harmonic minor, mixolydian, phrygian, and chromatic. It runs where a BLE or local note becomes `SetNote`, before the voice. No audio RAM, no change while BLE is on. Until that lands, a file with `scale=` or `root=` fails the load.
+1.2.0 snaps the note inside `SetNote`: nearest pitch class, ties down, modes major, minor, harmonic minor, mixolydian, phrygian, and chromatic. No audio RAM, no change while BLE is on.
 
-Sketch, not accepted by the first parser:
+The file that loads:
 
 ```
 mothdeck-patch 1
@@ -240,7 +240,7 @@ res=10
 
 `arp=2` is the other pair (five down, seven up). `arp` on a sample plugin does nothing audible, because `chordMult` only runs inside the built-in waveform reader.
 
-The LOOPA walker holds whatever notes are down and steps them on a clock division. That needs a new small block: a few note slots per track and a step counter, run once per block next to the scale remap, still no sample RAM. A file that says `arp=held` fails until that block exists. The first parser accepts only `arp=0`, `arp=1`, and `arp=2`.
+1.2.0 also accepts `arp=held`. Up to eight MIDI notes stay down, and the voice steps once per 16th. The Cardputer keyboard does not send note-off, so the held set is filled from BLE. No sample RAM.
 
 ### Dual-oscillator glide — preset of Bass or Saw; live blend and glide are a new small block
 
@@ -262,7 +262,7 @@ pitch=1
 
 `pitch=1` is the existing downward sweep from note-on. It is not a glide from the last note to the new one. `source=fm` is the other existing two-sine colour, baked at load, integer ratio only. `source=subtractive` is one wave.
 
-A folder still cannot name a second waveform, a blend, a non-harmonic detune, or a glide time. Those are one new small block if Chris wants them: a second phase accumulator, a coarse transpose, a blend, and a glide time in milliseconds, a few integers per voice, using the oscillators `ToneSynth` already has. No new delay line. Until then the keys `osc2`, `blend`, and `glide` fail the load.
+1.2.0 adds that block: a second phase, coarse transpose −24..24, blend 0..100, and glide time in milliseconds, using the oscillators `ToneSynth` already has. No new delay line. `osc2`, `coarse`, `blend`, and `glide` load.
 
 ### Oscillator plus envelope — existing
 

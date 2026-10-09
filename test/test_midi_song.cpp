@@ -372,6 +372,32 @@ static void testSongV3() {
   expect(songEncodedSize(song) == v2 + kSongTracks * kSongFxBytes, "inserts add 48 bytes to a version 2 song");
 }
 
+static void testSongV4() {
+  SongData song;
+  std::memset(&song, 0, sizeof(song));
+  song.patternLength = 16;
+  song.bpms[0] = 120;
+  song.blocks[0].scaleMode = 2;
+  song.blocks[0].scaleRoot = 9;
+  song.blocks[0].arpMode = 3;
+  song.blocks[0].osc2Wave = 3;
+  song.blocks[0].osc2Coarse = -12;
+  song.blocks[0].blend = 40;
+  song.blocks[0].glideMs = 90;
+  expect(songNeedsV4(song), "scale and glide require version 4");
+  int need = songEncodedSize(song);
+  expect(need <= kSongFileBytesMax, "version 4 stays inside the slot buffer");
+  uint8_t buf[kSongFileBytesMax];
+  int n = songEncode(song, buf, kSongFileBytesMax);
+  expect(n == need && buf[4] == kSongVersionV4, "version 4 header");
+  SongData loaded;
+  expect(songDecode(buf, n, &loaded), "version 4 round trip");
+  expect(loaded.blocks[0].scaleMode == 2 && loaded.blocks[0].scaleRoot == 9, "scale restored");
+  expect(loaded.blocks[0].arpMode == 3 && loaded.blocks[0].osc2Wave == 3, "arp and osc2 restored");
+  expect(loaded.blocks[0].osc2Coarse == -12 && loaded.blocks[0].blend == 40 && loaded.blocks[0].glideMs == 90, "coarse blend glide restored");
+  expect(songDecode(buf, n - 1, &loaded) == false, "truncated version 4 is rejected");
+}
+
 static void testDevLogDefault() {
   expect(MOTHOS_DEV_LOG == 0, "MOTHOS_DEV_LOG stays off unless the compiler sets it");
   DEV_LOG("SD OLED DAC logs are compiled out");
@@ -387,6 +413,7 @@ int main() {
   testMapping();
   testSongFile();
   testSongV2();
+  testSongV4();
   testSongV3();
   if (failures) {
     std::printf("%d failed\n", failures);

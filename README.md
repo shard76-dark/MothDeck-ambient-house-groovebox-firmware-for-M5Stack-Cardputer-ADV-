@@ -14,6 +14,7 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 - BLE MIDI pairs with an MPC Live II, patterns run from 1 to 8 bars, and playback stays up if the radio cannot start. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - 1.1.1 is unreleased. It adds a Settings BLE on/off switch and an Unload BLE row, fixes SD loops that only opened two files after BLE started, and draws the Play page as a piano roll. The image above is still 1.1.0.
 - 1.1.2 is unreleased. BLE is off at boot and pairs with an MPC again, the air name is `Mothdeck`, Rec starts off, and loops unload while MIDI is on. Notes are in [CHANGELOG.md](CHANGELOG.md). The image above is still 1.1.0.
+- 1.2.0 is unreleased. Instrument folders can be patches (`mothdeck-patch 1`), including scale lock, a held-note arp, and a second oscillator with glide. Notes are in [CHANGELOG.md](CHANGELOG.md). The image above is still 1.1.0.
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
@@ -93,7 +94,15 @@ SFX is twelve different one-shots (riser, downlifter, zap, sweep, impact, noise,
 
 These are different pages.
 
-FX is the insert on the selected track: filter (off, low pass, high pass), cutoff, resonance, delay, feedback, mix, reverb send, bitcrush, drive, chorus, and tremolo. Fn+`;` and Fn+`.` move the row. Fn+`,`, Fn+`/`, and Enter change the value. Delay follows the BPM as 1/32, 1/16, or 1/8. Each track keeps its own insert. Inserts are saved only when one is in use, which makes the song file version 3. The Play-page keys A, F, K, and L still cycle the older 0–2 low pass, retrig, wobble, and echo on the selected track.
+FX is the insert on the selected track: filter (off, low pass, high pass), cutoff, resonance, delay, feedback, mix, reverb send, bitcrush, drive, chorus, and tremolo, then Scale, Root, Arp, Glide, Osc2, Blend, and Coarse. Fn+`;` and Fn+`.` move the row. Fn+`,`, Fn+`/`, and Enter change the value. The list shows seven rows and scrolls. Delay follows the BPM as 1/32, 1/16, or 1/8. Each track keeps its own insert. Inserts are saved only when one is in use, which makes the song file version 3. Scale, a held arp, Osc2, blend, coarse, or glide make version 4.
+
+Scale is off, major, minor, harmonic minor, mixolydian, phrygian, or chromatic. Root is the pitch class, C through B. A note from the keyboard, the sequencer, or BLE snaps to the nearest scale tone, and a tie goes down. On a sample patch the file's `root=` is the MIDI note the recording is at; `scaleroot=` is the scale's pitch class when both are set.
+
+Arp is off, pat 1, pat 2, or held. Pat 1 and pat 2 are the older built-in interval walks. Held keeps the MIDI notes that are down (up to eight) and steps to the next one each 16th note. The Cardputer keyboard is one note at a time and does not send note-off, so a held chord comes from BLE. The first note sounds immediately. Releasing the last note stops the track.
+
+Glide is the time from the previous note to the new one, in steps of 10 ms, up to 500 ms on the device (a patch file may say up to 2000). The first note snaps. Osc2 is a second sine, square, saw, or triangle, mixed by Blend (0–100, steps of 10) and transposed by Coarse (−24..24 semitones). It runs on built-in tones and on short samples.
+
+The Play-page keys A, F, K, and L still cycle the older 0–2 low pass, retrig, wobble, and echo on the selected track.
 
 Mixer shows all four tracks as volume faders, with the instrument name on each and the selected track highlighted. Fn+`;` raises the selected track and Fn+`.` lowers it (0–8). Fn+`,` and Fn+`/` move between tracks. `1`–`4` jump to a track. `M` mutes the selected track and `S` solos it. Volume is stored in every song version.
 
@@ -115,9 +124,13 @@ Loads that do not fit say how many kilobytes they need and how many are free (`N
 
 | What | Limit |
 | --- | --- |
-| Plugin sample | 4096 frames, 4 loaded at once |
+| Built-in patch | No heap. The numbers sit on the voice |
+| Subtractive or FM cycle | 168 frames, 336 bytes |
+| Plugin sample | 4096 frames (8192 bytes), 4 loaded at once |
 | Drum kit | 8000 frames total, 1800 per pad, one kit cache |
-| Loop streams | 4 open, each a small window, not the whole file |
+| Loop windows | Preferred pool is 20480 bytes: 5 slots × 1024 frames × 2 buffers × 2 bytes. One slot is 4096 bytes. Unloaded while BLE is on |
+
+A patch that only sets a built-in, a cycle, or a short sample does not count as a loop. Turning BLE on leaves those plugins loaded. The six example folders are `a-minor`, `held-arp`, `glide-bass`, `saw-pluck`, `body`, and `room-drive` under `sd-card-example/moth/instruments/`.
 
 An allocation also leaves about 8KB of internal heap for the rest of the system. A corrupt manifest or WAV is reported on the page and skipped.
 
@@ -227,7 +240,7 @@ While the page list is open it takes every key. Fn+`;` and Fn+`.` move the highl
 
 ### Instrument
 
-`9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track only. The four names across the top of the page are tracks 1–4. `R` rescans. `,` and `/` load drum kits, as described above. 1–4 still select the track and 5–8 the pattern.
+`9` / `0` and Fn+`;` / Fn+`.` move the instrument list. Enter assigns the row to the selected track only. Folders under `/moth/instruments` are listed after the built-ins. A `mothdeck-patch 1` folder copies its voice, FX, scale, arp, and glide numbers onto that track. A `mothdeck-instrument 1` folder loads the sample or cycle as before. `R` rescans. `,` and `/` load drum kits, as described above. 1–4 still select the track and 5–8 the pattern. The four names across the top of the page are tracks 1–4.
 
 ### FX
 

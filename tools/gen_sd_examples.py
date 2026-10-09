@@ -190,7 +190,150 @@ def main():
             ]
         ),
     )
+    # Six mothdeck-patch folders. They sit beside the older instrument
+    # manifests. body.wav is a short original pluck under the 4096-frame cap.
+    body = os.path.join(inst, "body")
+    os.makedirs(body, exist_ok=True)
+    write_wav(os.path.join(body, "body.wav"), pluck(1800, rate, 196.0), rate)
+    write(
+        os.path.join(body, "manifest.txt"),
+        "\n".join(
+            [
+                "mothdeck-patch 1",
+                "name=body",
+                "source=sample",
+                "sample=body.wav",
+                "root=55",
+                "rate=22050",
+                "oneshot=1",
+                "gain=100",
+                "envelope=0",
+                "envlen=2",
+                "scale=off",
+                "arp=0",
+                "osc2=off",
+                "glide=0",
+                "",
+            ]
+        ),
+    )
+    write(
+        os.path.join(inst, "a-minor", "manifest.txt"),
+        "\n".join(
+            [
+                "mothdeck-patch 1",
+                "name=a-minor",
+                "source=builtin",
+                "builtin=bass",
+                "scale=minor",
+                "root=9",
+                "envelope=2",
+                "envlen=1",
+                "filter=1",
+                "cutoff=42",
+                "res=12",
+                "arp=0",
+                "osc2=off",
+                "glide=0",
+                "",
+            ]
+        ),
+    )
+    write(
+        os.path.join(inst, "held-arp", "manifest.txt"),
+        "\n".join(
+            [
+                "mothdeck-patch 1",
+                "name=held-arp",
+                "source=builtin",
+                "builtin=saw",
+                "arp=held",
+                "scale=off",
+                "envelope=2",
+                "envlen=2",
+                "filter=1",
+                "cutoff=70",
+                "res=8",
+                "osc2=off",
+                "glide=0",
+                "",
+            ]
+        ),
+    )
+    write(
+        os.path.join(inst, "glide-bass", "manifest.txt"),
+        "\n".join(
+            [
+                "mothdeck-patch 1",
+                "name=glide-bass",
+                "source=builtin",
+                "builtin=bass",
+                "osc2=saw",
+                "coarse=-12",
+                "blend=40",
+                "glide=90",
+                "scale=off",
+                "arp=0",
+                "envelope=2",
+                "envlen=1",
+                "filter=1",
+                "cutoff=36",
+                "res=16",
+                "drive=20",
+                "",
+            ]
+        ),
+    )
+    write(
+        os.path.join(inst, "saw-pluck", "manifest.txt"),
+        "\n".join(
+            [
+                "mothdeck-patch 1",
+                "name=saw-pluck",
+                "source=subtractive",
+                "wave=saw",
+                "cutoff=80",
+                "resonance=10",
+                "gain=100",
+                "envelope=0",
+                "envlen=3",
+                "filter=1",
+                "cutoff=64",
+                "res=12",
+                "scale=off",
+                "arp=0",
+                "osc2=off",
+                "glide=0",
+                "",
+            ]
+        ),
+    )
+    write(
+        os.path.join(inst, "room-drive", "manifest.txt"),
+        "\n".join(
+            [
+                "mothdeck-patch 1",
+                "name=room-drive",
+                "source=builtin",
+                "builtin=sine",
+                "drive=55",
+                "delay=2",
+                "feedback=35",
+                "mix=28",
+                "reverb=30",
+                "chorus=10",
+                "envelope=0",
+                "envlen=2",
+                "scale=off",
+                "arp=0",
+                "osc2=off",
+                "glide=0",
+                "",
+            ]
+        ),
+    )
     print("wrote %s" % OUT)
+    print("patch folders: a-minor held-arp glide-bass saw-pluck body room-drive")
 
 
 if __name__ == "__main__":

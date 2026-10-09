@@ -89,6 +89,20 @@ Voice::Voice() {
   tremPhase = 0;
   shotSerial = 0;
   memset(shots, 0, sizeof(shots));
+  memset(&block, 0, sizeof(block));
+  sounding = 1;
+  heldCount = 0;
+  heldPos = 0;
+  arpSamples = 0;
+  glideFrom = 0;
+  glideTo = 0;
+  glidePos = 0;
+  glideLen = 0;
+  glideCur = 0;
+  baseFreq = 0;
+  extFrom = 0;
+  extTo = 0;
+  osc2Phase = 0;
   SetEnvelopeLength(1);
   ResetEffects();
 }
@@ -279,6 +293,9 @@ int Voice::MixShots() {
 }
 
 int Voice::RenderSource() {
+  if (!sounding) {
+    return 0;
+  }
   int sample = 0;
   if (voiceNum >= 12) {
     ExtSampleView view;
@@ -294,6 +311,8 @@ int Voice::RenderSource() {
 }
 
 int Voice::OutputWith(int extra) {
+  AdvanceHeld();
+  AdvanceGlide();
   int sample = RenderSource() + extra;
   if (soloMute || mute) {
     return 0;
@@ -571,7 +590,7 @@ int Voice::ApplyInserts(int sample) {
 
 int Voice::ReadWaveform() {
   int vSel = voiceNum;
-  int baseFreqLocal = baseFreq;
+  int baseFreqLocal = glideCur > 0 ? glideCur : baseFreq;
 
   if (samplerMode) {
     vSel = note;
@@ -623,6 +642,7 @@ int Voice::ReadWaveform() {
     baseFreqLocal = scaleByBend(baseFreqLocal, bend14);
   }
   int sample = toneSample(&tone, vSel, baseFreqLocal);
+  sample = MixOsc2(sample, baseFreqLocal);
 
   // Pad, organ, flute, and bass keep a long body. The default fade is
   // short enough that those voices used to die like a piano key.
@@ -763,11 +783,36 @@ void Voice::SetNote(int val, bool delay, int optOctave, int optInstrument) {
   sampleIndex = 0;
   pitchDur = 7000;
   envelopeIndex = 0;
+  sounding = 1;
   note = val;
   voiceNum = optInstrument;
   recOctave = optOctave;
   int oct = (optOctave == -1) ? octave : optOctave;
-  baseFreq = GetBaseFreq(val, oct);
+  if (block.scaleMode > 0 && val >= 0 && val <= 11) {
+    int midi = synthToMidiNote(val, oct);
+    midi = scaleLock(midi, block.scaleRoot, block.scaleMode);
+    midiNoteToSynth(midi, val, oct);
+    note = val;
+    optOctave = oct;
+    recOctave = optOctave;
+  }
+  int target = GetBaseFreq(val, oct);
+  if (block.glideMs > 0 && glideCur > 0) {
+    glideFrom = glideCur;
+    glideTo = target;
+    glideLen = (int)block.glideMs * kSampleRate / 1000;
+    if (glideLen < 1) {
+      glideLen = 1;
+    }
+    glidePos = 0;
+  } else {
+    glideFrom = target;
+    glideTo = target;
+    glideLen = 0;
+    glidePos = 0;
+    glideCur = target;
+  }
+  baseFreq = target;
   baseFreq_ch1 = GetBaseFreq(val - 4, oct);
   baseFreq_ch2 = GetBaseFreq(val + 3, oct);
   baseFreq_ch3 = GetBaseFreq(val - 5, oct);
@@ -798,7 +843,14 @@ void Voice::SetNote(int val, bool delay, int optOctave, int optInstrument) {
       if (step < 1) {
         step = 1;
       }
-      extBaseStep = step;
+      if (block.glideMs > 0 && extBaseStep > 0) {
+        extFrom = extBaseStep;
+        extTo = step;
+      } else {
+        extFrom = step;
+        extTo = step;
+        extBaseStep = step;
+      }
     }
   }
   ArmPcm(optInstrument);
@@ -837,6 +889,7 @@ int Voice::ReadExt() {
     return 0;
   }
   int sample = view.data[idx];
+  sample = MixOsc2(sample, glideCur > 0 ? glideCur : baseFreq);
   int step = extBaseStep > 0 ? extBaseStep : 1000;
   if (bend14 != 8192) {
     step = scaleByBend(step, bend14);
@@ -862,6 +915,116 @@ int Voice::ReadExt() {
     sample /= 3;
   }
   return sample;
+}
+
+void Voice::CopyBlock(const TrackBlock &in) {
+  block = in;
+  trackBlockClamp(&block);
+  if (block.arpMode != 3) {
+    heldCount = 0;
+  }
+  if (block.arpMode == 1 || block.arpMode == 2) {
+    chordMult = block.arpMode;
+  } else if (block.arpMode == 3) {
+    chordMult = 0;
+  }
+}
+
+void Voice::AdvanceGlide() {
+  if (block.glideMs == 0 || glideLen <= 0) {
+    glideCur = baseFreq;
+    return;
+  }
+  int pos = glidePos;
+  glideCur = glideAt(glideFrom, glideTo, pos, glideLen);
+  if (extFrom > 0 || extTo > 0) {
+    int step = glideAt(extFrom, extTo, pos, glideLen);
+    if (step < 1) {
+      step = 1;
+    }
+    extBaseStep = step;
+  }
+  if (glidePos < glideLen) {
+    glidePos++;
+  }
+}
+
+void Voice::AdvanceHeld() {
+  if (block.arpMode != 3 || heldCount < 2 || !sounding) {
+    return;
+  }
+  float rate = bps > 0.2f ? bps : 2.0f;
+  int sps = (int)(11025.0f / rate);
+  if (sps < 256) {
+    sps = 256;
+  }
+  arpSamples++;
+  if (arpSamples < sps) {
+    return;
+  }
+  heldPos = (uint8_t)((heldPos + 1) % heldCount);
+  int pitch = 0;
+  int oct = 0;
+  midiNoteToSynth(held[heldPos], pitch, oct);
+  int inst = voiceNum;
+  SetNote(pitch, false, oct, inst);
+  arpSamples = 0;
+}
+
+int Voice::MixOsc2(int sample, int freq) {
+  if (block.osc2Wave == 0 || block.blend == 0) {
+    return sample;
+  }
+  int wave = (int)block.osc2Wave - 1;
+  int f2 = shiftSemi(freq, block.osc2Coarse);
+  osc2Phase += toneInc(f2);
+  int y2 = toneWave(wave, osc2Phase);
+  int b = block.blend;
+  if (b > 100) {
+    b = 100;
+  }
+  return (sample * (100 - b) + y2 * b) / 100;
+}
+
+void Voice::HeldNote(int midi, bool down, int instrument) {
+  if (block.arpMode != 3) {
+    return;
+  }
+  if (midi < 0) {
+    midi = 0;
+  } else if (midi > 127) {
+    midi = 127;
+  }
+  if (block.scaleMode > 0) {
+    midi = scaleLock(midi, block.scaleRoot, block.scaleMode);
+  }
+  if (down) {
+    int count = heldCount;
+    int added = heldAdd(held, &count, midi);
+    heldCount = (uint8_t)count;
+    if (added == 1) {
+      heldPos = 0;
+      int pitch = 0;
+      int oct = 0;
+      midiNoteToSynth(midi, pitch, oct);
+      SetNote(pitch, false, oct, instrument);
+    }
+    return;
+  }
+  int index = heldPos;
+  int count = heldCount;
+  heldRemove(held, &count, &index, midi);
+  heldCount = (uint8_t)count;
+  heldPos = (uint8_t)index;
+  if (heldCount == 0) {
+    sounding = 0;
+    return;
+  }
+  int pitch = 0;
+  int oct = 0;
+  midiNoteToSynth(held[heldPos], pitch, oct);
+  SetNote(pitch, false, oct, instrument);
+  arpSamples = 0;
 }
 
 void Voice::SetDelay(int val) {

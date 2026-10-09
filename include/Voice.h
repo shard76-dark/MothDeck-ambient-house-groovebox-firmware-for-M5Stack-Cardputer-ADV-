@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "ToneSynth.h"
 #include "SongFile.h"
+#include "PatchBlocks.h"
 
 class Voice {
 public:
@@ -23,6 +24,8 @@ public:
   uint16_t bend14;
   float bps;
   TrackFx fx;
+  TrackBlock block;
+  uint8_t sounding;
 
   Voice();
   int UpdateVoice();
@@ -40,6 +43,10 @@ public:
   void SetEffectNum(int val);
   void ResetEffects();
   void CopyFx(const TrackFx &in);
+  void CopyBlock(const TrackBlock &in);
+  // MIDI note on/off for the held-note arp. Other arp modes ignore this.
+  void HeldNote(int midi, bool down, int instrument);
+  void ClearHeld() { heldCount = 0; heldPos = 0; }
   void UpdateDelayOffset();
   uint8_t EnvelopeNum() const { return envelopeNum; }
   uint8_t EnvelopeLength() const { return envelopeLength; }
@@ -73,6 +80,18 @@ private:
   uint16_t sampleHistoryIndex;
   int sampleLen;
   int8_t phaserDir;
+  uint8_t held[8];
+  uint8_t heldCount;
+  uint8_t heldPos;
+  int arpSamples;
+  int glideFrom;
+  int glideTo;
+  int glidePos;
+  int glideLen;
+  int glideCur;
+  int extFrom;
+  int extTo;
+  uint32_t osc2Phase;
   uint8_t envelopeLength;
   uint8_t envelopeNum;
   int8_t voiceNum;
@@ -125,6 +144,9 @@ private:
   int FxDelayBack() const;
   int RenderSource();
   int Shape(int sample);
+  void AdvanceGlide();
+  void AdvanceHeld();
+  int MixOsc2(int sample, int freq);
   void ArmPcm(int instrument);
   void StartShot(const void *data, int length, int step, bool eightBit, uint8_t kind, bool fromKit, int instrument);
   int MixShots();

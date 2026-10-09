@@ -8,6 +8,7 @@ static const int kSongSlots = 4;
 static const uint8_t kSongVersion = 1;
 static const uint8_t kSongVersionV2 = 2;
 static const uint8_t kSongVersionV3 = 3;
+static const uint8_t kSongVersionV4 = 4;
 static const int kPluginNameLen = 24;
 static const int kSongPluginSlots = 8;
 // magic + version + pattern + mixer/transport + 3 track grids + 4 voices + checksum
@@ -16,7 +17,21 @@ static const int kSongV1Payload = 3153;
 // Twelve bytes per track, after the version 2 tail. The last byte is reserved.
 static const int kSongFxBytes = 12;
 // v2 max is 3556. Version 3 adds 4 * 12 effect bytes: 3604.
-static const int kSongFileBytesMax = 3604;
+// Version 4 adds 4 * 8 block bytes on top of version 3: 3636.
+static const int kSongBlockBytes = 8;
+static const int kSongFileBytesMax = 3636;
+
+// Scale, held arp, second oscillator, and glide. Zero is off.
+// Written only in song version 4, after the version 3 insert block.
+struct TrackBlock {
+  uint8_t scaleMode;  // 0 off, 1 major, 2 minor, 3 harmonic, 4 mixolydian, 5 phrygian, 6 chromatic
+  uint8_t scaleRoot;  // pitch class 0..11
+  uint8_t arpMode;    // 0 off, 1 and 2 are the built-in interval walk, 3 is held notes
+  uint8_t osc2Wave;   // 0 off, 1 sine, 2 square, 3 saw, 4 triangle
+  int8_t osc2Coarse;  // semitones, -24..24
+  uint8_t blend;      // 0..100, how much of osc2 is in the mix
+  uint16_t glideMs;   // 0..2000
+};
 
 // Insert effect on one track. Zero means the insert is off.
 struct TrackFx {
@@ -84,17 +99,21 @@ struct SongData {
   SongPluginRef plugins[kSongPluginSlots];
   SongLoopRef loops[kSongTracks];
   TrackFx fx[kSongTracks];
+  TrackBlock blocks[kSongTracks];
 };
 
 // Writes version 1 (3155 bytes, MothOS compatible) when no plugin, loop, or
 // insert effect is in use. Version 2 adds plugins and loops. Version 3 adds
-// the per-track insert block on top of version 2.
+// the per-track insert block on top of version 2. Version 4 adds the
+// scale / arp / oscillator block and always includes the insert bytes.
 int songEncode(const SongData &song, uint8_t *dst, int dstLen);
 bool songDecode(const uint8_t *src, int srcLen, SongData *song);
 int songEncodedSize(const SongData &song);
 bool songNeedsV2(const SongData &song);
 bool songNeedsV3(const SongData &song);
+bool songNeedsV4(const SongData &song);
 bool trackFxActive(const TrackFx &fx);
 void trackFxClamp(TrackFx *fx);
+void trackBlockClamp(TrackBlock *block);
 
 #endif

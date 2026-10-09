@@ -1,0 +1,16 @@
+mothdeck-patch 1
+name=room-drive
+source=builtin
+builtin=sine
+drive=55
+delay=2
+feedback=35
+mix=28
+reverb=30
+chorus=10
+envelope=0
+envlen=2
+scale=off
+arp=0
+osc2=off
+glide=0
