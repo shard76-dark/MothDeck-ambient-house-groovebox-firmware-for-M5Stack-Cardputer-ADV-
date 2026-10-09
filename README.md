@@ -8,10 +8,10 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.2.0
-- SHA-256: `a802ece13876ab053dac6bc8e2c8e8feab1d5b936c3b59d9f32de618946172ee`
-- Size: 1,153,152 bytes (app image, magic `E9`)
-- Play opens on a piano roll. Patterns are 1–8 bars. BLE is off until Settings turns it on, the air name is `Mothdeck`, and instrument folders can be patches (scale, held arp, glide). Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md). Chris confirmed the piano roll on a Cardputer. BLE in this image has not been tried on hardware.
+- Version 1.2.1
+- SHA-256: `d01b62bd90a58c1345aa8c451771770db7e4ff6504a4d3669b88363176e7bafe`
+- Size: 1,152,112 bytes (app image, magic `E9`)
+- Play opens on a piano roll. Patterns are 1–8 bars. BLE is off until Settings turns it on, the air name is `Mothdeck`, and instrument folders can be patches (scale, held arp, glide). Turning BLE on with loops in the song asks `MIDI mode: loops off. Save song? Y/N`. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md). Chris confirmed the piano roll on a Cardputer. BLE in this image has not been tried on hardware.
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
@@ -115,9 +115,9 @@ A loop is not copied into the heap. Playback reads a short window from the card 
 
 ## Memory
 
-Settings prints Free RAM as internal kilobytes still free, the largest free block, and whether BLE is advertising, connected, or off (`120k blk 80k adv`). That is the heap after audio and the sprite, not flash and not the whole chip. The Stamp-S3A has no PSRAM. BLE is off at boot, so that block stays with the loop windows. Turning BLE on frees the windows first, then initialises NimBLE. Init is skipped when the largest block is under 36KB, and the MIDI page says so. Each pattern step in RAM is two bytes (note, octave, instrument). The song file on the card stays the unpacked 256-step layout. Pattern storage does not grow when BLE is left off.
+The release Settings screen does not print a heap readout. The Radio row says `off`, `adv`, or `conn`. Kilobyte figures stay on the MIDI page (`heap` and `blk`) and in the dev build's serial log. The Stamp-S3A has no PSRAM. BLE is off at boot, so that block stays with the loop windows. Turning BLE on frees the windows first, then initialises NimBLE. Init is skipped when the largest block is under 36KB. The BLE row then says `restart`, and the toast says `BLE loads after restart`. Each pattern step in RAM is two bytes (note, octave, instrument). The song file on the card stays the unpacked 256-step layout. Pattern storage does not grow when BLE is left off.
 
-Loads that do not fit say how many kilobytes they need and how many are free (`Need Nk, Mk free`). The previous kit or plugin stays selected. Without PSRAM the caps are:
+A kit or plugin that does not fit leaves the previous one selected. The toast says `Kit unchanged` or `Sound unchanged`. A loop library that cannot open every file says `Loops: N of M ready`. Without PSRAM the caps are:
 
 | What | Limit |
 | --- | --- |
@@ -271,17 +271,19 @@ Described above. `` ` `` or Backspace returns to Play.
 
 ### Loops
 
-Described above. Fn+`;` and Fn+`.` move through every entry in the library. The list scrolls. If the stream windows cannot hold every audio loop, the page says how many opened. While BLE is on the page says loops are off under MIDI, and Enter, `A`, and the Loops instrument do not open a stream.
+Described above. Fn+`;` and Fn+`.` move through every entry in the library. The list scrolls. If the stream windows cannot hold every audio loop, the page says `Loops: N of M ready`. While BLE is on the page says `MIDI mode: loops off`, and Enter, `A`, and the Loops instrument do not open a stream.
 
 ### MIDI
 
-The page shows the real radio state, the stored name, and the channel map. It says "MIDI advertising" only while the controller is advertising. At boot it says `BLE off`. If init failed it says `BLE off: init failed (reason)`, and the next line is the free internal heap and the largest free block measured just before `BLEDevice::init`. While a host is connected, the status row also shows the negotiated connection interval (`link 15.0ms`). Under that it counts packets, parsed messages, overflows, clocks, and notes (`pk`, `msg`, `ovf`, `clk`, `note`). A stored name longer than 8 characters is shortened in the advertising packet, and the page shows that shorter name in parentheses. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
+The page shows the real radio state, the stored name, and the channel map. It says "MIDI advertising" only while the controller is advertising. At boot it says `BLE off`. If the stack cannot start, the status says `restart` or `BLE off`. The next line on the MIDI page is the free internal heap and the largest free block. The release Settings screen does not repeat those numbers. While a host is connected, the status row also shows the negotiated connection interval (`link 15.0ms`). Under that it counts packets, parsed messages, overflows, clocks, and notes (`pk`, `msg`, `ovf`, `clk`, `note`). A stored name longer than 8 characters is shortened in the advertising packet, and the page shows that shorter name in parentheses. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
 
 ### Settings
 
-Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, free RAM, card, bars. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). On the BLE row the same keys turn the radio off and on. Off stops advertising, disconnects a host, ignores incoming MIDI, and loads loop windows again. On turns Rec off, unloads loops, and advertises. The first On in a session is what initialises NimBLE, and it does that only after the loop pool is freed, which is the heap 1.1.0 paired with. Later On calls do not allocate again. The choice is stored and defaults to off. A 1.1.1 setting of on is not read, so the radio stays off until you turn it on. If the open project has a loop on a track, or a track on the Loops instrument, On asks whether to save (Y saves, N skips) and then loads an empty project. `` ` `` or Backspace cancels and leaves BLE off.
+Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, radio, card, bars. The radio row shows `off`, `adv`, or `conn`. The dev build uses that row for a heap readout instead. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). On the BLE row the same keys turn the radio off and on. Off stops advertising, disconnects a host, ignores incoming MIDI, and loads loop windows again. On turns Rec off, unloads loops, and advertises. The first On in a session is what initialises NimBLE, and it does that only after the loop pool is freed, which is the heap 1.1.0 paired with. Later On calls do not allocate again. The choice is stored and defaults to off. A 1.1.1 setting of on is not read, so the radio stays off until you turn it on. If the open project has a loop on a track, or a track on the Loops instrument, On shows `MIDI mode: loops off.` and `Save song? Y / N`. Y saves, N skips, and either one then loads an empty project. `` ` `` cancels and leaves BLE off.
 
-Unload BLE is separate. Enter on that row stores the choice and skips BLE on the next boot. It does not tear the stack down in this session: NimBLE's deinit races the host task and releasing its memory blocks a later init, and either one can reset the board while the speaker is running. The row says `next boot` until restart. After that the BLE row says `unloaded`, and Enter on Load BLE initialises again if a 36KB block is free. If it is not, the toast says `not enough memory, reboot to load` and the board keeps running. Fn+`,` before the reboot cancels the unload.
+![MIDI mode notice](docs/screenshots/screen-ble-loops-warning-2x.png)
+
+Unload BLE is separate. Enter on that row stores the choice and skips BLE on the next boot. It does not tear the stack down in this session: NimBLE's deinit races the host task and releasing its memory blocks a later init, and either one can reset the board while the speaker is running. The row says `next boot` until restart. After that the BLE row says `unloaded`, and Enter on Load BLE initialises again if a 36KB block is free. If it is not, the BLE row says `restart` and the toast says `BLE loads after restart`. The board keeps running. Fn+`,` before the reboot cancels the unload.
 
 On the Bars row Fn+`,` and Fn+`/` set the pattern length from 1 to 8 bars and leave the notes in place. Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising when the radio is on. While the name editor is open it takes every key: glyphs are lowercased and appended, up to 16, Backspace deletes one character, and `` ` `` cancels. Space does not play and is not typed.
 

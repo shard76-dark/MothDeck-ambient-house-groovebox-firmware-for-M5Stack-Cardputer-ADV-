@@ -959,10 +959,9 @@ static void drawLoops() {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   if (loopsBlocked) {
-    canvas->setTextColor(COL_WARN);
-    canvas->setCursor(2, 40);
-    canvas->print("Loops off under MIDI");
     canvas->setTextColor(COL_TEXT);
+    canvas->setCursor(2, 40);
+    canvas->print("MIDI mode: loops off");
     canvas->setCursor(2, 56);
     canvas->print("Turn BLE off to load them");
     legend("Settings  Fn ,  BLE off");
@@ -1080,7 +1079,7 @@ static void drawSettings(BleMidi &ble) {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   canvas->print("Settings");
-  const char *rows[] = {"Speaker", "Brightness", "BLE name", "BLE", "Unload", "Battery", "Free RAM", "Card", "Bars"};
+  const char *rows[] = {"Speaker", "Brightness", "BLE name", "BLE", "Unload", "Battery", "Radio", "Card", "Bars"};
   int top = cursor > 3 ? cursor - 3 : 0;
   for (int i = 0; i < 5; i++) {
     int idx = top + i;
@@ -1097,6 +1096,12 @@ static void drawSettings(BleMidi &ble) {
     canvas->setCursor(4, y);
     if (idx == 4) {
       canvas->print(ble.Resident() ? "Unload BLE" : "Load BLE");
+    } else if (idx == 6) {
+#if MOTHOS_DEV_LOG
+      canvas->print("Heap");
+#else
+      canvas->print("Radio");
+#endif
     } else {
       canvas->print(rows[idx]);
     }
@@ -1122,10 +1127,14 @@ static void drawSettings(BleMidi &ble) {
         canvas->printf("%dmV %d%%", mv, pct);
       }
     } else if (idx == 6) {
+      const char *bleWord = ble.Connected() ? "conn" : (ble.Advertising() ? "adv" : "off");
+#if MOTHOS_DEV_LOG
       unsigned freeKb = (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
       unsigned blkKb = (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
-      const char *bleWord = ble.Connected() ? "conn" : (ble.Advertising() ? "adv" : "off");
       canvas->printf("%uk blk %uk %s", freeKb, blkKb, bleWord);
+#else
+      canvas->print(bleWord);
+#endif
     } else if (idx == 7) {
       canvas->print(sdCard.Mounted() ? "mounted" : "none");
     } else {
@@ -1211,18 +1220,15 @@ static void drawOverlay() {
 
 static void drawBleAsk() {
   canvas->fillRect(8, 28, 224, 78, COL_BAR);
-  canvas->drawRect(8, 28, 224, 78, COL_WARN);
-  canvas->setTextColor(COL_WARN);
-  canvas->setCursor(16, 36);
-  canvas->print("Loops off under MIDI");
+  canvas->drawRect(8, 28, 224, 78, COL_AMBER);
   canvas->setTextColor(COL_TEXT);
-  canvas->setCursor(16, 50);
-  canvas->print("A new project will load");
-  canvas->setCursor(16, 66);
-  canvas->print("Save this one?  Y / N");
+  canvas->setCursor(16, 40);
+  canvas->print("MIDI mode: loops off.");
+  canvas->setCursor(16, 56);
+  canvas->print("Save song? Y / N");
   canvas->setTextColor(COL_DIM);
-  canvas->setCursor(16, 84);
-  canvas->print("` cancel, BLE stays off");
+  canvas->setCursor(16, 76);
+  canvas->print("` cancels");
 }
 
 void uiDraw(BleMidi &ble) {
@@ -1268,7 +1274,7 @@ static void assignInstrument() {
     return;
   }
   if (cursor == 12 && loopsBlocked) {
-    toastSet("Loops off under MIDI");
+    toastSet("MIDI mode: loops off");
     return;
   }
   if (cursor == 12) {
@@ -1341,7 +1347,7 @@ static void doLoad() {
       song.loops[t].enabled = 0;
     }
     if (hadLoops) {
-      snprintf(lerr, sizeof(lerr), "Loops off under MIDI");
+      snprintf(lerr, sizeof(lerr), "MIDI mode: loops off");
     }
   } else {
     loopLibrary.PrepareSong(&song, lerr, (int)sizeof(lerr));
@@ -1362,7 +1368,7 @@ static void doLoad() {
 
 static void launchLoop(bool audition) {
   if (loopsBlocked) {
-    toastSet("Loops off under MIDI");
+    toastSet("MIDI mode: loops off");
     return;
   }
   if (loopLibrary.Count() <= 0) {
@@ -1469,7 +1475,7 @@ static void finishBleOn(BleMidi &ble) {
     bleOn = 0;
     savePrefs();
     restoreLoops();
-    toastSet(ble.Resident() ? "BLE off: not advertising" : "not enough memory, reboot to load");
+    toastSet(ble.Resident() ? "BLE off: not advertising" : "BLE loads after restart");
     return;
   }
   bleOn = 1;
@@ -1565,7 +1571,7 @@ static void doLoadBle(BleMidi &ble) {
     if (have) {
       rearmCaptured(kept);
     }
-    toastSet("not enough memory, reboot to load");
+    toastSet("BLE loads after restart");
     return;
   }
   if (!bleOn || !ok) {
@@ -1835,7 +1841,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       drumKit.Scan();
       loopLibrary.Scan();
       if (loopsBlocked) {
-        toastSet("Loops off under MIDI");
+        toastSet("MIDI mode: loops off");
       } else {
         loopLibrary.PreloadInstrument(nullptr, 0);
         toastSet(sdCard.Mounted() ? "Rescanned" : "No SD card");

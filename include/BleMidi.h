@@ -28,7 +28,7 @@ public:
   const char *LinkLine();
   // Unload is stored for the next boot. The stack is not torn down now.
   void SetPendingUnload(bool pending);
-  // "On adv", "On conn", "Off", "unloaded", "reboot unload", or "no mem".
+  // "On adv", "On conn", "Off", "unloaded", "reboot unload", or "restart".
   const char *SwitchLine();
   // Stop and push the advertising payload again. Called after the large
   // allocations so a host reset during those cannot leave an empty advert.

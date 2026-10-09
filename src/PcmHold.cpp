@@ -1,5 +1,6 @@
 #include "PcmHold.h"
 #include "DspHot.h"
+#include "DevLog.h"
 #include "SdCard.h"
 #include "WavPcm.h"
 #include <Arduino.h>
@@ -223,11 +224,11 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
     slotLimit = kPcmHolds;
   }
   if (slotLimit < 1) {
-    uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (err && errLen > 0) {
-      snprintf(err, errLen, "Not enough memory %uk blk %uk", (unsigned)(freeB / 1024), (unsigned)(largest / 1024));
-    }
+    DEV_LOGF(
+      "LOOP: no window free=%u largest=%u\n",
+      (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+      (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    setErr(err, errLen, "Loops: not ready");
     return 0;
   }
   for (int i = 0; i < slotLimit; i++) {
@@ -249,7 +250,7 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
     }
   }
   if (slotIndex < 0) {
-    setErr(err, errLen, "Loop cache full");
+    setErr(err, errLen, "Loops: not ready");
     return 0;
   }
   PcmSlot &slot = slots[slotIndex];
@@ -283,11 +284,11 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
   slot.bits = info.bits;
   if (!allocBuf(slot, slotIndex)) {
     slot.file.close();
-    uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (err && errLen > 0) {
-      snprintf(err, errLen, "Not enough memory %uk blk %uk", (unsigned)(freeB / 1024), (unsigned)(largest / 1024));
-    }
+    DEV_LOGF(
+      "LOOP: window skipped free=%u largest=%u\n",
+      (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+      (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    setErr(err, errLen, "Loops: not ready");
     return 0;
   }
   if (!fillWin(slot, slot.win[0], 0)) {

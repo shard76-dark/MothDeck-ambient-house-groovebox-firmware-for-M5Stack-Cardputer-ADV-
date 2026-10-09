@@ -3,6 +3,7 @@
 #include "PluginFormat.h"
 #include "SynthRender.h"
 #include "BoardConfig.h"
+#include "DevLog.h"
 #include <Arduino.h>
 #include <string.h>
 #include <stdio.h>
@@ -130,11 +131,9 @@ static void scaleGain(int16_t *data, int n, int gain) {
 }
 
 static void oom(char *err, int errLen, int needBytes) {
-  int freeKb = (int)(deckFreeInternal() / 1024);
-  int needKb = (needBytes + 1023) / 1024;
-  if (err && errLen > 0) {
-    snprintf(err, errLen, "Need %dk, %dk free", needKb, freeKb);
-  }
+  DEV_LOGF("PLUGIN: skipped need=%d free=%u\n", needBytes, (unsigned)deckFreeInternal());
+  (void)needBytes;
+  setErr(err, errLen, "Sound unchanged");
 }
 
 static bool loadAudioFile(const char *path, const InstrumentManifest &man, int16_t **outData, int *outLen, int *outRate, char *err, int errLen) {
@@ -300,7 +299,7 @@ int InstrumentBank::LoadFolder(const char *folder, char *err, int errLen, PatchA
   int slot = allocLive(folder);
   if (slot < 0) {
     deckFree(pcm);
-    setErr(err, errLen, "Instrument cache full");
+    setErr(err, errLen, "Sound unchanged");
     return -1;
   }
   if (liveSlots[slot].data && liveSlots[slot].data != pcm) {

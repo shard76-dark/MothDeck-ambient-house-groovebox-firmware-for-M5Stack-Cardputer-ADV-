@@ -1,3 +1,9 @@
+## 1.2.1 (2026-10-09)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,152,112 bytes, magic `E9`, chip `0x0009`, SHA-256 `d01b62bd90a58c1345aa8c451771770db7e4ff6504a4d3669b88363176e7bafe`). Version on the Settings screen is 1.2.1. Host tests passed. Use earphones. This image has not been tried on a Cardputer. The piano roll Chris liked is unchanged. BLE is still untested on hardware.
+
+Notices on the screen no longer read as memory errors. Turning BLE on while a song has loops asks `MIDI mode: loops off.` and `Save song? Y / N`. `` ` `` cancels. A library that cannot open every loop says `Loops: N of M ready`. If BLE cannot start, the row says `restart` and the toast says `BLE loads after restart`. A kit or plugin that does not fit says `Kit unchanged` or `Sound unchanged`, and the previous one stays. The release Settings screen has a Radio row (`off`, `adv`, or `conn`) instead of a Free RAM readout. Heap figures stay on the MIDI page and in the dev build's serial log.
+
 ## 1.2.0 (2026-10-09)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (1,153,152 bytes, magic `E9`, chip `0x0009`, SHA-256 `a802ece13876ab053dac6bc8e2c8e8feab1d5b936c3b59d9f32de618946172ee`). Version on the Settings screen is 1.2.0. Host tests passed. Use earphones.

@@ -1,4 +1,5 @@
 #include "DrumKit.h"
+#include "DevLog.h"
 #include "KitFormat.h"
 #include "SdCard.h"
 #include <Arduino.h>
@@ -111,11 +112,9 @@ static bool decodePad(const char *path, int16_t *dst, int dstFrames, int *got, i
 }
 
 static void oom(char *err, int errLen, int needBytes) {
-  int freeKb = (int)(deckFreeInternal() / 1024);
-  int needKb = (needBytes + 1023) / 1024;
-  if (err && errLen > 0) {
-    snprintf(err, errLen, "Need %dk, %dk free", needKb, freeKb);
-  }
+  DEV_LOGF("KIT: skipped need=%d free=%u\n", needBytes, (unsigned)deckFreeInternal());
+  (void)needBytes;
+  setErr(err, errLen, "Kit unchanged");
 }
 
 bool DrumKit::Select(int index, char *err, int errLen) {
@@ -161,7 +160,7 @@ bool DrumKit::Select(int index, char *err, int errLen) {
     }
     if (room < 2) {
       deckFree(block);
-      setErr(err, errLen, "Kit too large");
+      setErr(err, errLen, "Kit unchanged");
       return false;
     }
     char file[128];

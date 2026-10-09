@@ -27,9 +27,9 @@ static const uint16_t kAdvIntervalMax = 0x40;
 
 // NimBLE's controller and host pools come out of internal SRAM
 // (CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_INTERNAL). The Stamp-S3A has no PSRAM.
-// A largest free block under this size is reported as "no mem": the
-// controller wants one contiguous internal block, and init returns false
-// rather than advertising.
+// A largest free block under this size is stored as "no mem". The screen
+// says "restart" and does not print that reason. The controller wants one
+// contiguous internal block, and init returns false rather than advertising.
 // Below this, nimble_port_init is not called. A failed controller alloc can
 // still consume the largest internal block, and playback is already using
 // its own. 36KB is the floor at which the prebuilt NimBLE image is worth
@@ -378,12 +378,12 @@ bool BleMidi::Begin(const char *name, bool advertise) {
     userEnabled = false;
     snprintf(failReason, sizeof(failReason), "no mem");
     initOk = false;
-    Serial.printf(
-      "BLE: init failed (no mem) free=%u largest=%u ctrl=%s\n",
+    DEV_LOGF(
+      "BLE: skip init free=%u largest=%u ctrl=%s\n",
       (unsigned)heapFreeAtInit,
       (unsigned)heapLargestAtInit,
       ctrlName(ctrl));
-    Serial.println("BLE: skipped init, largest block below 36k");
+    Serial.println("BLE: loads after restart");
     return false;
   }
 
@@ -391,11 +391,12 @@ bool BleMidi::Begin(const char *name, bool advertise) {
     userEnabled = false;
     snprintf(failReason, sizeof(failReason), "mem released");
     initOk = false;
-    Serial.printf(
-      "BLE: init failed (mem released) free=%u largest=%u ctrl=%s\n",
+    DEV_LOGF(
+      "BLE: controller released free=%u largest=%u ctrl=%s\n",
       (unsigned)heapFreeAtInit,
       (unsigned)heapLargestAtInit,
       ctrlName(ctrl));
+    Serial.println("BLE: loads after restart");
     return false;
   }
 
@@ -412,17 +413,23 @@ bool BleMidi::Begin(const char *name, bool advertise) {
       snprintf(failReason, sizeof(failReason), "other");
     }
     initOk = false;
-    Serial.printf(
-      "BLE: init failed (%s) free=%u largest=%u ctrl=%s\n",
+    DEV_LOGF(
+      "BLE: init missed (%s) free=%u largest=%u ctrl=%s after=%u/%u\n",
       failReason,
       (unsigned)heapFreeAtInit,
       (unsigned)heapLargestAtInit,
-      ctrlName(ctrl));
-    Serial.printf("BLE: after init attempt free=%u largest=%u\n", (unsigned)freeAfter, (unsigned)largestAfter);
+      ctrlName(ctrl),
+      (unsigned)freeAfter,
+      (unsigned)largestAfter);
+    if (strcmp(failReason, "no mem") == 0) {
+      Serial.println("BLE: loads after restart");
+    } else {
+      Serial.println("BLE: not started");
+    }
     return false;
   }
   initOk = true;
-  Serial.printf(
+  DEV_LOGF(
     "BLE: init ok free=%u largest=%u ctrl=%s\n",
     (unsigned)freeAfter,
     (unsigned)largestAfter,
@@ -548,7 +555,7 @@ void BleMidi::SetPendingUnload(bool pending) {
 const char *BleMidi::SwitchLine() {
   if (!initOk || !serverOk) {
     if (strcmp(failReason, "no mem") == 0 || strcmp(failReason, "mem released") == 0) {
-      return "no mem";
+      return "restart";
     }
     if (strcmp(failReason, "unloaded") == 0) {
       return "unloaded";
@@ -696,12 +703,11 @@ const char *BleMidi::StatusLine() {
     return "MIDI advertising";
   }
   const char *why = failReason[0] ? failReason : "not advertising";
-  if (!initOk || strcmp(why, "no server") == 0) {
-    if (strcmp(why, "no mem") == 0 || strcmp(why, "mem released") == 0 || strcmp(why, "other") == 0 || strcmp(why, "no server") == 0) {
-      snprintf(statusBuf, sizeof(statusBuf), "BLE off: init failed (%s)", why);
-    } else {
-      snprintf(statusBuf, sizeof(statusBuf), "BLE off: init failed");
-    }
+  if (strcmp(why, "no mem") == 0 || strcmp(why, "mem released") == 0) {
+    return "restart";
+  }
+  if (!initOk || strcmp(why, "no server") == 0 || strcmp(why, "other") == 0) {
+    snprintf(statusBuf, sizeof(statusBuf), "BLE off");
   } else {
     snprintf(statusBuf, sizeof(statusBuf), "BLE off: %s", why);
   }

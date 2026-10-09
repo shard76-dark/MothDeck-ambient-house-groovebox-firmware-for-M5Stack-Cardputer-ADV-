@@ -141,7 +141,7 @@ bool LoopLibrary::LoadEntry(int libIndex, int entryIndex, LoopArm *arm, uint8_t 
     snprintf(path, sizeof(path), "/moth/loops/%s/%s", lib.folder, entry.file);
     slot = cacheSlot(key);
     if (slot < 0) {
-      setErr(err, errLen, "Loop cache full");
+      setErr(err, errLen, "Loops: not ready");
       return false;
     }
     if (cache[slot].hold > 0) {
@@ -280,7 +280,7 @@ bool LoopLibrary::PrepareSong(SongData *song, char *err, int errLen) {
 }
 
 static bool memoryLimit(const char *msg) {
-  return msg && (strstr(msg, "memory") != nullptr || strstr(msg, "cache full") != nullptr);
+  return msg && strstr(msg, "Loops: not ready") != nullptr;
 }
 
 void LoopLibrary::DropAudio() {
@@ -337,11 +337,7 @@ int LoopLibrary::PreloadInstrument(char *err, int errLen) {
       if (!LoadEntry(i, e, &arm, steps, &stepCount, &pattern, local, (int)sizeof(local))) {
         if (memoryLimit(local)) {
           stopped = true;
-          if (strstr(local, "memory") != nullptr || pcmHoldSlots() < kPcmHolds) {
-            snprintf(limitMsg, sizeof(limitMsg), "%d of %d, not enough memory", n, audio);
-          } else {
-            snprintf(limitMsg, sizeof(limitMsg), "%d of %d loops in memory", n, audio);
-          }
+          snprintf(limitMsg, sizeof(limitMsg), "Loops: %d of %d ready", n, audio);
           setErr(err, errLen, limitMsg);
           break;
         }

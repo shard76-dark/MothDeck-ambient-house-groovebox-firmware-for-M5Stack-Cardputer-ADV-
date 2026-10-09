@@ -125,7 +125,7 @@ Any non-zero insert turns off the old `lowpass` / voice-reverb / voice-delay pat
 
 ### Load path today
 
-`InstrumentBank::Scan` lists folders. `Load` / `LoadFolder` run on the UI task. The sample buffer is published in `instrumentView` only after it is full. Unload clears `ready`, waits, then frees. The audio task never parses the card and never allocates. A bad file keeps the previous instrument and the screen shows the error. A kit that does not fit says `Need Nk, Mk free`.
+`InstrumentBank::Scan` lists folders. `Load` / `LoadFolder` run on the UI task. The sample buffer is published in `instrumentView` only after it is full. Unload clears `ready`, waits, then frees. The audio task never parses the card and never allocates. A bad file keeps the previous instrument and the screen shows the error. A kit that does not fit says `Kit unchanged`. A plugin that does not fit says `Sound unchanged`.
 
 ### BLE
 
