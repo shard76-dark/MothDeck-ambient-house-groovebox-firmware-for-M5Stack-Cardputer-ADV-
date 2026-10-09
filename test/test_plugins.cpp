@@ -1,4 +1,5 @@
 #include "PluginFormat.h"
+#include "PatchBlocks.h"
 #include "LoopFormat.h"
 #include "WavPcm.h"
 #include "SynthRender.h"
@@ -175,11 +176,86 @@ static void testRender() {
   expect(finite && energy > 0 && peak < 32767, "fm cycle is in range and not silent");
 }
 
+static void testPatch() {
+  const char *minor =
+      "mothdeck-patch 1\n"
+      "name=a-minor\n"
+      "source=builtin\n"
+      "builtin=bass\n"
+      "scale=minor\n"
+      "root=9\n"
+      "arp=0\n"
+      "glide=0\n"
+      "osc2=off\n";
+  PatchAssign p;
+  expect(parsePatchManifest(minor, (int)std::strlen(minor), &p), "minor patch parses");
+  expect(p.instrument == 10 && p.block.scaleMode == 2 && p.block.scaleRoot == 9, "bass in A minor");
+  expect((p.blockMask & PATCH_SCALE) != 0 && p.block.arpMode == 0, "scale is set and arp is off");
+
+  const char *held =
+      "mothdeck-patch 1\n"
+      "name=held-arp\n"
+      "source=builtin\n"
+      "builtin=saw\n"
+      "arp=held\n";
+  expect(parsePatchManifest(held, (int)std::strlen(held), &p), "held arp parses");
+  expect(p.block.arpMode == 3 && p.voice.chordMult == 0, "held arp is not the interval walk");
+
+  const char *glide =
+      "mothdeck-patch 1\n"
+      "name=glide-bass\n"
+      "source=builtin\n"
+      "builtin=bass\n"
+      "osc2=saw\n"
+      "coarse=-12\n"
+      "blend=40\n"
+      "glide=90\n";
+  expect(parsePatchManifest(glide, (int)std::strlen(glide), &p), "glide patch parses");
+  expect(p.block.osc2Wave == 3 && p.block.osc2Coarse == -12 && p.block.blend == 40 && p.block.glideMs == 90, "second saw and glide");
+
+  const char *saw =
+      "mothdeck-patch 1\n"
+      "name=saw-pluck\n"
+      "source=subtractive\n"
+      "wave=saw\n"
+      "cutoff=80\n"
+      "resonance=10\n"
+      "filter=1\n"
+      "cutoff=64\n"
+      "res=12\n";
+  expect(parsePatchManifest(saw, (int)std::strlen(saw), &p), "subtractive patch parses");
+  expect(p.audio.cutoff == 80 && p.fx.cutoff == 64 && p.fx.filter == 1 && p.fx.res == 12, "baked cutoff and track cutoff stay apart");
+
+  const char *bad =
+      "mothdeck-patch 1\n"
+      "name=nope\n"
+      "source=builtin\n"
+      "builtin=bass\n"
+      "attack=10\n";
+  expect(!parsePatchManifest(bad, (int)std::strlen(bad), &p), "attack is rejected");
+  expect(std::strstr(p.error, "Unknown") != 0, "unknown key is named");
+
+  expect(scaleLock(61, 0, 1) == 60, "C# snaps down to C in C major");
+  expect(scaleLock(60, 0, 1) == 60, "C stays in C major");
+  expect(scaleLock(70, 9, 2) == 69, "A# snaps to A in A minor");
+  expect(glideAt(100, 200, 0, 4) == 100 && glideAt(100, 200, 4, 4) == 200, "glide endpoints");
+  expect(glideAt(100, 200, 2, 4) == 150, "glide midpoint");
+  expect(shiftSemi(1000, 12) == 2000 && shiftSemi(1000, -12) == 500, "octave shift");
+  uint8_t notes[8];
+  int count = 0;
+  expect(heldAdd(notes, &count, 60) == 1 && count == 1, "first held note");
+  expect(heldAdd(notes, &count, 64) == 2 && count == 2, "second held note joins");
+  expect(heldAdd(notes, &count, 60) == 0 && count == 2, "duplicate held note ignored");
+  int index = 1;
+  expect(heldRemove(notes, &count, &index, 64) == 1 && notes[0] == 60, "releasing one note leaves the other");
+}
+
 int main() {
   testInstrument();
   testLoops();
   testWav();
   testRender();
+  testPatch();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

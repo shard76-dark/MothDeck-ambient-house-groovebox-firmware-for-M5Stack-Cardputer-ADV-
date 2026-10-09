@@ -790,13 +790,17 @@ static void drawInst() {
   } else {
     canvas->printf("Kit %.14s   , /", drumKit.Name(drumKit.Selected()));
   }
-  legend(", / load kit   Ent assign   R scan");
+  legend(", / kit   Ent assign   R scan");
 }
 
 static const char *kFxLabel[] = {
-  "Filter", "Cutoff", "Res", "Delay", "Feedback", "Mix", "Reverb", "Crush", "Drive", "Chorus", "Tremolo"
+  "Filter", "Cutoff", "Res", "Delay", "Feedback", "Mix", "Reverb", "Crush", "Drive", "Chorus", "Tremolo",
+  "Scale", "Root", "Arp", "Glide", "Osc2", "Blend", "Coarse"
 };
-static const int kFxRows = 11;
+static const int kFxRows = 18;
+static const char *kScaleName[] = { "off", "major", "minor", "harm", "mixo", "phry", "chrom" };
+static const char *kRootName[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+static const char *kOsc2Name[] = { "off", "sine", "square", "saw", "tri" };
 
 static int packFx(int row, int dir) {
   return (row & 0xFF) | ((dir & 0xFF) << 8);
@@ -814,7 +818,14 @@ static int fxValue(int row) {
     case 7: return snap.fxCrush;
     case 8: return snap.fxDrive;
     case 9: return snap.fxChorus;
-    default: return snap.fxTrem;
+    case 10: return snap.fxTrem;
+    case 11: return snap.scaleMode;
+    case 12: return snap.scaleRoot;
+    case 13: return snap.arpMode == 3 ? 3 : snap.arp[snap.track];
+    case 14: return snap.glideMs;
+    case 15: return snap.osc2Wave;
+    case 16: return snap.blend;
+    default: return snap.osc2Coarse;
   }
 }
 
@@ -828,6 +839,16 @@ static void fxText(int row, char *dst, int n) {
     snprintf(dst, n, "%s", v == 1 ? "low pass" : (v == 2 ? "high pass" : "off"));
   } else if (row == 3) {
     snprintf(dst, n, "%s", v == 1 ? "1/32" : (v == 2 ? "1/16" : (v == 3 ? "1/8" : "off")));
+  } else if (row == 11) {
+    snprintf(dst, n, "%s", (v >= 0 && v <= 6) ? kScaleName[v] : "off");
+  } else if (row == 12) {
+    snprintf(dst, n, "%s", (v >= 0 && v <= 11) ? kRootName[v] : "C");
+  } else if (row == 13) {
+    snprintf(dst, n, "%s", v == 3 ? "held" : (v == 1 ? "pat 1" : (v == 2 ? "pat 2" : "off")));
+  } else if (row == 14) {
+    snprintf(dst, n, "%d ms", v);
+  } else if (row == 15) {
+    snprintf(dst, n, "%s", (v >= 0 && v <= 4) ? kOsc2Name[v] : "off");
   } else {
     snprintf(dst, n, "%d", v);
   }
@@ -860,7 +881,7 @@ static void drawFx() {
     canvas->setCursor(120, y);
     canvas->print(value);
   }
-  legend("1-4 track  Fn ,/ value  Ent +");
+  legend("1-4 track   Fn , / value   Ent +");
 }
 
 static void drawMixer() {
@@ -1266,12 +1287,20 @@ static void assignInstrument() {
   }
   int index = cursor - 13;
   char err[48];
-  int id = instrumentBank.Load(index, err, (int)sizeof(err));
+  PatchAssign patch;
+  memset(&patch, 0, sizeof(patch));
+  int id = instrumentBank.Load(index, err, (int)sizeof(err), &patch);
   if (id < 0) {
     toastSet(err[0] ? err : "Load failed");
     return;
   }
-  audioCommand('I', id);
+  if (patch.active) {
+    patch.instrument = (uint8_t)id;
+    audioStagePatch(patch);
+    audioCommand('J', id);
+  } else {
+    audioCommand('I', id);
+  }
   toastSet(instrumentBank.At(index).name);
 }
 

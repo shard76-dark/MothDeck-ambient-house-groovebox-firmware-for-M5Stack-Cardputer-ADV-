@@ -1,4 +1,5 @@
 #include "Tracker.h"
+#include "AudioEngine.h"
 #include "DspHot.h"
 #include "PcmHold.h"
 #include "Voice.h"
@@ -7,6 +8,18 @@
 #include "LoopInstrument.h"
 #include <string.h>
 #include <stdio.h>
+
+static PatchAssign stagedPatch;
+
+void audioStagePatch(const PatchAssign &in) {
+  stagedPatch = in;
+}
+
+void audioCopyStaged(PatchAssign *out) {
+  if (out) {
+    *out = stagedPatch;
+  }
+}
 
 __attribute__((weak)) bool loopInstrumentHit(int note, LoopHit *out) {
   (void)note;
@@ -541,6 +554,12 @@ void Tracker::SetCommand(char command, int val) {
         SetHint("Rec Off");
       }
       break;
+    case 'J': {
+      PatchAssign staged;
+      audioCopyStaged(&staged);
+      ApplyPatch(staged);
+      break;
+    }
     case 'I':
       SetInstrument(val);
       QueueBankMidi();
@@ -738,6 +757,75 @@ void Tracker::AdjustFx(int packed) {
       fx.tremolo = (uint8_t)clampStep(fx.tremolo, dir, 10, 100);
       SetHintF("Tremolo: %d", fx.tremolo);
       break;
+    case 11: {
+      TrackBlock &b = voices[selectedTrack].block;
+      int mode = (int)b.scaleMode + dir;
+      if (mode > 6) mode = 0;
+      if (mode < 0) mode = 6;
+      b.scaleMode = (uint8_t)mode;
+      SetHint(mode == 0 ? "Scale off" : "Scale");
+      break;
+    }
+    case 12: {
+      TrackBlock &b = voices[selectedTrack].block;
+      int root = (int)b.scaleRoot + dir;
+      if (root > 11) root = 0;
+      if (root < 0) root = 11;
+      b.scaleRoot = (uint8_t)root;
+      SetHintF("Root %d", root);
+      break;
+    }
+    case 13: {
+      Voice &voice = voices[selectedTrack];
+      int mode = voice.block.arpMode == 3 ? 3 : (int)voice.chordMult;
+      mode += dir;
+      if (mode > 3) mode = 0;
+      if (mode < 0) mode = 3;
+      if (mode == 3) {
+        voice.block.arpMode = 3;
+        voice.chordMult = 0;
+        SetHint("Arp held");
+      } else {
+        voice.block.arpMode = (uint8_t)mode;
+        voice.chordMult = (uint8_t)mode;
+        voice.ClearHeld();
+        SetHintF("Arp %d", mode);
+      }
+      break;
+    }
+    case 14: {
+      int ms = (int)voices[selectedTrack].block.glideMs + dir * 10;
+      if (ms < 0) ms = 0;
+      if (ms > 500) ms = 500;
+      voices[selectedTrack].block.glideMs = (uint16_t)ms;
+      SetHintF("Glide %dms", ms);
+      break;
+    }
+    case 15: {
+      TrackBlock &b = voices[selectedTrack].block;
+      int wave = (int)b.osc2Wave + dir;
+      if (wave > 4) wave = 0;
+      if (wave < 0) wave = 4;
+      b.osc2Wave = (uint8_t)wave;
+      SetHint(wave == 0 ? "Osc2 off" : "Osc2");
+      break;
+    }
+    case 16: {
+      int blend = (int)voices[selectedTrack].block.blend + dir * 10;
+      if (blend < 0) blend = 0;
+      if (blend > 100) blend = 100;
+      voices[selectedTrack].block.blend = (uint8_t)blend;
+      SetHintF("Blend %d", blend);
+      break;
+    }
+    case 17: {
+      int coarse = (int)voices[selectedTrack].block.osc2Coarse + dir;
+      if (coarse > 24) coarse = -24;
+      if (coarse < -24) coarse = 24;
+      voices[selectedTrack].block.osc2Coarse = (int8_t)coarse;
+      SetHintF("Coarse %d", coarse);
+      break;
+    }
     default:
       break;
   }
@@ -1062,6 +1150,59 @@ void Tracker::SyncTrackVoicesFromSteps() {
   RememberVoiceLabel(trackVoice[selectedTrack]);
 }
 
+void Tracker::ApplyPatch(const PatchAssign &patch) {
+  if (!patch.active) {
+    return;
+  }
+  SetInstrument(patch.instrument);
+  Voice &voice = voices[selectedTrack];
+  if (patch.voiceMask & PATCH_VOLUME) voice.volume = patch.voice.volume;
+  if (patch.voiceMask & PATCH_OCTAVE) voice.octave = patch.voice.octave;
+  if (patch.voiceMask & PATCH_SAMPLER) voice.samplerMode = patch.voice.samplerMode != 0;
+  if (patch.voiceMask & PATCH_OVERDRIVE) voice.overdrive = patch.voice.overdrive != 0;
+  if ((patch.voiceMask & PATCH_ENVELOPE) || (patch.voiceMask & PATCH_ENVLEN)) {
+    uint8_t num = (patch.voiceMask & PATCH_ENVELOPE) ? patch.voice.envelopeNum : voice.EnvelopeNum();
+    uint8_t len = (patch.voiceMask & PATCH_ENVLEN) ? patch.voice.envelopeLength : voice.EnvelopeLength();
+    voice.RestoreEnvelope(num, len);
+  }
+  if (patch.voiceMask & PATCH_LOWPASS) voice.lowPassMult = patch.voice.lowPassMult;
+  if (patch.voiceMask & PATCH_WHOOSH) voice.whooshMult = patch.voice.whooshMult;
+  if (patch.voiceMask & PATCH_WOBBLE) voice.phaserMult = patch.voice.phaserMult;
+  if (patch.voiceMask & PATCH_PITCH) voice.pitchMult = patch.voice.pitchMult;
+  if (patch.voiceMask & PATCH_ARP) {
+    voice.chordMult = patch.voice.chordMult;
+    voice.block.arpMode = patch.block.arpMode;
+    if (patch.block.arpMode != 3) {
+      voice.ClearHeld();
+    }
+  }
+  TrackFx &fx = voice.fx;
+  if (patch.fxMask & PATCH_FILTER) fx.filter = patch.fx.filter;
+  if (patch.fxMask & PATCH_CUTOFF) fx.cutoff = patch.fx.cutoff;
+  if (patch.fxMask & PATCH_RES) fx.res = patch.fx.res;
+  if (patch.fxMask & PATCH_DELAY) fx.delayDiv = patch.fx.delayDiv;
+  if (patch.fxMask & PATCH_FEEDBACK) fx.delayFb = patch.fx.delayFb;
+  if (patch.fxMask & PATCH_MIX) fx.delayMix = patch.fx.delayMix;
+  if (patch.fxMask & PATCH_REVERB) fx.reverb = patch.fx.reverb;
+  if (patch.fxMask & PATCH_CRUSH) fx.crush = patch.fx.crush;
+  if (patch.fxMask & PATCH_DRIVE) fx.drive = patch.fx.drive;
+  if (patch.fxMask & PATCH_CHORUS) fx.chorus = patch.fx.chorus;
+  if (patch.fxMask & PATCH_TREMOLO) fx.tremolo = patch.fx.tremolo;
+  trackFxClamp(&fx);
+  if (patch.blockMask & PATCH_SCALE) voice.block.scaleMode = patch.block.scaleMode;
+  if (patch.blockMask & PATCH_ROOT) voice.block.scaleRoot = patch.block.scaleRoot;
+  if (patch.blockMask & PATCH_OSC2) voice.block.osc2Wave = patch.block.osc2Wave;
+  if (patch.blockMask & PATCH_COARSE) voice.block.osc2Coarse = patch.block.osc2Coarse;
+  if (patch.blockMask & PATCH_BLEND) voice.block.blend = patch.block.blend;
+  if (patch.blockMask & PATCH_GLIDE) voice.block.glideMs = patch.block.glideMs;
+  trackBlockClamp(&voice.block);
+  if (patch.name[0]) {
+    memset(oledInstString, 0, sizeof(oledInstString));
+    strncpy(oledInstString, patch.name, sizeof(oledInstString) - 1);
+    SetHint(patch.name);
+  }
+}
+
 void Tracker::SetInstrument(int val) {
   if (val < 0) {
     val = 0;
@@ -1204,15 +1345,24 @@ void Tracker::HandleMidi(const MidiEvent &event) {
   }
   switch (event.type) {
     case MIDI_MSG_NOTE_ON: {
+      ArmTransport();
+      if (voices[selectedTrack].block.arpMode == 3) {
+        int inst = trackVoice[selectedTrack];
+        voices[selectedTrack].HeldNote(event.number, true, inst);
+        break;
+      }
       int pitch = 0;
       int oct = 0;
       midiNoteToSynth(event.number, pitch, oct);
-      ArmTransport();
       voices[selectedTrack].SetOctave(oct);
       SetNote(pitch, selectedTrack);
       break;
     }
     case MIDI_MSG_NOTE_OFF:
+      if (voices[selectedTrack].block.arpMode == 3) {
+        int inst = trackVoice[selectedTrack];
+        voices[selectedTrack].HeldNote(event.number, false, inst);
+      }
       break;
     case MIDI_MSG_MSB:
     case MIDI_MSG_LSB:
@@ -1268,6 +1418,7 @@ void Tracker::CaptureSong(SongData *song) const {
     out.whooshMult = voice.whooshMult;
     out.bend14 = voice.bend14;
     song->fx[t] = voice.fx;
+    song->blocks[t] = voice.block;
     song->loops[t].enabled = (loopPlay[t].enabled || loopPlay[t].pending) ? 1 : 0;
     song->loops[t].quantize = loopPlay[t].quantize;
     memcpy(song->loops[t].library, loopPlay[t].library, 24);
@@ -1327,6 +1478,7 @@ void Tracker::ApplySong(const SongData &song) {
     voice.whooshMult = in.whooshMult;
     voice.bend14 = in.bend14;
     voice.CopyFx(song.fx[t]);
+    voice.CopyBlock(song.blocks[t]);
     voice.soloMute = false;
     voice.ReleaseShots();
   }
@@ -1663,6 +1815,13 @@ void Tracker::FillSnap(Snap *snap) const {
       snap->fxDrive = fx.drive;
       snap->fxChorus = fx.chorus;
       snap->fxTrem = fx.tremolo;
+      snap->scaleMode = voices[t].block.scaleMode;
+      snap->scaleRoot = voices[t].block.scaleRoot;
+      snap->arpMode = voices[t].block.arpMode;
+      snap->osc2Wave = voices[t].block.osc2Wave;
+      snap->osc2Coarse = voices[t].block.osc2Coarse;
+      snap->blend = voices[t].block.blend;
+      snap->glideMs = voices[t].block.glideMs;
     }
     for (int s = 0; s < 16; s++) {
       int idx = origin + s;

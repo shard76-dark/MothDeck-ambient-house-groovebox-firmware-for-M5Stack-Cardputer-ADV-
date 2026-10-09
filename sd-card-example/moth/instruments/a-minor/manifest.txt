@@ -1,0 +1,14 @@
+mothdeck-patch 1
+name=a-minor
+source=builtin
+builtin=bass
+scale=minor
+root=9
+envelope=2
+envlen=1
+filter=1
+cutoff=42
+res=12
+arp=0
+osc2=off
+glide=0

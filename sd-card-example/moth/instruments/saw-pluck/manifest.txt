@@ -1,0 +1,16 @@
+mothdeck-patch 1
+name=saw-pluck
+source=subtractive
+wave=saw
+cutoff=80
+resonance=10
+gain=100
+envelope=0
+envlen=3
+filter=1
+cutoff=64
+res=12
+scale=off
+arp=0
+osc2=off
+glide=0
