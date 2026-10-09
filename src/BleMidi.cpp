@@ -66,6 +66,8 @@ static uint32_t lastMaintainMs = 0;
 static uint32_t lastStatMs = 0;
 static uint32_t lastAdvQueryMs = 0;
 static bool lastAdvActive = false;
+static volatile bool userEnabled = true;
+static bool pendingUnload = false;
 static char statusBuf[44];
 static char diagBuf[44];
 static char counterBuf[44];
@@ -94,7 +96,7 @@ static void countParsed(const MidiEvent &event) {
 
 class MidiCharCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *characteristic) override {
-    if (!characteristic) {
+    if (!userEnabled || !characteristic) {
       return;
     }
     const uint8_t *data = characteristic->getData();
@@ -128,11 +130,20 @@ static void requestShortInterval(BLEServer *server, uint16_t handle) {
 class MidiServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *server) override {
     (void)server;
+    if (!userEnabled) {
+      return;
+    }
     connected = true;
     connectEdge = 1;
   }
 
   void onConnect(BLEServer *server, ble_gap_conn_desc *desc) override {
+    if (!userEnabled) {
+      if (desc && server) {
+        server->disconnect(desc->conn_handle);
+      }
+      return;
+    }
     connected = true;
     connectEdge = 1;
     if (desc) {
@@ -149,7 +160,9 @@ class MidiServerCallbacks : public BLEServerCallbacks {
     connHandle = 0xFFFF;
     running.sysex = 0;
     BLESecurity::resetSecurity();
-    BLEDevice::startAdvertising();
+    if (userEnabled) {
+      BLEDevice::startAdvertising();
+    }
   }
 
   void onConnParamsUpdate(uint16_t conn_handle, uint16_t interval, uint16_t latency, uint16_t timeout, uint8_t status) override {
@@ -273,14 +286,42 @@ static bool radioStart(bool logPackets) {
   return active;
 }
 
+static void stopRadio() {
+  userEnabled = false;
+  if (initOk) {
+    BLEAdvertising *advertising = BLEDevice::getAdvertising();
+    if (advertising) {
+      advertising->stop();
+    }
+  }
+  lastAdvActive = false;
+  lastAdvQueryMs = millis();
+  if (midiServer && connected && connHandle != 0xFFFF) {
+    midiServer->disconnect(connHandle);
+  }
+}
+
 BleMidi::BleMidi() {
   started = false;
 }
 
-bool BleMidi::Begin(const char *name) {
-  if (started && initOk) {
-    return true;
+bool BleMidi::Begin(const char *name, bool advertise) {
+  if (started && initOk && serverOk) {
+    if (!advertise) {
+      stopRadio();
+      return true;
+    }
+    userEnabled = true;
+    pendingUnload = false;
+    bool active = radioStart(false);
+    if (active) {
+      failReason[0] = 0;
+    } else {
+      snprintf(failReason, sizeof(failReason), "not advertising");
+    }
+    return active;
   }
+  userEnabled = advertise;
   buildBleMidiAdvert(name, MOTHDECK_BLE_NAME_DEFAULT, &pkts);
   memset(&running, 0, sizeof(running));
   snapHeap(&heapFreeAtInit, &heapLargestAtInit);
@@ -375,9 +416,14 @@ bool BleMidi::Begin(const char *name) {
   service->start();
   serverOk = true;
   failReason[0] = 0;
-
-  bool active = radioStart(MOTHOS_DEV_LOG != 0);
   started = true;
+  if (!advertise) {
+    userEnabled = false;
+    Serial.printf("BLE MIDI ready as %s, advertising off\n", pkts.gapName);
+    return true;
+  }
+  userEnabled = true;
+  bool active = radioStart(MOTHOS_DEV_LOG != 0);
   if (active) {
     Serial.printf("BLE MIDI advertising as %s (air %s)\n", pkts.gapName, pkts.advName);
   } else {
@@ -386,17 +432,81 @@ bool BleMidi::Begin(const char *name) {
   return active;
 }
 
+void BleMidi::SetUserEnabled(bool on) {
+  if (!initOk || !serverOk) {
+    userEnabled = false;
+    return;
+  }
+  if (!on) {
+    stopRadio();
+    Serial.println("BLE: radio off");
+    return;
+  }
+  userEnabled = true;
+  bool active = radioStart(false);
+  if (active) {
+    failReason[0] = 0;
+    Serial.println("BLE: radio on");
+  } else {
+    snprintf(failReason, sizeof(failReason), "not advertising");
+    Serial.println("BLE: radio on, advertising failed");
+  }
+}
+
+bool BleMidi::UserEnabled() const {
+  return userEnabled;
+}
+
+bool BleMidi::Resident() const {
+  return initOk && serverOk;
+}
+
+void BleMidi::MarkSkipped() {
+  userEnabled = false;
+  pendingUnload = false;
+  initOk = false;
+  serverOk = false;
+  started = false;
+  snprintf(failReason, sizeof(failReason), "unloaded");
+}
+
+void BleMidi::SetPendingUnload(bool pending) {
+  pendingUnload = pending && initOk && serverOk;
+}
+
+const char *BleMidi::SwitchLine() {
+  if (!initOk || !serverOk) {
+    if (strcmp(failReason, "no mem") == 0 || strcmp(failReason, "mem released") == 0) {
+      return "no mem";
+    }
+    return "unloaded";
+  }
+  if (!userEnabled) {
+    return "Off";
+  }
+  if (connected) {
+    return "On conn";
+  }
+  if (Advertising()) {
+    return "On adv";
+  }
+  return "On";
+}
+
 bool BleMidi::Restart(const char *name) {
   // deinit() gives the controller memory back, and taking it again after
   // the sprite and the audio DMA exist can fail. Change the payload in
   // place when the stack is already up.
   if (!initOk || !serverOk) {
     started = false;
-    return Begin(name);
+    return Begin(name, userEnabled);
   }
   buildBleMidiAdvert(name, MOTHDECK_BLE_NAME_DEFAULT, &pkts);
   int rc = ble_svc_gap_device_name_set(pkts.gapName);
   DEV_LOGF("BLE: rename rc=%d name=%s air=%s\n", rc, pkts.gapName, pkts.advName);
+  if (!userEnabled) {
+    return true;
+  }
   bool active = radioStart(MOTHOS_DEV_LOG != 0);
   if (active) {
     failReason[0] = 0;
@@ -412,7 +522,7 @@ void BleMidi::RecommitAfter(const char *where) {
   uint32_t largest = 0;
   snapHeap(&freeB, &largest);
   const char *tag = where && where[0] ? where : "later";
-  if (!initOk || !serverOk) {
+  if (!initOk || !serverOk || !userEnabled) {
     DEV_LOGF(
       "BLE: after %s free=%u largest=%u active=0 (init never came up)\n",
       tag,
@@ -448,7 +558,7 @@ void BleMidi::Maintain() {
       requestShortInterval(midiServer, connHandle);
     }
   }
-  if (!initOk || !serverOk || connected) {
+  if (!userEnabled || !initOk || !serverOk || connected) {
     return;
   }
   if ((uint32_t)(now - lastMaintainMs) < 1000) {
@@ -486,6 +596,12 @@ bool BleMidi::Advertising() {
 }
 
 const char *BleMidi::StatusLine() {
+  if (!initOk && strcmp(failReason, "unloaded") == 0) {
+    return "BLE unloaded";
+  }
+  if (initOk && serverOk && !userEnabled) {
+    return pendingUnload ? "BLE reboot to unload" : "BLE off";
+  }
   if (connected) {
     return "MIDI connected";
   }
@@ -552,6 +668,11 @@ int BleMidi::Poll(MidiEvent *out, int maxOut) {
   if (!out || maxOut <= 0) {
     return 0;
   }
+  if (!userEnabled) {
+    uint32_t head = __atomic_load_n(&qHead, __ATOMIC_ACQUIRE);
+    __atomic_store_n(&qTail, head, __ATOMIC_RELEASE);
+    return 0;
+  }
   uint32_t tail = __atomic_load_n(&qTail, __ATOMIC_RELAXED);
   uint32_t head = __atomic_load_n(&qHead, __ATOMIC_ACQUIRE);
   int count = 0;
@@ -572,7 +693,7 @@ int BleMidi::ConsumeConnectEdge() {
 }
 
 void BleMidi::Send(const MidiEvent &event) {
-  if (!started || !connected || !midiChar) {
+  if (!userEnabled || !started || !connected || !midiChar) {
     return;
   }
   uint8_t packet[5];

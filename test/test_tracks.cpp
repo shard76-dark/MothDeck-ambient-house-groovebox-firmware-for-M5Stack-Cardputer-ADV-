@@ -158,13 +158,31 @@ static void testBarsAndExternalLoop() {
   song.tracks[0][20] = 3;
   song.voices[0].bend14 = 8192;
   tracker.ApplySong(song);
-  expect(tracker.patternLength == 16 && tracker.Bars() == 1, "a 16-step song loads as one bar");
+  expect(tracker.patternLength == 16 && tracker.Bars() == 1 && tracker.PatternSlots() == 4, "a 16-step song loads as one bar with four slots");
   expect(tracker.NoteAt(0, 0) == 5 && tracker.OctaveAt(0, 0) == -1 && tracker.InstAt(0, 0) == 9, "packed step keeps note, octave, and instrument");
   expect(tracker.NoteAt(0, 20) == 3, "steps past the old 16 stay in the grid");
   tracker.SetCommand('Y', 4);
   expect(tracker.patternLength == 64 && tracker.NoteAt(0, 0) == 5 && tracker.NoteAt(0, 20) == 3, "changing length does not wipe steps");
   tracker.SetCommand('Y', 1);
   expect(tracker.NoteAt(0, 20) == 3, "a shorter pattern keeps the hidden steps");
+
+  song.patternLength = 64;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 64 && tracker.Bars() == 4 && tracker.PatternSlots() == 4, "a 64-step song stays four bars and four slots");
+
+  song.patternLength = 96;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 96 && tracker.Bars() == 6 && tracker.PatternSlots() == 2, "a 96-step song keeps six bars");
+
+  song.patternLength = 128;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 128 && tracker.Bars() == 8 && tracker.PatternSlots() == 2, "an 8-bar song stays 128 steps");
+
+  song.patternLength = 256;
+  song.tracks[0][200] = 4;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 64 && tracker.Bars() == 4 && tracker.PatternSlots() == 4, "a 256-step file is four patterns of 64, not two of 128");
+  expect(tracker.NoteAt(0, 200) == 4, "notes past step 128 stay on the grid");
 
   song.patternLength = 4;
   tracker.ApplySong(song);

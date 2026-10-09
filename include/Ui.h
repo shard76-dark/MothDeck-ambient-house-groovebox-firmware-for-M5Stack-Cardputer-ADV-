@@ -11,5 +11,8 @@ void uiMountStorage();
 void uiPoll(BleMidi &ble);
 void uiDraw(BleMidi &ble);
 const char *uiBleName();
+// NVS. Missing keys default to on, which is the 1.1.0 behaviour.
+bool uiBleEnabled();
+bool uiBleWantLoad();
 
 #endif

@@ -12,6 +12,7 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 - SHA-256: `f8d9ab44082ab7ff5921dca9d30eb68ed8a440430bb019df31e4d82212569a4a`
 - Size: 1,134,080 bytes (app image, magic `E9`)
 - BLE MIDI pairs with an MPC Live II, patterns run from 1 to 8 bars, and playback stays up if the radio cannot start. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
+- 1.1.1 is unreleased. It adds a Settings BLE on/off switch and an Unload BLE row, and it fixes SD loops that only opened two files after BLE started. The image above is still 1.1.0.
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
@@ -253,7 +254,7 @@ Described above. `` ` `` or Backspace returns to Play.
 
 ### Loops
 
-Described above. Fn+`;` moves the row up and will not pass row 8. Fn+`.` moves down to the last entry.
+Described above. Fn+`;` and Fn+`.` move through every entry in the library. The list scrolls. If the stream windows cannot hold every audio loop, the page says how many opened.
 
 ### MIDI
 
@@ -261,7 +262,11 @@ The page shows the real radio state, the stored name, and the channel map. It sa
 
 ### Settings
 
-Rows: speaker, brightness, BLE name, battery, free RAM, card, bars. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). On the Bars row the same keys set the pattern length from 1 to 8 bars and leave the notes in place. Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising. On any other row, Enter does nothing. While the name editor is open it takes every key: glyphs are lowercased and appended, up to 16, Backspace deletes one character, and `` ` `` cancels. Space does not play and is not typed.
+Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, free RAM, card, bars. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). On the BLE row the same keys turn the radio off and on. Off stops advertising, disconnects a host, and ignores incoming MIDI. On advertises again. The NimBLE stack stays in memory, so On does not allocate and cannot fail for lack of memory. The choice is stored and defaults to on. With off saved, boot still initialises BLE and does not advertise.
+
+Unload BLE is separate. Enter on that row stores the choice and skips BLE on the next boot. It does not tear the stack down in this session: NimBLE's deinit races the host task and releasing its memory blocks a later init, and either one can reset the board while the speaker is running. The row says `next boot` until restart. After that the BLE row says `unloaded`, and Enter on Load BLE initialises again if a 36KB block is free. If it is not, the toast says `not enough memory, reboot to load` and the board keeps running. Fn+`,` before the reboot cancels the unload.
+
+On the Bars row Fn+`,` and Fn+`/` set the pattern length from 1 to 8 bars and leave the notes in place. Enter on the BLE name row starts typing. Enter again applies the name and restarts advertising when the radio is on. While the name editor is open it takes every key: glyphs are lowercased and appended, up to 16, Backspace deletes one character, and `` ` `` cancels. Space does not play and is not typed.
 
 ### Exit
 

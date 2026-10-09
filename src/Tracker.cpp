@@ -114,9 +114,20 @@ int Tracker::Bars() const {
   return bars;
 }
 
-static int barsFromSteps(int steps) {
+// Steps stored in the song, turned into the pattern length the tracker uses.
+// A length the previous firmware could reload is 64 or fewer (four patterns
+// had to fit in the 256-step grid). Those stay that many steps, so a 32-step
+// song is still two bars and a 64-step song is still four, each with four
+// pattern slots. A stored 256 is the grid size, not an 8-bar pattern: reading
+// it as 128 steps leaves two slots and parks the upper half of the song on
+// pattern 2. It loads as four patterns of 64. Lengths 65..255 are the 1–8
+// bar sizes, capped at 8 bars.
+static int lengthFromSong(int steps) {
   if (steps < 1) {
-    return 1;
+    return Tracker::kStepsPerBar;
+  }
+  if (steps >= Tracker::kMaxSteps) {
+    return 64;
   }
   int bars = (steps + Tracker::kStepsPerBar - 1) / Tracker::kStepsPerBar;
   if (bars < 1) {
@@ -124,7 +135,7 @@ static int barsFromSteps(int steps) {
   } else if (bars > Tracker::kMaxBars) {
     bars = Tracker::kMaxBars;
   }
-  return bars;
+  return bars * Tracker::kStepsPerBar;
 }
 
 void Tracker::ClampTransport() {
@@ -1180,7 +1191,7 @@ void Tracker::CaptureSong(SongData *song) const {
 }
 
 void Tracker::ApplySong(const SongData &song) {
-  patternLength = barsFromSteps(song.patternLength) * kStepsPerBar;
+  patternLength = lengthFromSong(song.patternLength);
   masterVolume = song.masterVolume;
   memcpy(bpms, song.bpms, sizeof(bpms));
   currentPattern = song.currentPattern;

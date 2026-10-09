@@ -16,7 +16,7 @@ A song that only uses the built-in instruments, and no loop assignment, is versi
 | --- | --- | --- |
 | 0 | 4 | ASCII `MOTH` |
 | 4 | 1 | version `1` |
-| 5 | 2 | pattern length in steps, uint16 little-endian. This firmware writes 16, 32, 48, 64, 80, 96, 112, or 128 (1–8 bars of 16). Older files with any length 1..256 still load; the tracker rounds that length up to a whole bar and caps it at 8 bars. A stored 16 is one bar, and a stored 32 stays two bars. The 256-step grid is unchanged, so fewer than four patterns fit once a pattern is longer than 64 steps |
+| 5 | 2 | pattern length in steps, uint16 little-endian. This firmware writes 16, 32, 48, 64, 80, 96, 112, or 128 (1–8 bars of 16). A stored 16 is one bar, a stored 32 stays two bars, and a stored 64 stays four bars with four pattern slots. A stored 256 is the old grid size and loads as four patterns of 64, not as 8 bars. Lengths from 65 to 255 round up to a whole bar and cap at 8 bars. The 256-step grid is unchanged, so fewer than four patterns fit once a pattern is longer than 64 steps |
 | 7 | 1 | master volume |
 | 8 | 1 | bpm slot 0..3 |
 | 9 | 4 | four BPM values |
@@ -90,9 +90,9 @@ loop=hats.wav
 pattern=offbeat.pat
 ```
 
-`bpm` is 40..240. `bars` is 1..8. Up to 16 entries in a file; the browser keeps 8. Audio is unsigned 8-bit mono WAV at 22050 Hz, or raw int16. A 16-bit WAV still loads. Playback resamples with linear interpolation so the loop's BPM matches the project BPM. Pitch moves with tempo. Launch quantize is immediate, next beat, or next bar.
+`bpm` is 40..240. `bars` is 1..8. Up to 16 entries in a file, and the browser lists all of them. Audio is unsigned 8-bit mono WAV at 22050 Hz, or raw int16. A 16-bit WAV still loads. Playback resamples with linear interpolation so the loop's BPM matches the project BPM. Pitch moves with tempo. Launch quantize is immediate, next beat, or next bar.
 
-The **Loops** instrument (id 63, the row after Pad) plays these audio loops from the keyboard. Notes wrap across the audio entries that fit in the stream cache (four), and the loop phase is lined up with the current bar. Playback reads the WAV from the card through a short window, so the file is not copied into the heap. A song that selects Loops is version 2. Plugin folders use ids 12..62 so they do not collide with it.
+The **Loops** instrument (id 63, the row after Pad) plays these audio loops from the keyboard. The stream windows are one heap block, reserved before BLE when that still leaves 36KB for the controller, otherwise cut from the block BLE leaves behind. If that block cannot hold every audio loop, the Loops page and the toast say how many opened and that there is not enough memory. Playback reads the WAV from the card through a short window, so the file is not copied into the heap. A song that selects Loops is version 2. Plugin folders use ids 12..62 so they do not collide with it.
 
 ## Drum kit
 

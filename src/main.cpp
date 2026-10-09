@@ -155,7 +155,22 @@ void setup() {
   uiBegin();
   uiDraw(ble);
   bootExitChord();
-  ble.Begin(uiBleName());
+  // Reserve loop windows before BLE when doing so still leaves the 36KB
+  // block the controller needs. Otherwise BLE starts first and the windows
+  // are cut from whatever contiguous RAM remains.
+  pcmHoldReservePreferred();
+  if (uiBleWantLoad()) {
+    uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (pcmHoldReserved() && largest < 36 * 1024) {
+      pcmHoldReleaseReserve();
+    }
+    ble.Begin(uiBleName(), uiBleEnabled());
+  } else {
+    ble.MarkSkipped();
+  }
+  if (!pcmHoldReserved()) {
+    pcmHoldReserveFit();
+  }
   uiMountStorage();
   logHeap("after storage");
 }
@@ -172,5 +187,7 @@ void loop() {
 
   uiDraw(ble);
   pcmHoldService();
-  delay(16);
+  // Shorter than a 512-frame window at 44100 Hz, so a loop opened from the
+  // block left after BLE does not run off the end of its buffer.
+  delay(8);
 }

@@ -90,10 +90,16 @@ static void toastSet(const char *msg) {
   toastUntil = millis() + 2200;
 }
 
+static uint8_t bleOn = 1;
+static uint8_t bleLoad = 1;
+static bool bleUnloadPending = false;
+
 static void savePrefs() {
   prefs.putUChar("vol", outVol);
   prefs.putUChar("bri", bright);
   prefs.putString("ble", bleName);
+  prefs.putUChar("bleOn", bleOn);
+  prefs.putUChar("bleLoad", bleLoad);
 }
 
 static int clampi(int v, int lo, int hi) {
@@ -189,7 +195,19 @@ void uiLoadPrefs() {
   if (!bleName[0]) {
     snprintf(bleName, sizeof(bleName), "%s", MOTHDECK_BLE_NAME_DEFAULT);
   }
+  bleOn = prefs.getUChar("bleOn", 1) ? 1 : 0;
+  bleLoad = prefs.getUChar("bleLoad", 1) ? 1 : 0;
   prefsLoaded = true;
+}
+
+bool uiBleEnabled() {
+  uiLoadPrefs();
+  return bleOn != 0;
+}
+
+bool uiBleWantLoad() {
+  uiLoadPrefs();
+  return bleLoad != 0;
 }
 
 static uint16_t rgb332to565(uint8_t c) {
@@ -260,7 +278,12 @@ void uiMountStorage() {
   instrumentBank.Scan();
   loopLibrary.Scan();
   drumKit.Scan();
-  loopLibrary.PreloadInstrument(nullptr, 0);
+  char err[48];
+  err[0] = 0;
+  loopLibrary.PreloadInstrument(err, (int)sizeof(err));
+  if (loopLibrary.AudioCount() > loopLibrary.ReadyCount() && err[0]) {
+    toastSet(err);
+  }
 }
 
 static void statusBar(BleMidi &ble) {
@@ -657,18 +680,34 @@ static void drawLoops() {
     canvas->setTextColor(COL_WARN);
     canvas->setCursor(2, 54);
     canvas->print(lib.error);
+  } else if (loopLibrary.LimitLine()[0]) {
+    canvas->setTextColor(COL_WARN);
+    canvas->setCursor(2, 54);
+    canvas->print(loopLibrary.LimitLine());
   }
-  for (int i = 0; i < lib.entryCount && i < 5; i++) {
+  int visible = 5;
+  int top = 0;
+  if (lib.entryCount > visible) {
+    top = loopRow - visible + 1;
+    if (top < 0) {
+      top = 0;
+    }
+    if (top > lib.entryCount - visible) {
+      top = lib.entryCount - visible;
+    }
+  }
+  for (int i = 0; i < visible && top + i < lib.entryCount; i++) {
+    int idx = top + i;
     int y = 66 + i * 10;
-    if (i == loopRow) {
+    if (idx == loopRow) {
       canvas->fillRect(0, y - 1, 220, 10, COL_AMBER);
       canvas->setTextColor(COL_BG);
     } else {
       canvas->setTextColor(COL_TEXT);
     }
     canvas->setCursor(4, y);
-    canvas->print(lib.entries[i].kind == LOOP_PATTERN ? "PAT " : "WAV ");
-    canvas->print(lib.entries[i].file);
+    canvas->print(lib.entries[idx].kind == LOOP_PATTERN ? "PAT " : "WAV ");
+    canvas->print(lib.entries[idx].file);
   }
   legend("Ent launch  A aud  Q quant  S stop");
 }
@@ -718,11 +757,11 @@ static void drawSettings(BleMidi &ble) {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   canvas->print("Settings");
-  const char *rows[] = {"Speaker", "Brightness", "BLE name", "Battery", "Free RAM", "Card", "Bars"};
+  const char *rows[] = {"Speaker", "Brightness", "BLE name", "BLE", "Unload", "Battery", "Free RAM", "Card", "Bars"};
   int top = cursor > 3 ? cursor - 3 : 0;
   for (int i = 0; i < 5; i++) {
     int idx = top + i;
-    if (idx > 6) {
+    if (idx > 8) {
       break;
     }
     int y = 30 + i * 12;
@@ -733,7 +772,11 @@ static void drawSettings(BleMidi &ble) {
       canvas->setTextColor(COL_TEXT);
     }
     canvas->setCursor(4, y);
-    canvas->print(rows[idx]);
+    if (idx == 4) {
+      canvas->print(ble.Resident() ? "Unload BLE" : "Load BLE");
+    } else {
+      canvas->print(rows[idx]);
+    }
     canvas->setCursor(100, y);
     if (idx == 0) {
       canvas->printf("%u", outVol);
@@ -742,6 +785,12 @@ static void drawSettings(BleMidi &ble) {
     } else if (idx == 2) {
       canvas->print(naming ? edit : bleName);
     } else if (idx == 3) {
+      canvas->print(ble.SwitchLine());
+    } else if (idx == 4) {
+      if (bleUnloadPending) {
+        canvas->print("next boot");
+      }
+    } else if (idx == 5) {
       int mv = M5.Power.getBatteryVoltage();
       int pct = M5.Power.getBatteryLevel();
       if (pct < 0) {
@@ -749,12 +798,12 @@ static void drawSettings(BleMidi &ble) {
       } else {
         canvas->printf("%dmV %d%%", mv, pct);
       }
-    } else if (idx == 4) {
+    } else if (idx == 6) {
       unsigned freeKb = (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
       unsigned blkKb = (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
       const char *bleWord = ble.Connected() ? "conn" : (ble.Advertising() ? "adv" : "off");
       canvas->printf("%uk blk %uk %s", freeKb, blkKb, bleWord);
-    } else if (idx == 5) {
+    } else if (idx == 7) {
       canvas->print(sdCard.Mounted() ? "mounted" : "none");
     } else {
       canvas->printf("%u", snap.barCount ? snap.barCount : 1);
@@ -765,10 +814,14 @@ static void drawSettings(BleMidi &ble) {
   canvas->print(ble.CounterLine());
   canvas->setCursor(4, 108);
   canvas->printf("v%s  %s", MOTHDECK_VERSION, BOARD_NAME);
-  if (!naming && cursor == 4) {
+  if (!naming && cursor == 6) {
     legend(ble.StatusLine());
+  } else if (!naming && cursor == 3) {
+    legend("Fn , off   Fn / on");
+  } else if (!naming && cursor == 4) {
+    legend(ble.Resident() ? (bleUnloadPending ? "Ent unload  Fn , keep" : "Ent unload") : "Ent load");
   } else {
-    legend(naming ? "Ent apply  Bksp  ` cancel" : (cursor == 6 ? "Fn ,/ bars" : "Lf/Rt change  Ent name"));
+    legend(naming ? "Ent apply  Bksp  ` cancel" : (cursor == 8 ? "Fn ,/ bars" : "Lf/Rt change  Ent name"));
   }
 }
 
@@ -873,6 +926,8 @@ static void assignInstrument() {
     audioCommand('I', kLoopsVoice);
     if (n <= 0) {
       toastSet(err[0] ? err : "No loop samples");
+    } else if (loopLibrary.AudioCount() > n && err[0]) {
+      toastSet(err);
     } else {
       toastSet("Loops");
     }
@@ -977,7 +1032,56 @@ static void cycleKit(int dir) {
   toastSet(drumKit.Name(s));
 }
 
-static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool fn) {
+static void applyBleRadio(BleMidi &ble, bool on) {
+  if (!ble.Resident()) {
+    toastSet("BLE unloaded");
+    return;
+  }
+  bleOn = on ? 1 : 0;
+  savePrefs();
+  ble.SetUserEnabled(on);
+  toastSet(on ? "BLE on" : "BLE off");
+}
+
+static void doLoadBle(BleMidi &ble) {
+  if (ble.Resident()) {
+    bleLoad = 1;
+    bleUnloadPending = false;
+    savePrefs();
+    ble.SetPendingUnload(false);
+    toastSet("BLE stays loaded");
+    return;
+  }
+  bleLoad = 1;
+  bleUnloadPending = false;
+  savePrefs();
+  ble.Begin(uiBleName(), bleOn != 0);
+  if (!ble.Resident()) {
+    toastSet("not enough memory, reboot to load");
+    return;
+  }
+  toastSet(bleOn ? "BLE on" : "BLE off");
+}
+
+static void doUnloadBle(BleMidi &ble) {
+  // NimBLE deinit from the UI task calls nimble_port_stop and then
+  // nimble_port_deinit without waiting for the host task to leave
+  // nimble_port_run. deinit(true) also releases controller memory and the
+  // library will not init again until reboot. Either path can reset the
+  // board while the speaker DMA is running. The choice is stored and BLE
+  // is skipped on the next boot. The stack stays resident until then.
+  if (!ble.Resident()) {
+    toastSet("BLE unloaded");
+    return;
+  }
+  bleLoad = 0;
+  bleUnloadPending = true;
+  savePrefs();
+  ble.SetPendingUnload(true);
+  toastSet("Reboot to unload BLE");
+}
+
+static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool fn, BleMidi &ble) {
   if (fn) {
     if (c == ';') {
       if (page == 1) {
@@ -987,9 +1091,13 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       } else if (page == kMixerPage) {
         audioCommand('v', clampi((int)snap.vol[snap.track] + 1, 0, 8));
       } else if (page == kLoopsPage) {
-        loopRow = clampi(loopRow - 1, 0, 7);
+        int n = 0;
+        if (loopLibrary.Count() > 0) {
+          n = loopLibrary.At(loopLib).entryCount - 1;
+        }
+        loopRow = clampi(loopRow - 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor - 1, 0, 6);
+        cursor = clampi(cursor - 1, 0, 8);
       }
       return;
     }
@@ -1007,7 +1115,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         }
         loopRow = clampi(loopRow + 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor + 1, 0, 6);
+        cursor = clampi(cursor + 1, 0, 8);
       }
       return;
     }
@@ -1029,7 +1137,11 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         bright = (uint8_t)clampi((int)bright - 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
-      } else if (page == kSettingsPage && cursor == 6) {
+      } else if (page == kSettingsPage && cursor == 3) {
+        applyBleRadio(ble, false);
+      } else if (page == kSettingsPage && cursor == 4 && bleUnloadPending) {
+        doLoadBle(ble);
+      } else if (page == kSettingsPage && cursor == 8) {
         int bars = snap.barCount ? (int)snap.barCount : 1;
         audioCommand('Y', clampi(bars - 1, 1, 8));
       } else if (page == 0) {
@@ -1055,7 +1167,15 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         bright = (uint8_t)clampi((int)bright + 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
-      } else if (page == kSettingsPage && cursor == 6) {
+      } else if (page == kSettingsPage && cursor == 3) {
+        applyBleRadio(ble, true);
+      } else if (page == kSettingsPage && cursor == 4) {
+        if (ble.Resident()) {
+          doUnloadBle(ble);
+        } else {
+          doLoadBle(ble);
+        }
+      } else if (page == kSettingsPage && cursor == 8) {
         int bars = snap.barCount ? (int)snap.barCount : 1;
         audioCommand('Y', clampi(bars + 1, 1, 8));
       } else if (page == 0) {
@@ -1294,6 +1414,12 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
     else if (page == kSettingsPage && cursor == 2) {
       naming = true;
       snprintf(edit, sizeof(edit), "%s", bleName);
+    } else if (page == kSettingsPage && cursor == 4) {
+      if (ble.Resident()) {
+        doUnloadBle(ble);
+      } else {
+        doLoadBle(ble);
+      }
     }
     return;
   }
@@ -1318,7 +1444,7 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
       continue;
     }
     char c = (char)tolower((unsigned char)raw);
-    handleChar(c, st.ctrl, st.shift, st.alt, st.opt, st.fn);
+    handleChar(c, st.ctrl, st.shift, st.alt, st.opt, st.fn, ble);
   }
 }
 

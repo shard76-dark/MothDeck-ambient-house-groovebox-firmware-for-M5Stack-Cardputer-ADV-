@@ -12,7 +12,7 @@ struct LoopLibInfo {
   int bars;
   char tags[48];
   int entryCount;
-  LoopEntry entries[8];
+  LoopEntry entries[kLoopEntryMax];
   char error[40];
 };
 
@@ -28,15 +28,21 @@ public:
   bool PrepareSong(SongData *song, char *err, int errLen);
   // After PrepareSong, pointers for enabled tracks are ready for ArmLoop.
   bool TrackArm(int track, LoopArm *arm) const;
-  // Loads the first audio loops into the cache for the Loops instrument.
-  // Returns how many are ready. Safe to call again.
+  // Loads audio loops into the stream cache for the Loops instrument.
+  // Returns how many are ready. If some were skipped, LimitLine() says why.
   int PreloadInstrument(char *err, int errLen);
+  int ReadyCount() const { return ready; }
+  int AudioCount() const { return audio; }
+  const char *LimitLine() const { return limitMsg; }
 
 private:
   LoopLibInfo libs[kMaxLibs];
   int count;
   LoopArm loaded[kSongTracks];
   uint8_t loadedOk[kSongTracks];
+  int ready;
+  int audio;
+  char limitMsg[48];
 };
 
 extern LoopLibrary loopLibrary;
