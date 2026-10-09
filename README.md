@@ -60,6 +60,12 @@ There are 4 tracks. A pattern is 1 to 8 bars, and a bar is 4 beats of 4 sixteent
 
 The Play page is a piano roll: pitches down the left (C2 at the bottom through B5), time across, notes as blocks as wide as their hold. A one-bar pattern draws 8 pixels per step. Two bars use 6. Three bars and longer use 4, and the grid scrolls to keep the cursor on screen. While playback is running the cursor follows the playhead until you move it in time. Enter switches to the old 16-step strip, where Fn+`,` and Fn+`/` still page the bar (`B3/8`). Enter again returns to the roll. Settings has a Bars row; Fn+`,` and Fn+`/` on that row change the length without clearing notes. Song `N` still starts a new song, and it steps the length through 1–8 bars. A song saved with 16 steps loads as 1 bar. A song saved with 32 steps stays 2 bars. Other stored lengths round up to a whole bar, capped at 8. A one-step note is stored as before. A longer hold (2–4 steps) uses two spare bits in that same note byte.
 
+![Piano roll](docs/screenshots/screen-play-roll-2x.png)
+
+![16-step strip](docs/screenshots/screen-play-steps-2x.png)
+
+Page-by-page notes and the rest of the shots are in [docs/USER-GUIDE.md](docs/USER-GUIDE.md).
+
 Audio runs on its own task on core 1. The UI reads a snapshot. It does not write the tracker from the draw path. The speaker is fed 256-frame blocks while fewer than two blocks are queued.
 
 ## Drums, kits, and the other instruments
@@ -85,6 +91,8 @@ Drums are twelve different hits, one per pad, played at the recorded pitch. Chan
 
 On the Instrument page, `,` and `/` load the previous or next kit onto Drums. Fn+`,` and Fn+`/` do the same. The line under the list is the kit name. Index 0 is always the built-in Ambient House kit in flash. Further kits are folders under `/moth/drums`. If the card has none, the toast says "No SD kits". `R` rescans instruments, kits, and loops. Enter assigns the highlighted row to the selected track only.
 
+![Instrument page](docs/screenshots/screen-instrument-2x.png)
+
 SFX is twelve different one-shots (riser, downlifter, zap, sweep, impact, noise, blip, siren, reverse, drop, bubbles, whoosh), one per key. Those do follow the octave. Sine through Pad are synthesized per sample: sine is a sine, square is rounded, saw is a detuned lead, triangle is a triangle, organ is drawbar sines, pluck closes a filter and decays, bell is decaying FM, flute is a slow sine with breath, bass is a sub plus detuned saws, and pad attacks slowly, stays detuned, and holds.
 
 ## Mixer and FX
@@ -99,6 +107,8 @@ Arp is off, pat 1, pat 2, or held. Pat 1 and pat 2 are the older built-in interv
 
 Glide is the time from the previous note to the new one, in steps of 10 ms, up to 500 ms on the device (a patch file may say up to 2000). The first note snaps. Osc2 is a second sine, square, saw, or triangle, mixed by Blend (0–100, steps of 10) and transposed by Coarse (−24..24 semitones). It runs on built-in tones and on short samples.
 
+![FX page](docs/screenshots/screen-fx-2x.png)
+
 The Play-page keys A, F, K, and L still cycle the older 0–2 low pass, retrig, wobble, and echo on the selected track.
 
 Mixer shows all four tracks as volume faders, with the instrument name on each and the selected track highlighted. Fn+`;` raises the selected track and Fn+`.` lowers it (0–8). Fn+`,` and Fn+`/` move between tracks. `1`–`4` jump to a track. `M` mutes the selected track and `S` solos it. Volume is stored in every song version.
@@ -112,6 +122,8 @@ The Loops page lists libraries and entries. Enter launches the row onto the sele
 The Loops instrument (the row after Pad, id 63) is assigned like any other instrument. Notes on that track start one of the audio loops, wrapping if there are fewer loops than keys, lined up with the current bar. Playback follows the project BPM, so a faster song advances the file faster.
 
 A loop is not copied into the heap. Playback reads a short window from the card (1024 frames, double buffered, up to four streams, five hold slots). The window is allocated when the loop opens and freed when it closes. Launch can wait for the next beat or the next bar.
+
+![Loops page](docs/screenshots/screen-loops-2x.png)
 
 ## Memory
 
@@ -180,6 +192,10 @@ python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \
 Those two commands resample to 22050 Hz and write 8-bit mono WAV. Song, instrument, loop, kit, and pattern bytes are specified in [docs/FORMATS.md](docs/FORMATS.md).
 
 Plugins get ids 12–62. Id 63 is Loops. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. A song that stays on the built-in instruments is a 3155-byte MothOS version 1 file. Plugins and loops make version 2. An insert effect makes version 3. Scale, a held arp, a second oscillator, or glide makes version 4.
+
+## Screenshots
+
+Shots of the MothDeck UI, at 2×, sit next to Play, Instrument, FX, and Loops above, and next to MIDI and Settings in the keyboard sections below. The Play, Instrument, FX, Loops, MIDI, and Settings pictures are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording (`MIDI mode: loops off.` / `Save song? Y / N`). Native 240×135 files are beside the 2× files in [docs/screenshots/](docs/screenshots/). Each page's keys are written out in [docs/USER-GUIDE.md](docs/USER-GUIDE.md).
 
 ## Keyboard
 
@@ -277,11 +293,19 @@ Described above. Fn+`;` and Fn+`.` move through every entry in the library. The 
 
 The page shows the real radio state, the stored name, and the channel map. It says "MIDI advertising" only while the controller is advertising. At boot it says `BLE off`. If the stack cannot start, the status says `restart` or `BLE off`. The next line on the MIDI page is the free internal heap and the largest free block. The release Settings screen does not repeat those numbers. While a host is connected, the status row also shows the negotiated connection interval (`link 15.0ms`). Under that it counts packets, parsed messages, overflows, clocks, and notes (`pk`, `msg`, `ovf`, `clk`, `note`). A stored name longer than 8 characters is shortened in the advertising packet, and the page shows that shorter name in parentheses. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
 
+![MIDI page](docs/screenshots/screen-midi-2x.png)
+
 ### Settings
 
 Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, radio, card, bars. The radio row shows `off`, `adv`, or `conn`. The dev build uses that row for a heap readout instead. Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change speaker volume or brightness by 8 when that row is selected (brightness stays at least 10). On the BLE row the same keys turn the radio off and on. Off stops advertising, disconnects a host, ignores incoming MIDI, and loads loop windows again. On turns Rec off, unloads loops, and advertises. The first On in a session is what initialises NimBLE, and it does that only after the loop pool is freed, which is the heap 1.1.0 paired with. Later On calls do not allocate again. The choice is stored and defaults to off. A 1.1.1 setting of on is not read, so the radio stays off until you turn it on. If the open project has a loop on a track, or a track on the Loops instrument, On shows `MIDI mode: loops off.` and `Save song? Y / N`. Y saves, N skips, and either one then loads an empty project. `` ` `` cancels and leaves BLE off.
 
 ![MIDI mode notice](docs/screenshots/screen-ble-loops-warning-2x.png)
+
+The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.1 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.1`.
+
+![Settings, BLE row](docs/screenshots/screen-settings-ble-2x.png)
+
+![Settings, Bars row](docs/screenshots/screen-settings-bars-2x.png)
 
 Unload BLE is separate. Enter on that row stores the choice and skips BLE on the next boot. It does not tear the stack down in this session: NimBLE's deinit races the host task and releasing its memory blocks a later init, and either one can reset the board while the speaker is running. The row says `next boot` until restart. After that the BLE row says `unloaded`, and Enter on Load BLE initialises again if a 36KB block is free. If it is not, the BLE row says `restart` and the toast says `BLE loads after restart`. The board keeps running. Fn+`,` before the reboot cancels the unload.
 
@@ -301,7 +325,7 @@ Incoming BLE MIDI is parsed a whole packet at a time. One packet may hold severa
 
 MIDI has no message for the other machine's sequence length. Auto-length watches for Start, or a Song Position of 0, after a whole number of bars of clocks (one bar is 96 clocks, and the count has to land within half a beat of that). It rounds to 1–8 bars and adopts that length. The MPC Live II manual documents MIDI Clock, Start, Stop, and Continue. It does not document a message at the sequence loop point, and in practice the Live II keeps the clock running through the loop and does not send Start or Song Position there. When nothing comes back to zero, auto-length leaves the length set on the device. Phase still follows the clock from the last Start: a 1-bar pattern stays locked to a longer MPC sequence, and a length that does not divide the MPC sequence drifts until the next Start or Song Position. Stop, Space, and a Song Position that is not zero throw away the measurement so the next Start does not resize from a partial pass.
 
-After a connection has been up for 250 ms the link asks for a 7.5–15 ms interval. Serial prints the interval the central accepted, and the MIDI page shows it as `link 15.0ms` (or whatever was negotiated). The characteristic accepts write and write-without-response. While connected, the audio task drains MIDI every 32 samples and renders 128-sample blocks with one buffer queued, instead of waiting out two 256-sample blocks. The MIDI page and the Settings screen count packets, parsed messages, clocks, notes, and buffer overflows. Settings also repeats the free heap, the largest block, and whether BLE is off, advertising, or connected. Change the BLE name on Settings. The name is stored in NVS. The first boot of 1.1.2 stores `Mothdeck`. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
+After a connection has been up for 250 ms the link asks for a 7.5–15 ms interval. Serial prints the interval the central accepted, and the MIDI page shows it as `link 15.0ms` (or whatever was negotiated). The characteristic accepts write and write-without-response. While connected, the audio task drains MIDI every 32 samples and renders 128-sample blocks with one buffer queued, instead of waiting out two 256-sample blocks. The MIDI page counts packets, parsed messages, clocks, notes, and buffer overflows, and it is where the free heap and the largest block are printed. Settings counts the same packets on its own line, and its Radio row says whether BLE is off, advertising, or connected. Change the BLE name on Settings. The name is stored in NVS. The first boot of 1.1.2 stores `Mothdeck`. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
 
 | Message | Map |
 | --- | --- |
@@ -368,7 +392,7 @@ include/     headers, including the codecs the host tests compile
 src/         firmware
 test/        host tests (MIDI, song v1/v2/v3, per-track FX, manifests, WAV, synth render)
 tools/       sample generator, WAV converters, keymap and splash tools, test runner
-docs/        project site (index, robots, sitemap), file formats, keymap drawings, splash art
+docs/        project site (index, robots, sitemap), user guide, screenshots, file formats, keymap drawings, splash art
 sd-card-example/
 partitions/  development table, not used by Launcher
 releases/    application image, full-flash image, SD pack, checksums, install notes
