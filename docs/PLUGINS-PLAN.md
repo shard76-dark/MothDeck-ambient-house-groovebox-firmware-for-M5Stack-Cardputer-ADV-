@@ -2,7 +2,7 @@
 
 Design note only. No firmware in this change. Implementation waits until Chris approves this revision.
 
-Chris chose option (b). A plugin is a text file on the microSD card. It names a sound MothDeck already plays and the voice and FX numbers that already exist, and the firmware applies those numbers. The card never supplies code.
+Chris chose option (b). A plugin is a text file on the microSD card. It names a sound MothDeck already plays and the voice and FX numbers that already exist, and the firmware applies those numbers. The card never supplies code. A RAM hat on the expansion header is an optional extra, written up in section 6. The patch format does not depend on it.
 
 LOOPA ([aftersound.tech](https://aftersound.tech), source [ferluht/loopa](https://github.com/ferluht/loopa), GPLv3) is the source of the ideas in the shortlist. Nothing from that tree is included here. The node sketch in the first draft of this note (`osc`, `mix`, `env`, `lpf`, `drive`, `scale`, `arp` as a free graph) is withdrawn. Those names are not blocks in this firmware.
 
@@ -390,3 +390,80 @@ New small blocks, only if he wants them in that same pass or a later one:
 | Second oscillator and glide time | Bass and Saw are fixed dual voices. `pitchMult` is a one-shot sweep. | A few integers per voice, on oscillators that already exist. |
 
 Not proposed: a runtime ADSR, a drive shelf, tape, ping-pong, Plateau, or the microphone.
+
+## 6. Optional RAM hat
+
+Chris's idea, kept as an option: a small Cardputer ADV hat with an SPI RAM chip on the expansion header, for example an APS6404L (8 MB, QSPI/SPI PSRAM) or a 23LC1024 (128 KB SPI SRAM). It is not part of the patch format. A machine without the hat runs the firmware as it does today.
+
+### It is not ESP32 PSRAM
+
+The Stamp-S3A's PSRAM controller sits on the same SPI0/SPI1 bus as the flash, inside the module. Quad PSRAM shares those flash pins. Octal PSRAM uses GPIO33–37, which on this board are the display (reset, DC, MOSI, clock, CS). ESP-IDF maps that bus into the data address space at boot and, in current releases, only for Espressif PSRAM parts it knows. `psramFound()` stays false. `malloc` cannot see a chip on the hat. The audio task cannot take a delay tap from it. The build stays `qio_qspi` with PSRAM left off. Turning on `qio_opi` would try to start octal RAM on the display pins.
+
+Treat the hat as a scratch store: the CPU sends a read or write command, waits, and copies bytes into a normal internal buffer. Same shape as the microSD, with a shorter command.
+
+### Which pins
+
+The Grove port is GND, 5 V, GPIO2, and GPIO1. Two signals cannot carry SCK, MOSI, MISO, and a chip select.
+
+The EXT 2.54-14P header is the bus that already goes to the microSD:
+
+| Header | GPIO | Use |
+| --- | --- | --- |
+| SCK | 40 | Shared clock. The card is already on this pin. |
+| MOSI | 14 | Shared. |
+| MISO | 39 | Shared. |
+| CS | 5 | Hat chip select. |
+
+The card's own chip select is GPIO12, which is not on the header. The firmware already drives GPIO5 high before `SD.begin` (`PIN_SD_AUX`, 20 MHz on `HSPI`) so a second device on that pin stays quiet. A hat uses GPIO5 as its select, with a pull-up so the pin cannot float during reset and answer while the card is mounting.
+
+There is no spare hardware SPI. `HSPI` is the card. The other controller is the display. A private bit-banged bus on GPIO4, GPIO6, GPIO13, and GPIO15 would run from flash cache, because the 16 KB of IRAM is already full, and it would sit on the CPU the audio task needs. Quad mode would need two more data lines and a bus width the SD driver does not share. Four loop voices do not need it.
+
+GPIO3 is a strapping pin. GPIO8 and GPIO9 are the keyboard and codec I2C. Leave Grove GPIO1 and GPIO2 free.
+
+The header's power pins are 5 V in, 5 V out, and ground. There is no 3.3 V pin. The ESP32 is not 5 V tolerant, and the APS6404L is a 2.7–3.6 V part. The hat regulates 5 V out down to 3.3 V with a small LDO and runs the RAM at 3.3 V even if the SRAM would tolerate 5 V.
+
+### Throughput against the mix
+
+The mix is 44100 Hz. Loop and sample files are unsigned 8-bit mono at 22050 Hz, about 22 KB/s per stream. The house pack is four one-bar loops, 44100 frames, about 44 KB each, 176 KB together. The streamer keeps five windows (`kPcmHolds`: four tracks plus audition). The preferred pool is 5 × 1024 frames × two buffers × int16, which is 20 KB of internal heap. The audio task only reads that RAM. The main loop refills it.
+
+A 23LC1024 clocks at up to 20 MHz, the same clock the card already uses. A sequential read is one command and a 24-bit address, then bytes for as long as chip select stays down. A 512-byte payload is about a quarter of a millisecond of clocks. With SPI-driver overhead, a sustained 0.8–1.5 MB/s on that bus is the honest band. Five 8-bit streams are about 110 KB/s, under a tenth of that. Five 16-bit 44100 streams would be about 440 KB/s and would still fit the clock. Throughput is not the limit. Size is: 128 KB holds about 5.9 seconds of one 8-bit stream, which is two of those 44 KB loops, not four.
+
+An APS6404L is 8 MB, about 380 seconds of one 8-bit stream. At 120 BPM that is about 47 bars with all four tracks playing. The clock on a 2.54 header should stay at the 20 MHz the card already uses, not the 84 MHz linear-burst rating. Standard-grade parts also cap chip-select low at 8 µs (`tCEM`). At 20 MHz that is on the order of 16 payload bytes before the driver must drop chip select and send the command again. Transaction overhead then dominates. A careful driver might land around a few hundred KB/s, which still covers five 8-bit streams, with less margin once a card read wants the same bus. The part is PSRAM: it refreshes itself, and a software driver has to honour that chip-select cap. The ESP32's own PSRAM controller hides this. A hat driver does not.
+
+Sharing the bus means a card transaction and a RAM transaction never overlap. Saves, kit loads, and directory scans already take this bus. A refill that misses its window is a dropout. The audio task must keep reading internal RAM only.
+
+### Loops and BLE
+
+Turning BLE on drops the 20 KB window pool because NimBLE wants one contiguous block of about 36 KB for the controller and more host pools after that. The hat does not add internal RAM, so it does not by itself put that pool back.
+
+What it can do is hold loop bytes after they have been read off the card once. Refill then copies from the hat into a small internal window. That window has to be internal either way: one SPI transaction is longer than a sample (about 23 µs at 44100 Hz), so a per-sample read from the hat in the audio task will miss the codec. A static buffer of a few kilobytes, reserved in BSS rather than malloc'd after BLE, is what would actually leave the heap block for the controller. The same static buffer can be refilled from the microSD with no hat. The hat only makes the refill shorter and more regular than a FAT read. That is a real difference on a slow card, and it is a weak reason to build a board.
+
+Plugin samples stay at 4096 frames. An 8 MB scratch chip could cache longer files. That is a different feature from the patch file, and it still needs the internal cache the voice reads.
+
+### Latency and power
+
+MIDI latency does not change. Notes do not pass through the hat. Loop playback latency stays the I2S buffer plus the internal window. The hat adds refill jitter on the main loop, which is already where `pcmHoldService` runs.
+
+A delay, chorus, or reverb tap stays in the 8192-sample history each voice already has. Random access per sample on the hat does not fit the sample period.
+
+The 23LC1024's listed supply current is 10 mA. The APS6404L is listed around 7 mA active, with standby up to 250 µA at 85 °C. Clocked all day, 10 mA is about 240 mAh on the ADV's 1750 mAh pack. Playback does not clock the chip all day, and standby is the smaller number. Next to the ESP32 with the radio up, the RAM is the smaller draw. The LDO should be a low-quiescent part. An AMS1117's own idle current can exceed the RAM.
+
+### What ten hats would cost
+
+Sketch only, checked against public list prices while writing this, not a quote. Round conversion A$1.50 per US$1.
+
+The 23LC1024-I/SN is in JLCPCB's library at about US$2.34 each from ten up. RS in Australia lists the DIP version at about A$4.34 ex GST in small quantity. A 10-piece economic assembly of a small 2-layer board is on the order of US$8 setup, US$1.50 stencil, a few dollars of PCB, and cents per joint. Ten SRAMs, an LDO, a pull-up, and a 14-pin socket land the order around US$45–55 before postage. Postage to Australia on a small parcel is often another US$15–30. Landed, about A$90–130 for ten, or roughly A$10–15 each, plus the time to lay the board out. A hand-built run from RS chips and bare boards is in the same band per board before labour.
+
+The APS6404L-3SQR-SN was not in stock at LCSC (C5333729) at the time of writing, so a turnkey 10-piece build cannot assume the assembler has it. The chip itself is only a couple of US dollars when a distributor has some. Consigning ten of them does not move the board cost. It does add a sourcing step for a part the firmware would have to drive in short bursts.
+
+### Firmware, if it were ever built
+
+Detect at boot, after the card mount, with the card's chip select held high. For an APS6404L, use its read-ID command. The 23LC1024 has no ID; write a pattern at the top of the chip and read it back. A miss leaves every path as it is now: window pool, 4096-frame plugins, BLE gate. A hit may preload open loops into the scratch chip and refill the internal windows from there. Presence lasts for that boot. Pulling the hat off while a loop is playing is not supported.
+
+Do not report the hat as `psramFound()`. Do not allocate the BLE block, the sprite, or the voice history in it. Take the SPI bus with the same transaction lock as the card, and never from the audio task.
+
+### Recommendation
+
+Not worth building for MothDeck.
+
+The patch file does not need more RAM. Loops already stream from the card. The reason they unload when BLE is on is the internal window, and a static window refilled from that card is the change that would test coexistence, with no PCB. Of the two chips, the 23LC1024 is the one a driver can stream, and it is too small for the four example loops. The APS6404L is large enough and is the wrong kind of part: a self-timed PSRAM with an 8 µs chip-select cap, on a bus that cannot be the ESP32's PSRAM bus. Ten boards are cheap next to a firmware driver and a shared-bus failure during a gig. Ships without the hat, and the hat stays optional even if someone builds one later for a longer sample cache.
