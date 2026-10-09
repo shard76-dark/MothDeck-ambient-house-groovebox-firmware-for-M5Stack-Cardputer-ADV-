@@ -155,8 +155,33 @@ void setup() {
   uiBegin();
   uiDraw(ble);
   bootExitChord();
-  ble.Begin(uiBleName());
-  uiMountStorage();
+  // 1.1.0 started BLE here, with the loop pool still unallocated. 1.1.1
+  // reserved that pool first and kept it whenever 36KB remained. The
+  // controller takes about 36KB and the host pools need more on top, so
+  // pairing ran out of buffers. BLE on means the pool is not allocated.
+  // BLE off (the boot default) keeps the pool and does not init NimBLE.
+  if (uiBleWantLoad() && uiBleEnabled()) {
+    ble.Begin(uiBleName(), true);
+    if (!ble.Resident()) {
+      pcmHoldReservePreferred();
+      if (!pcmHoldReserved()) {
+        pcmHoldReserveFit();
+      }
+    }
+  } else if (!uiBleWantLoad()) {
+    ble.MarkSkipped();
+    pcmHoldReservePreferred();
+    if (!pcmHoldReserved()) {
+      pcmHoldReserveFit();
+    }
+  } else {
+    ble.MarkIdle();
+    pcmHoldReservePreferred();
+    if (!pcmHoldReserved()) {
+      pcmHoldReserveFit();
+    }
+  }
+  uiMountStorage(!ble.UserEnabled());
   logHeap("after storage");
 }
 
@@ -170,7 +195,16 @@ void loop() {
     ble.Send(outgoing);
   }
 
-  uiDraw(ble);
+  // The sprite blit shares core 1 with the audio task. Drawing every pass
+  // kept the core busy. 20 ms is still a fluid meter.
+  static uint32_t lastDrawMs = 0;
+  uint32_t now = millis();
+  if (lastDrawMs == 0 || (uint32_t)(now - lastDrawMs) >= 20) {
+    uiDraw(ble);
+    lastDrawMs = now;
+  }
   pcmHoldService();
-  delay(16);
+  // Shorter than a 512-frame window at 44100 Hz, so a loop opened from the
+  // block left after BLE does not run off the end of its buffer.
+  delay(4);
 }

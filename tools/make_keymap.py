@@ -147,12 +147,12 @@ def paint_play(g):
     put(g, 2, 5, "Retrig", "fx")
     put(g, 2, 9, "Wobble", "fx")
     put(g, 2, 10, "Echo", "fx")
-    put(g, 2, 11, "Note len", "fx", "Fn: list −")
+    put(g, 2, 11, "Hold / len", "fx", "Fn: pitch +")
     put(g, 2, 12, "Sampler", "fx")
-    put(g, 2, 13, "Idle", "idle", "Enter unused")
-    put(g, 3, 10, "C +oct", "piano", "Shift is <")
-    put(g, 3, 11, "Copy pat", "fx", "Fn: list +")
-    put(g, 3, 12, "Paste pat", "fx", "Fn: idle")
+    put(g, 2, 13, "Roll", "act", "toggle steps")
+    put(g, 3, 10, "C +oct", "piano", "Fn: step −")
+    put(g, 3, 11, "Copy pat", "fx", "Fn: pitch −")
+    put(g, 3, 12, "Paste pat", "fx", "Fn: step +")
 
 
 def paint_inst(g):
@@ -233,10 +233,10 @@ PAGES = [
         [
             "Bottom letters are the current octave. Q through ] is the next octave, chromatic. Comma is the C above that row.",
             "Shift or Alt adds an octave on letter notes. Opt subtracts one. They stack and clamp to MIDI C2–B5.",
-            "Fn+; and Fn+. change page only while the page list is open. Fn+, and Fn+/ do nothing on Play. Other Fn chords still do the key's normal action.",
+            "On the piano roll, Fn+; and Fn+. move the cursor by a semitone, and Fn+, and Fn+/ move it by a step. On the 16-step strip, Fn+, and Fn+/ page the bar. Other Fn chords still do the key's normal action.",
             "Fn+− and Fn+= change speaker volume on every page (step 12). Hold ` or the front button about 0.7s to exit when Launcher is present.",
             "While the page list is open it takes every key. Fn+; , Fn+. , and Tab move the highlight. Enter stays there. ` or Backspace returns to Play. Notes, space, and track keys do nothing.",
-            "; sends note-length L with the stored length, and does not step it. The voice stores 4 minus that value. Enter does nothing on Play.",
+            "On the roll, ; cycles the hold of the note under the cursor through 1–4 steps. On an empty cell it sends note-length L, and the voice stores 4 minus that value. Enter toggles the 16-step strip.",
             "Ctrl or Shift sends the shifted glyph, then the UI lowercases it. Digits and punctuation no longer match, so Ctrl+1–8 (!@#$%^&*) does not clear a track or pattern, and Shift+, is < rather than high C. Ctrl+N still starts a new song.",
         ],
     ),

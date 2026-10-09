@@ -37,36 +37,36 @@ static bool hasAdType(const uint8_t *data, int len, uint8_t type) {
 }
 
 static void testDefaultName() {
-  expect(std::strcmp(MOTHDECK_BLE_NAME_DEFAULT, "MothDeck") == 0, "default BLE name is MothDeck");
+  expect(std::strcmp(MOTHDECK_BLE_NAME_DEFAULT, "Mothdeck") == 0, "default BLE name is Mothdeck");
   expect(std::strlen(MOTHDECK_BLE_NAME_DEFAULT) <= (size_t)kBleAdvNameMax, "default name fits beside the MIDI UUID");
 
   const uint8_t adv[] = {
     0x02, 0x01, 0x06,
-    0x09, 0x09, 'M', 'o', 't', 'h', 'D', 'e', 'c', 'k',
+    0x09, 0x09, 'M', 'o', 't', 'h', 'd', 'e', 'c', 'k',
     0x11, 0x07,
     0x00, 0xC7, 0xC4, 0x4E, 0xE3, 0x6C, 0x51, 0xA7,
     0x33, 0x4B, 0xE8, 0xED, 0x5A, 0x0E, 0xB8, 0x03
   };
   const uint8_t scan[] = {
-    0x09, 0x09, 'M', 'o', 't', 'h', 'D', 'e', 'c', 'k',
+    0x09, 0x09, 'M', 'o', 't', 'h', 'd', 'e', 'c', 'k',
     0x03, 0x19, 0x00, 0x00,
-    0x05, 0x12, 0x06, 0x00, 0x12, 0x00
+    0x05, 0x12, 0x06, 0x00, 0x0C, 0x00
   };
 
   BleAdvertPackets pkts;
   buildBleMidiAdvert(nullptr, MOTHDECK_BLE_NAME_DEFAULT, &pkts);
   expect(pkts.advLen == 31, "default advert is 31 bytes");
-  expect(sameBytes(pkts.adv, pkts.advLen, adv, (int)sizeof(adv)), "default advert is flags, MothDeck, MIDI UUID");
+  expect(sameBytes(pkts.adv, pkts.advLen, adv, (int)sizeof(adv)), "default advert is flags, Mothdeck, MIDI UUID");
   expect(sameBytes(pkts.scan, pkts.scanLen, scan, (int)sizeof(scan)), "default scan response is the full name, appearance, interval");
   expect(!pkts.nameShortened, "default name is complete in the advert");
-  expect(std::strcmp(pkts.advName, "MothDeck") == 0, "on-air name is MothDeck");
-  expect(std::strcmp(pkts.gapName, "MothDeck") == 0, "GAP name is MothDeck");
+  expect(std::strcmp(pkts.advName, "Mothdeck") == 0, "on-air name is Mothdeck");
+  expect(std::strcmp(pkts.gapName, "Mothdeck") == 0, "GAP name is Mothdeck");
   expect(!hasAdType(pkts.scan, pkts.scanLen, 0x01), "scan response does not carry flags");
 }
 
 static void testLongName() {
   BleAdvertPackets pkts;
-  buildBleMidiAdvert("MothSynth", "MothDeck", &pkts);
+  buildBleMidiAdvert("MothSynth", "Mothdeck", &pkts);
   expect(pkts.nameShortened, "MothSynth is shortened in the advert");
   expect(std::strcmp(pkts.advName, "MothSynt") == 0, "MothSynth advert name is MothSynt");
   expect(std::strcmp(pkts.gapName, "MothSynth") == 0, "MothSynth GAP name stays complete");
@@ -78,7 +78,7 @@ static void testLongName() {
   expect(pkts.scan[0] == 0x0A && pkts.scan[1] == 0x09, "scan response carries the complete name");
   expect(std::memcmp(pkts.scan + 2, "MothSynth", 9) == 0, "scan response name is MothSynth");
 
-  buildBleMidiAdvert("abcdefghijklmnop", "MothDeck", &pkts);
+  buildBleMidiAdvert("abcdefghijklmnop", "Mothdeck", &pkts);
   expect(pkts.nameShortened && std::strcmp(pkts.advName, "abcdefgh") == 0, "16-character name shortens to 8");
   expect(std::strcmp(pkts.gapName, "abcdefghijklmnop") == 0, "16-character GAP name is kept");
   expect(pkts.scanLen <= 31 && pkts.advLen <= 31, "both payloads stay inside 31 bytes");
@@ -88,10 +88,10 @@ static void testLongName() {
 
 static void testEmptyFallsBack() {
   BleAdvertPackets pkts;
-  buildBleMidiAdvert("", "MothDeck", &pkts);
-  expect(std::strcmp(pkts.gapName, "MothDeck") == 0 && !pkts.nameShortened, "empty name uses the fallback");
+  buildBleMidiAdvert("", "Mothdeck", &pkts);
+  expect(std::strcmp(pkts.gapName, "Mothdeck") == 0 && !pkts.nameShortened, "empty name uses the fallback");
   buildBleMidiAdvert(nullptr, nullptr, &pkts);
-  expect(std::strcmp(pkts.gapName, "MothDeck") == 0, "missing name and fallback still advertise MothDeck");
+  expect(std::strcmp(pkts.gapName, "Mothdeck") == 0, "missing name and fallback still advertise Mothdeck");
   expect(pkts.adv[2] == 0x06, "fallback advert is general discoverable");
 }
 

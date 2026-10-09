@@ -13,8 +13,23 @@ struct MidiCounters {
 class BleMidi {
 public:
   BleMidi();
-  bool Begin(const char *name);
+  // advertise false still initialises the stack. It does not advertise.
+  bool Begin(const char *name, bool advertise = true);
   bool Restart(const char *name);
+  // Radio only. The stack stays resident, so this cannot fail for memory.
+  void SetUserEnabled(bool on);
+  bool UserEnabled() const;
+  bool Resident() const;
+  // Boot skipped BLE, or init never succeeded.
+  void MarkSkipped();
+  // Stack was not started. The switch reads Off, not unloaded.
+  void MarkIdle();
+  // Negotiated connection interval, or "link --" while disconnected.
+  const char *LinkLine();
+  // Unload is stored for the next boot. The stack is not torn down now.
+  void SetPendingUnload(bool pending);
+  // "On adv", "On conn", "Off", "unloaded", "reboot unload", or "no mem".
+  const char *SwitchLine();
   // Stop and push the advertising payload again. Called after the large
   // allocations so a host reset during those cannot leave an empty advert.
   void RecommitAfter(const char *where);

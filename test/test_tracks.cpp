@@ -60,6 +60,9 @@ static void testAssignStaysOnTrack() {
   tracker.SetCommand('T', 0);
   expect(tracker.currentVoice == 14 && tracker.trackVoice[1] == 5, "returning to track 1 recalls the plugin");
 
+  expect(!tracker.isPlaying, "rec is off at boot");
+  tracker.SetCommand('P', 0);
+  expect(tracker.isPlaying, "space starts rec");
   tracker.SetCommand('N', 0);
   expect(tracker.NoteAt(0, 0) == 1 && tracker.InstAt(0, 0) == 14, "recorded note uses track 1");
   tracker.SetCommand('T', 1);
@@ -158,13 +161,31 @@ static void testBarsAndExternalLoop() {
   song.tracks[0][20] = 3;
   song.voices[0].bend14 = 8192;
   tracker.ApplySong(song);
-  expect(tracker.patternLength == 16 && tracker.Bars() == 1, "a 16-step song loads as one bar");
+  expect(tracker.patternLength == 16 && tracker.Bars() == 1 && tracker.PatternSlots() == 4, "a 16-step song loads as one bar with four slots");
   expect(tracker.NoteAt(0, 0) == 5 && tracker.OctaveAt(0, 0) == -1 && tracker.InstAt(0, 0) == 9, "packed step keeps note, octave, and instrument");
   expect(tracker.NoteAt(0, 20) == 3, "steps past the old 16 stay in the grid");
   tracker.SetCommand('Y', 4);
   expect(tracker.patternLength == 64 && tracker.NoteAt(0, 0) == 5 && tracker.NoteAt(0, 20) == 3, "changing length does not wipe steps");
   tracker.SetCommand('Y', 1);
   expect(tracker.NoteAt(0, 20) == 3, "a shorter pattern keeps the hidden steps");
+
+  song.patternLength = 64;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 64 && tracker.Bars() == 4 && tracker.PatternSlots() == 4, "a 64-step song stays four bars and four slots");
+
+  song.patternLength = 96;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 96 && tracker.Bars() == 6 && tracker.PatternSlots() == 2, "a 96-step song keeps six bars");
+
+  song.patternLength = 128;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 128 && tracker.Bars() == 8 && tracker.PatternSlots() == 2, "an 8-bar song stays 128 steps");
+
+  song.patternLength = 256;
+  song.tracks[0][200] = 4;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 64 && tracker.Bars() == 4 && tracker.PatternSlots() == 4, "a 256-step file is four patterns of 64, not two of 128");
+  expect(tracker.NoteAt(0, 200) == 4, "notes past step 128 stay on the grid");
 
   song.patternLength = 4;
   tracker.ApplySong(song);
@@ -203,11 +224,83 @@ static void testBarsAndExternalLoop() {
   expect(snap.barIndex == 2 && snap.barCount == 3 && snap.barOrigin == 16, "Fn pages the editor to bar 2 of 3");
 }
 
+static void testNoteHold() {
+  Tracker tracker;
+  expect(!tracker.isPlaying, "stopped for roll edits");
+
+  tracker.SetCommand('r', 0 | (0 << 8) | (1 << 12));
+  expect(tracker.NoteAt(0, 0) == 1 && tracker.NoteLenAt(0, 0) == 1 && tracker.OctaveAt(0, 0) == 1, "a new roll note is one step");
+
+  tracker.SetCommand('r', 4 | (7 << 8) | (2 << 12) | (2 << 16));
+  expect(tracker.NoteAt(0, 4) == 8 && tracker.OctaveAt(0, 4) == 2 && tracker.NoteLenAt(0, 4) == 3, "roll write stores pitch, octave, and hold");
+  expect(tracker.InstAt(0, 4) == 0, "roll write uses the track instrument");
+
+  tracker.SetCommand('g', 4);
+  expect(tracker.NoteLenAt(0, 4) == 4, "hold steps from 3 to 4");
+  tracker.SetCommand('g', 4);
+  expect(tracker.NoteLenAt(0, 4) == 1 && tracker.NoteAt(0, 4) == 8, "hold wraps to one step and keeps the pitch");
+  tracker.SetCommand('g', 4);
+  expect(tracker.NoteLenAt(0, 4) == 2, "hold steps to two");
+
+  tracker.SetCommand('*', 0);
+  tracker.SetCommand('e', 4);
+  expect(tracker.NoteAt(0, 4) == 0 && tracker.NoteLenAt(0, 4) == 0, "backspace clears the cursor step");
+  tracker.SetCommand('*', 1);
+  expect(tracker.NoteAt(0, 4) == 8 && tracker.NoteLenAt(0, 4) == 2, "copy and paste keep the hold");
+
+  tracker.SetCommand('I', 9);
+  expect(tracker.NoteLenAt(0, 4) == 2 && tracker.InstAt(0, 4) == 9 && tracker.NoteAt(0, 4) == 8, "changing instrument keeps the hold");
+  expect(tracker.NoteLenAt(0, 0) == 1 && tracker.InstAt(0, 0) == 9, "a one-step note stays one step");
+
+  SongData song;
+  tracker.CaptureSong(&song);
+  expect(song.tracks[0][0] == 1, "a one-step note is stored as the pitch byte");
+  expect(song.tracks[0][4] == (uint8_t)(8 | (1 << 4)), "a two-step note stores the length code in bits 4-5");
+
+  uint8_t buf[kSongFileBytesMax];
+  int n = songEncode(song, buf, (int)sizeof(buf));
+  expect(n == kSongFileBytes, "a builtin song with a hold stays version 1");
+  SongData back;
+  std::memset(&back, 0, sizeof(back));
+  expect(songDecode(buf, n, &back), "song with a hold decodes");
+  Tracker loaded;
+  loaded.ApplySong(back);
+  expect(loaded.NoteAt(0, 0) == 1 && loaded.NoteLenAt(0, 0) == 1, "a one-step note round-trips");
+  expect(loaded.NoteAt(0, 4) == 8 && loaded.NoteLenAt(0, 4) == 2 && loaded.OctaveAt(0, 4) == 2, "a held note round-trips");
+
+  SongData ext;
+  std::memset(&ext, 0, sizeof(ext));
+  ext.patternLength = 64;
+  ext.bpms[0] = 120;
+  ext.tracks[0][3] = (uint8_t)(5 | (3 << 4));
+  ext.octaves[0][3] = 0;
+  ext.instruments[0][3] = 4;
+  ext.voices[0].bend14 = 8192;
+  loaded.ApplySong(ext);
+  expect(loaded.patternLength == 64, "the hold test keeps a 64-step pattern");
+  expect(loaded.NoteAt(0, 3) == 5 && loaded.NoteLenAt(0, 3) == 4 && loaded.InstAt(0, 3) == 4, "a length nibble above 15 loads as a four-step hold");
+
+  ext.tracks[0][3] = 5;
+  loaded.ApplySong(ext);
+  expect(loaded.NoteAt(0, 3) == 5 && loaded.NoteLenAt(0, 3) == 1, "a plain note byte is still one step");
+
+  loaded.SetCommand('Y', 4);
+  loaded.SetCommand('r', 20 | (2 << 8) | (1 << 12) | (1 << 16));
+  Snap snap;
+  std::memset(&snap, 0, sizeof(snap));
+  loaded.FillSnap(&snap);
+  expect(snap.rollCount == 64, "the roll image covers the whole pattern");
+  uint8_t cell = snap.roll[20];
+  expect((cell & 0x0F) == 3 && ((cell >> 4) & 3) == 1 && ((cell >> 6) & 3) == 1, "snap roll packs note, hold, and octave");
+  expect(snap.roll[0] == 0 && snap.roll[3] == (uint8_t)(5 | (0 << 6)), "empty steps stay empty and the one-step note is packed");
+}
+
 int main() {
   testAssignStaysOnTrack();
   testMidiBankStaysOnChannel();
   testSongRecallDoesNotSmear();
   testBarsAndExternalLoop();
+  testNoteHold();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

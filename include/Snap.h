@@ -36,6 +36,12 @@ struct Snap {
   uint8_t whoosh[4];
   uint8_t pitchFx[4];
   uint8_t notes[4][16];
+  // Selected track, current pattern, one byte per step (at most 8 bars).
+  // Bits 0-3 are the note (0 empty, 1-12), bits 4-5 the length code
+  // (0 = one step), bits 6-7 the octave 0-3. The 16-step strip above is
+  // the classic view. Two snap slots, so this is 256 bytes, not a buffer.
+  uint8_t roll[128];
+  uint8_t rollCount;
   uint8_t loopOn[4];
   uint16_t barOrigin;
   uint8_t fxFilter;

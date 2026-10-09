@@ -8,7 +8,15 @@
 #include <string.h>
 #include <stdio.h>
 
-static const int kWin = 1024;
+static const int kWinMax = 1024;
+static const int kWinMin = 512;
+
+// One pool, sliced into per-stream windows. A separate 4KB malloc per loop
+// runs after BLE has taken the largest block, and on this board that leftover
+// only held two of them. The third open failed and the loader moved on.
+static int16_t *pool = nullptr;
+static int poolSlots = 0;
+static int winFrames = kWinMax;
 
 struct PcmWin {
   int16_t *sample;
@@ -17,9 +25,7 @@ struct PcmWin {
 };
 
 struct PcmSlot {
-  // Both windows live in one heap block, allocated when the stream opens.
-  // Keeping them in BSS stole about 21KB before BLE started and the boot
-  // that used to stay on Play reset instead.
+  // Points into `pool`. Not freed on close; the pool owns the bytes.
   int16_t *buf;
   PcmWin win[2];
   File file;
@@ -65,25 +71,91 @@ static int decodeFrames(const uint8_t *p, int n, int channels, int bits, int16_t
 }
 
 static void freeBuf(PcmSlot &slot) {
-  if (slot.buf) {
-    heap_caps_free(slot.buf);
-    slot.buf = nullptr;
-  }
+  slot.buf = nullptr;
   slot.win[0].sample = nullptr;
   slot.win[1].sample = nullptr;
 }
 
-static bool allocBuf(PcmSlot &slot) {
+static bool allocBuf(PcmSlot &slot, int index) {
   if (slot.buf) {
     return true;
   }
-  slot.buf = (int16_t *)heap_caps_malloc((size_t)kWin * 2 * sizeof(int16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  if (!slot.buf) {
+  if (!pool || index < 0 || index >= poolSlots) {
     return false;
   }
+  slot.buf = pool + (size_t)index * (size_t)winFrames * 2;
   slot.win[0].sample = slot.buf;
-  slot.win[1].sample = slot.buf + kWin;
+  slot.win[1].sample = slot.buf + winFrames;
   return true;
+}
+
+static bool reserveSlots(int slots, int frames) {
+  if (pool || slots < 1 || slots > kPcmHolds || frames < kWinMin || frames > kWinMax) {
+    return false;
+  }
+  size_t bytes = (size_t)slots * (size_t)frames * 2 * sizeof(int16_t);
+  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (largest < bytes + 256) {
+    return false;
+  }
+  void *block = heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (!block) {
+    return false;
+  }
+  memset(block, 0, bytes);
+  pool = (int16_t *)block;
+  poolSlots = slots;
+  winFrames = frames;
+  return true;
+}
+
+bool pcmHoldReservePreferred() {
+  if (pool) {
+    return true;
+  }
+  if (reserveSlots(kPcmHolds, kWinMax)) {
+    return true;
+  }
+  return reserveSlots(4, kWinMax);
+}
+
+void pcmHoldReleaseReserve() {
+  for (int i = 0; i < kPcmHolds; i++) {
+    if (slots[i].open) {
+      return;
+    }
+  }
+  if (pool) {
+    heap_caps_free(pool);
+    pool = nullptr;
+  }
+  poolSlots = 0;
+  winFrames = kWinMax;
+}
+
+bool pcmHoldReserved() {
+  return pool != nullptr && poolSlots > 0;
+}
+
+void pcmHoldReserveFit() {
+  if (pcmHoldReserved()) {
+    return;
+  }
+  for (int slots = kPcmHolds; slots >= 1; slots--) {
+    if (reserveSlots(slots, kWinMax)) {
+      return;
+    }
+    if (reserveSlots(slots, 768)) {
+      return;
+    }
+    if (reserveSlots(slots, kWinMin)) {
+      return;
+    }
+  }
+}
+
+int pcmHoldSlots() {
+  return poolSlots;
 }
 
 static bool fillWin(PcmSlot &slot, PcmWin &win, int start) {
@@ -100,7 +172,7 @@ static bool fillWin(PcmSlot &slot, PcmWin &win, int start) {
   if (frameBytes < 1) {
     return false;
   }
-  int count = kWin;
+  int count = winFrames;
   if (slot.frames - start < count) {
     count = slot.frames - start;
   }
@@ -146,7 +218,19 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
     return 0;
   }
   int slotIndex = -1;
-  for (int i = 0; i < kPcmHolds; i++) {
+  int slotLimit = poolSlots;
+  if (slotLimit > kPcmHolds) {
+    slotLimit = kPcmHolds;
+  }
+  if (slotLimit < 1) {
+    uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (err && errLen > 0) {
+      snprintf(err, errLen, "Not enough memory %uk blk %uk", (unsigned)(freeB / 1024), (unsigned)(largest / 1024));
+    }
+    return 0;
+  }
+  for (int i = 0; i < slotLimit; i++) {
     if (slots[i].open && strcmp(slots[i].path, path) == 0) {
       if (frames) {
         *frames = slots[i].frames;
@@ -158,7 +242,7 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
       return i + 1;
     }
   }
-  for (int i = 0; i < kPcmHolds; i++) {
+  for (int i = 0; i < slotLimit; i++) {
     if (!slots[i].open) {
       slotIndex = i;
       break;
@@ -197,7 +281,16 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
   slot.dataOffset = info.dataOffset;
   slot.channels = info.channels;
   slot.bits = info.bits;
-  if (!allocBuf(slot) || !fillWin(slot, slot.win[0], 0)) {
+  if (!allocBuf(slot, slotIndex)) {
+    slot.file.close();
+    uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (err && errLen > 0) {
+      snprintf(err, errLen, "Not enough memory %uk blk %uk", (unsigned)(freeB / 1024), (unsigned)(largest / 1024));
+    }
+    return 0;
+  }
+  if (!fillWin(slot, slot.win[0], 0)) {
     freeBuf(slot);
     slot.file.close();
     setErr(err, errLen, "Loop read failed");
@@ -229,6 +322,18 @@ void pcmHoldClose(int id) {
   freeBuf(slot);
   slot.path[0] = 0;
   slot.frames = 0;
+}
+
+void pcmHoldDropAll() {
+  for (int id = 1; id <= kPcmHolds; id++) {
+    pcmHoldClose(id);
+  }
+  if (pool) {
+    heap_caps_free(pool);
+    pool = nullptr;
+  }
+  poolSlots = 0;
+  winFrames = kWinMax;
 }
 
 void pcmHoldWant(int id, int frame) {
@@ -284,7 +389,11 @@ void pcmHoldService() {
     }
     int base = slot.win[active].base;
     int count = slot.win[active].count;
-    bool inside = want >= base && want + 512 < base + count;
+    int ahead = winFrames / 2;
+    if (ahead < 128) {
+      ahead = 128;
+    }
+    bool inside = want >= base && want + ahead < base + count;
     if (inside) {
       continue;
     }

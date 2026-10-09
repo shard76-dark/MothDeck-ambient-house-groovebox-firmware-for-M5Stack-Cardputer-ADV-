@@ -3,6 +3,7 @@
 #include "AudioEngine.h"
 #include "InstrumentBank.h"
 #include "LoopLibrary.h"
+#include "PcmHold.h"
 #include "DrumKit.h"
 #include "SdStorage.h"
 #include "SdCard.h"
@@ -84,16 +85,43 @@ static bool escDown = false;
 static bool escFired = false;
 static Snap snap;
 static SdStorage storage;
+// Play opens on the piano roll. Enter switches back to the 16-step strip.
+// The cursor is the UI's; the audio task still owns the steps.
+static bool rollView = true;
+static int rollStep = 0;
+static int rollPitch = 24;
+static int rollOrigin = 0;
+static bool rollFollow = true;
+
+static const int kRollY = 24;
+static const int kRollH = 96;
+static const int kRollRows = 48;
+static const int kRowH = 2;
+static const int kGridX = 22;
+static const uint16_t COL_KEY_W = 0xC618;
+static const uint16_t COL_KEY_B = 0x0000;
+static const uint16_t COL_LANE_W = 0x18C3;
+static const uint16_t COL_LANE_B = 0x0861;
+static const uint16_t COL_BEAT = 0x3186;
+static const uint16_t COL_BARLINE = 0x52AA;
+static const uint16_t COL_CURSOR = 0xFFFF;
 
 static void toastSet(const char *msg) {
   snprintf(toast, sizeof(toast), "%s", msg ? msg : "");
   toastUntil = millis() + 2200;
 }
 
+static uint8_t bleOn = 0;
+static uint8_t bleLoad = 1;
+static bool bleUnloadPending = false;
+
 static void savePrefs() {
   prefs.putUChar("vol", outVol);
   prefs.putUChar("bri", bright);
   prefs.putString("ble", bleName);
+  prefs.putUChar("bleOn", bleOn);
+  prefs.putUChar("bleEn", bleOn);
+  prefs.putUChar("bleLoad", bleLoad);
 }
 
 static int clampi(int v, int lo, int hi) {
@@ -186,10 +214,30 @@ void uiLoadPrefs() {
   bright = prefs.getUChar("bri", 180);
   String stored = prefs.getString("ble", MOTHDECK_BLE_NAME_DEFAULT);
   snprintf(bleName, sizeof(bleName), "%s", stored.c_str());
-  if (!bleName[0]) {
+  // 1.1.2 advertises Mothdeck. A stored MothDeck / MothSynth, or any name
+  // from before this image, is replaced once so the primary packet matches.
+  bool migrateName = prefs.getUChar("nm12", 0) == 0;
+  if (!bleName[0] || migrateName || strcmp(bleName, "MothDeck") == 0 || strcmp(bleName, "MothSynth") == 0) {
     snprintf(bleName, sizeof(bleName), "%s", MOTHDECK_BLE_NAME_DEFAULT);
   }
+  if (migrateName || strcmp(bleName, stored.c_str()) != 0) {
+    prefs.putString("ble", bleName);
+    prefs.putUChar("nm12", 1);
+  }
+  // bleEn is new in 1.1.2. A 1.1.1 bleOn of 1 must not start the radio.
+  bleOn = prefs.getUChar("bleEn", 0) ? 1 : 0;
+  bleLoad = prefs.getUChar("bleLoad", 1) ? 1 : 0;
   prefsLoaded = true;
+}
+
+bool uiBleEnabled() {
+  uiLoadPrefs();
+  return bleOn != 0;
+}
+
+bool uiBleWantLoad() {
+  uiLoadPrefs();
+  return bleLoad != 0;
 }
 
 static uint16_t rgb332to565(uint8_t c) {
@@ -256,11 +304,19 @@ void uiBegin() {
   launcherOk = launcherInstalled();
 }
 
-void uiMountStorage() {
+void uiMountStorage(bool withLoops) {
   instrumentBank.Scan();
   loopLibrary.Scan();
   drumKit.Scan();
-  loopLibrary.PreloadInstrument(nullptr, 0);
+  if (!withLoops) {
+    return;
+  }
+  char err[48];
+  err[0] = 0;
+  loopLibrary.PreloadInstrument(err, (int)sizeof(err));
+  if (loopLibrary.AudioCount() > loopLibrary.ReadyCount() && err[0]) {
+    toastSet(err);
+  }
 }
 
 static void statusBar(BleMidi &ble) {
@@ -283,6 +339,9 @@ static void statusBar(BleMidi &ble) {
     canvas->printf("%d%%", pct);
   }
 }
+
+static bool loopsBlocked = false;
+static bool bleAsk = false;
 
 static void legend(const char *text) {
   canvas->fillRect(0, 122, 240, 13, COL_BAR);
@@ -317,6 +376,257 @@ static void voiceName(int id, char *dst, int n) {
     }
   }
   snprintf(dst, n, "P%d", id);
+}
+
+static int rollPatLen() {
+  int n = snap.patternLength ? (int)snap.patternLength : 16;
+  if (n > 128) {
+    n = 128;
+  }
+  if (n < 1) {
+    n = 16;
+  }
+  return n;
+}
+
+static int rollStepPx(int patLen) {
+  int w = kSpriteW - kGridX;
+  if (patLen * 8 <= w) {
+    return 8;
+  }
+  if (patLen * 6 <= w) {
+    return 6;
+  }
+  return 4;
+}
+
+static int rollVisible(int stepW) {
+  int n = (kSpriteW - kGridX) / stepW;
+  if (n < 1) {
+    n = 1;
+  }
+  return n;
+}
+
+static bool blackSemitone(int pitch) {
+  int semi = pitch % 12;
+  if (semi < 0) {
+    semi += 12;
+  }
+  return semi == 1 || semi == 3 || semi == 6 || semi == 8 || semi == 10;
+}
+
+static void clampRoll() {
+  int patLen = rollPatLen();
+  rollStep = clampi(rollStep, 0, patLen - 1);
+  rollPitch = clampi(rollPitch, 0, kRollRows - 1);
+  int vis = rollVisible(rollStepPx(patLen));
+  if (rollStep < rollOrigin) {
+    rollOrigin = rollStep;
+  }
+  if (rollStep >= rollOrigin + vis) {
+    rollOrigin = rollStep - vis + 1;
+  }
+  int maxOrigin = patLen > vis ? patLen - vis : 0;
+  rollOrigin = clampi(rollOrigin, 0, maxOrigin);
+}
+
+static void followRollHead() {
+  if (!rollFollow || !snap.playing) {
+    return;
+  }
+  int patLen = rollPatLen();
+  int len = snap.patternLength ? (int)snap.patternLength : patLen;
+  int head = (int)snap.step - (int)snap.pattern * len;
+  rollStep = clampi(head, 0, patLen - 1);
+}
+
+// Step where the note under the cursor starts, or -1. A hold of 2–4
+// covers the steps after it, and edits land on that start cell.
+static int rollCoverStart() {
+  int from = rollStep - 3;
+  if (from < 0) {
+    from = 0;
+  }
+  int limit = snap.rollCount;
+  if (limit > 128) {
+    limit = 128;
+  }
+  for (int s = from; s <= rollStep && s < limit; s++) {
+    uint8_t cell = snap.roll[s];
+    int note = cell & 0x0F;
+    if (note < 1 || note > 12) {
+      continue;
+    }
+    int len = ((cell >> 4) & 3) + 1;
+    if (s + len <= rollStep) {
+      continue;
+    }
+    int oct = (cell >> 6) & 3;
+    if ((note - 1) + oct * 12 == rollPitch) {
+      return s;
+    }
+  }
+  return -1;
+}
+
+static void drawRollDigit(int x, int y, int digit) {
+  static const uint8_t kBits[4][5] = {
+      {0x7, 0x1, 0x7, 0x4, 0x7},
+      {0x7, 0x1, 0x7, 0x1, 0x7},
+      {0x5, 0x5, 0x7, 0x1, 0x1},
+      {0x7, 0x4, 0x7, 0x1, 0x7},
+  };
+  if (digit < 2 || digit > 5) {
+    return;
+  }
+  const uint8_t *row = kBits[digit - 2];
+  for (int dy = 0; dy < 5; dy++) {
+    uint8_t bits = row[dy];
+    for (int dx = 0; dx < 3; dx++) {
+      if (bits & (4 >> dx)) {
+        canvas->fillRect(x + dx, y + dy, 1, 1, COL_TEXT);
+      }
+    }
+  }
+}
+
+static void drawRoll() {
+  followRollHead();
+  clampRoll();
+  int patLen = rollPatLen();
+  int stepW = rollStepPx(patLen);
+  int vis = rollVisible(stepW);
+  int origin = rollOrigin;
+
+  canvas->setTextColor(COL_TRACK[snap.track & 3]);
+  canvas->setCursor(2, 14);
+  canvas->printf("T%d", (snap.track & 3) + 1);
+  canvas->setTextColor(COL_TEXT);
+  canvas->printf(" %s%d", kNoteName[rollPitch % 12], rollPitch / 12 + 2);
+  int bar = rollStep / 16 + 1;
+  int bars = patLen / 16;
+  if (bars < 1) {
+    bars = 1;
+  }
+  int cover = rollCoverStart();
+  canvas->setTextColor(COL_DIM);
+  if (cover >= 0) {
+    uint8_t cell = snap.roll[cover];
+    int len = ((cell >> 4) & 3) + 1;
+    canvas->printf(" x%d  B%d/%d", len, bar, bars);
+  } else {
+    canvas->printf("  rest  B%d/%d", bar, bars);
+  }
+  if (snap.hint[0]) {
+    canvas->setTextColor(COL_AMBER);
+    canvas->setCursor(168, 14);
+    canvas->printf("%.8s", snap.hint);
+  }
+
+  for (int p = 0; p < kRollRows; p++) {
+    int y = kRollY + (kRollRows - 1 - p) * kRowH;
+    bool black = blackSemitone(p);
+    canvas->fillRect(kGridX, y, kSpriteW - kGridX, kRowH, black ? COL_LANE_B : COL_LANE_W);
+    if (black) {
+      canvas->fillRect(8, y, 8, kRowH, COL_KEY_B);
+    } else {
+      canvas->fillRect(8, y, 13, kRowH, COL_KEY_W);
+    }
+  }
+  for (int oct = 0; oct < 4; oct++) {
+    int topPitch = oct * 12 + 11;
+    int y = kRollY + (kRollRows - 1 - topPitch) * kRowH;
+    drawRollDigit(1, y + 10, oct + 2);
+    int cPitch = oct * 12;
+    int cy = kRollY + (kRollRows - 1 - cPitch) * kRowH;
+    canvas->fillRect(19, cy, 2, kRowH, COL_AMBER);
+  }
+
+  for (int i = 0; i <= vis; i++) {
+    int step = origin + i;
+    if (step > patLen || (step % 4) != 0) {
+      continue;
+    }
+    int x = kGridX + i * stepW;
+    if (x >= kSpriteW) {
+      break;
+    }
+    uint16_t line = (step % 16) == 0 ? COL_BARLINE : COL_BEAT;
+    canvas->fillRect(x, kRollY, 1, kRollH, line);
+  }
+
+  int from = origin - 3;
+  if (from < 0) {
+    from = 0;
+  }
+  int to = origin + vis;
+  if (to > patLen) {
+    to = patLen;
+  }
+  int count = snap.rollCount;
+  if (count > 128) {
+    count = 128;
+  }
+  uint16_t noteColor = COL_TRACK[snap.track & 3];
+  for (int s = from; s < to && s < count; s++) {
+    uint8_t cell = snap.roll[s];
+    int note = cell & 0x0F;
+    if (note < 1 || note > 12) {
+      continue;
+    }
+    int len = ((cell >> 4) & 3) + 1;
+    int oct = (cell >> 6) & 3;
+    int pitch = (note - 1) + oct * 12;
+    if (pitch < 0 || pitch >= kRollRows) {
+      continue;
+    }
+    int x0 = kGridX + (s - origin) * stepW;
+    int x1 = x0 + len * stepW - 1;
+    if (x1 < kGridX || x0 >= kSpriteW) {
+      continue;
+    }
+    if (x0 < kGridX) {
+      x0 = kGridX;
+    }
+    if (x1 >= kSpriteW) {
+      x1 = kSpriteW - 1;
+    }
+    int w = x1 - x0 + 1;
+    if (w < 1) {
+      continue;
+    }
+    int y = kRollY + (kRollRows - 1 - pitch) * kRowH;
+    canvas->fillRect(x0, y, w, kRowH, noteColor);
+  }
+
+  int len = snap.patternLength ? (int)snap.patternLength : patLen;
+  int head = (int)snap.step - (int)snap.pattern * len;
+  if (head >= origin && head < origin + vis && head < patLen) {
+    int x = kGridX + (head - origin) * stepW;
+    canvas->fillRect(x, kRollY, 1, kRollH, COL_PLAY);
+  }
+  if (rollStep >= origin && rollStep < origin + vis) {
+    int x = kGridX + (rollStep - origin) * stepW;
+    int y = kRollY + (kRollRows - 1 - rollPitch) * kRowH - 1;
+    int h = kRowH + 2;
+    if (y < kRollY) {
+      h -= kRollY - y;
+      y = kRollY;
+    }
+    if (y + h > kRollY + kRollH) {
+      h = kRollY + kRollH - y;
+    }
+    if (h > 1 && stepW > 1) {
+      canvas->drawRect(x, y, stepW, h, COL_CURSOR);
+    }
+  }
+
+  if (audioFaultText()[0] && strcmp(audioFaultText(), "audio ok") != 0) {
+    legend(audioFaultText());
+  } else {
+    legend("Fn move  ; hold  Ent steps");
+  }
 }
 
 static void drawTrackVoices(int y) {
@@ -398,7 +708,7 @@ static void drawPlay() {
   if (audioFaultText()[0] && strcmp(audioFaultText(), "audio ok") != 0) {
     legend(audioFaultText());
   } else {
-    legend("Spc play  Fn ,/ bar  Tab page");
+    legend("Spc play  Fn ,/ bar  Ent roll");
   }
 }
 
@@ -627,6 +937,16 @@ static void drawSong() {
 static void drawLoops() {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
+  if (loopsBlocked) {
+    canvas->setTextColor(COL_WARN);
+    canvas->setCursor(2, 40);
+    canvas->print("Loops off under MIDI");
+    canvas->setTextColor(COL_TEXT);
+    canvas->setCursor(2, 56);
+    canvas->print("Turn BLE off to load them");
+    legend("Settings  Fn ,  BLE off");
+    return;
+  }
   if (!sdCard.Mounted()) {
     canvas->setTextColor(COL_TEXT);
     canvas->setCursor(2, 40);
@@ -657,18 +977,34 @@ static void drawLoops() {
     canvas->setTextColor(COL_WARN);
     canvas->setCursor(2, 54);
     canvas->print(lib.error);
+  } else if (loopLibrary.LimitLine()[0]) {
+    canvas->setTextColor(COL_WARN);
+    canvas->setCursor(2, 54);
+    canvas->print(loopLibrary.LimitLine());
   }
-  for (int i = 0; i < lib.entryCount && i < 5; i++) {
+  int visible = 5;
+  int top = 0;
+  if (lib.entryCount > visible) {
+    top = loopRow - visible + 1;
+    if (top < 0) {
+      top = 0;
+    }
+    if (top > lib.entryCount - visible) {
+      top = lib.entryCount - visible;
+    }
+  }
+  for (int i = 0; i < visible && top + i < lib.entryCount; i++) {
+    int idx = top + i;
     int y = 66 + i * 10;
-    if (i == loopRow) {
+    if (idx == loopRow) {
       canvas->fillRect(0, y - 1, 220, 10, COL_AMBER);
       canvas->setTextColor(COL_BG);
     } else {
       canvas->setTextColor(COL_TEXT);
     }
     canvas->setCursor(4, y);
-    canvas->print(lib.entries[i].kind == LOOP_PATTERN ? "PAT " : "WAV ");
-    canvas->print(lib.entries[i].file);
+    canvas->print(lib.entries[idx].kind == LOOP_PATTERN ? "PAT " : "WAV ");
+    canvas->print(lib.entries[idx].file);
   }
   legend("Ent launch  A aud  Q quant  S stop");
 }
@@ -684,6 +1020,11 @@ static void drawMidi(BleMidi &ble) {
   }
   canvas->setCursor(2, 16);
   canvas->print(ble.StatusLine());
+  if (ble.Connected()) {
+    canvas->setTextColor(COL_TEXT);
+    canvas->setCursor(148, 16);
+    canvas->print(ble.LinkLine());
+  }
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(2, 28);
   canvas->print(ble.DiagLine());
@@ -718,11 +1059,11 @@ static void drawSettings(BleMidi &ble) {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   canvas->print("Settings");
-  const char *rows[] = {"Speaker", "Brightness", "BLE name", "Battery", "Free RAM", "Card", "Bars"};
+  const char *rows[] = {"Speaker", "Brightness", "BLE name", "BLE", "Unload", "Battery", "Free RAM", "Card", "Bars"};
   int top = cursor > 3 ? cursor - 3 : 0;
   for (int i = 0; i < 5; i++) {
     int idx = top + i;
-    if (idx > 6) {
+    if (idx > 8) {
       break;
     }
     int y = 30 + i * 12;
@@ -733,7 +1074,11 @@ static void drawSettings(BleMidi &ble) {
       canvas->setTextColor(COL_TEXT);
     }
     canvas->setCursor(4, y);
-    canvas->print(rows[idx]);
+    if (idx == 4) {
+      canvas->print(ble.Resident() ? "Unload BLE" : "Load BLE");
+    } else {
+      canvas->print(rows[idx]);
+    }
     canvas->setCursor(100, y);
     if (idx == 0) {
       canvas->printf("%u", outVol);
@@ -742,6 +1087,12 @@ static void drawSettings(BleMidi &ble) {
     } else if (idx == 2) {
       canvas->print(naming ? edit : bleName);
     } else if (idx == 3) {
+      canvas->print(ble.SwitchLine());
+    } else if (idx == 4) {
+      if (bleUnloadPending) {
+        canvas->print("next boot");
+      }
+    } else if (idx == 5) {
       int mv = M5.Power.getBatteryVoltage();
       int pct = M5.Power.getBatteryLevel();
       if (pct < 0) {
@@ -749,12 +1100,12 @@ static void drawSettings(BleMidi &ble) {
       } else {
         canvas->printf("%dmV %d%%", mv, pct);
       }
-    } else if (idx == 4) {
+    } else if (idx == 6) {
       unsigned freeKb = (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
       unsigned blkKb = (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
       const char *bleWord = ble.Connected() ? "conn" : (ble.Advertising() ? "adv" : "off");
       canvas->printf("%uk blk %uk %s", freeKb, blkKb, bleWord);
-    } else if (idx == 5) {
+    } else if (idx == 7) {
       canvas->print(sdCard.Mounted() ? "mounted" : "none");
     } else {
       canvas->printf("%u", snap.barCount ? snap.barCount : 1);
@@ -765,10 +1116,14 @@ static void drawSettings(BleMidi &ble) {
   canvas->print(ble.CounterLine());
   canvas->setCursor(4, 108);
   canvas->printf("v%s  %s", MOTHDECK_VERSION, BOARD_NAME);
-  if (!naming && cursor == 4) {
+  if (!naming && cursor == 6) {
     legend(ble.StatusLine());
+  } else if (!naming && cursor == 3) {
+    legend("Fn , off   Fn / on");
+  } else if (!naming && cursor == 4) {
+    legend(ble.Resident() ? (bleUnloadPending ? "Ent unload  Fn , keep" : "Ent unload") : "Ent load");
   } else {
-    legend(naming ? "Ent apply  Bksp  ` cancel" : (cursor == 6 ? "Fn ,/ bars" : "Lf/Rt change  Ent name"));
+    legend(naming ? "Ent apply  Bksp  ` cancel" : (cursor == 8 ? "Fn ,/ bars" : "Lf/Rt change  Ent name"));
   }
 }
 
@@ -833,15 +1188,38 @@ static void drawOverlay() {
   }
 }
 
+static void drawBleAsk() {
+  canvas->fillRect(8, 28, 224, 78, COL_BAR);
+  canvas->drawRect(8, 28, 224, 78, COL_WARN);
+  canvas->setTextColor(COL_WARN);
+  canvas->setCursor(16, 36);
+  canvas->print("Loops off under MIDI");
+  canvas->setTextColor(COL_TEXT);
+  canvas->setCursor(16, 50);
+  canvas->print("A new project will load");
+  canvas->setCursor(16, 66);
+  canvas->print("Save this one?  Y / N");
+  canvas->setTextColor(COL_DIM);
+  canvas->setCursor(16, 84);
+  canvas->print("` cancel, BLE stays off");
+}
+
 void uiDraw(BleMidi &ble) {
   if (!canvas) {
     return;
   }
+  loopsBlocked = ble.UserEnabled();
   audioReadSnap(&snap);
   canvas->fillSprite(COL_BG);
   statusBar(ble);
   switch (page) {
-    case 0: drawPlay(); break;
+    case 0:
+      if (rollView) {
+        drawRoll();
+      } else {
+        drawPlay();
+      }
+      break;
     case 1: drawInst(); break;
     case kFxPage: drawFx(); break;
     case kMixerPage: drawMixer(); break;
@@ -852,7 +1230,9 @@ void uiDraw(BleMidi &ble) {
     default: drawExit(); break;
   }
   drawToast();
-  if (overlay) {
+  if (bleAsk) {
+    drawBleAsk();
+  } else if (overlay) {
     drawOverlay();
   }
   if (canvas->getBuffer()) {
@@ -866,6 +1246,10 @@ static void assignInstrument() {
     toastSet(InstrumentBank::BuiltinName(cursor));
     return;
   }
+  if (cursor == 12 && loopsBlocked) {
+    toastSet("Loops off under MIDI");
+    return;
+  }
   if (cursor == 12) {
     char err[48];
     err[0] = 0;
@@ -873,6 +1257,8 @@ static void assignInstrument() {
     audioCommand('I', kLoopsVoice);
     if (n <= 0) {
       toastSet(err[0] ? err : "No loop samples");
+    } else if (loopLibrary.AudioCount() > n && err[0]) {
+      toastSet(err);
     } else {
       toastSet("Loops");
     }
@@ -889,17 +1275,16 @@ static void assignInstrument() {
   toastSet(instrumentBank.At(index).name);
 }
 
-static void doSave() {
+static bool doSave() {
   SongData song;
   if (!audioCapture(&song)) {
     toastSet("Capture failed");
-    return;
+    return false;
   }
   instrumentBank.FillSongRefs(&song);
-  char err[48];
   SdResult r = storage.Save(songSlot, song);
-  (void)err;
   toastSet(SdStorage::ResultText(r, songSlot));
+  return r == SD_SAVED;
 }
 
 static void doLoad() {
@@ -916,12 +1301,29 @@ static void doLoad() {
   }
   char lerr[48];
   lerr[0] = 0;
-  loopLibrary.PrepareSong(&song, lerr, (int)sizeof(lerr));
-  audioApplySong(song);
+  bool hadLoops = false;
   for (int t = 0; t < 4; t++) {
-    LoopArm arm;
-    if (loopLibrary.TrackArm(t, &arm)) {
-      audioArmLoop(t, arm);
+    if (song.loops[t].enabled) {
+      hadLoops = true;
+    }
+  }
+  if (loopsBlocked) {
+    for (int t = 0; t < 4; t++) {
+      song.loops[t].enabled = 0;
+    }
+    if (hadLoops) {
+      snprintf(lerr, sizeof(lerr), "Loops off under MIDI");
+    }
+  } else {
+    loopLibrary.PrepareSong(&song, lerr, (int)sizeof(lerr));
+  }
+  audioApplySong(song);
+  if (!loopsBlocked) {
+    for (int t = 0; t < 4; t++) {
+      LoopArm arm;
+      if (loopLibrary.TrackArm(t, &arm)) {
+        audioArmLoop(t, arm);
+      }
     }
   }
   if (!err[0]) {
@@ -930,6 +1332,10 @@ static void doLoad() {
 }
 
 static void launchLoop(bool audition) {
+  if (loopsBlocked) {
+    toastSet("Loops off under MIDI");
+    return;
+  }
   if (loopLibrary.Count() <= 0) {
     toastSet("No libraries");
     return;
@@ -977,9 +1383,199 @@ static void cycleKit(int dir) {
   toastSet(drumKit.Name(s));
 }
 
-static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool fn) {
+static bool projectHasLoops() {
+  audioReadSnap(&snap);
+  for (int t = 0; t < 4; t++) {
+    if (snap.loopOn[t] || snap.trackVoice[t] == kLoopsVoice) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void silenceLoops() {
+  for (int t = 0; t < 4; t++) {
+    audioStopLoop(t);
+  }
+  audioStopAudition();
+  delay(30);
+  loopLibrary.DropAudio();
+  pcmHoldDropAll();
+}
+
+static void restoreLoops() {
+  if (!pcmHoldReserved()) {
+    pcmHoldReservePreferred();
+  }
+  if (!pcmHoldReserved()) {
+    pcmHoldReserveFit();
+  }
+  char err[48];
+  err[0] = 0;
+  loopLibrary.PreloadInstrument(err, (int)sizeof(err));
+  if (loopLibrary.AudioCount() > loopLibrary.ReadyCount() && err[0]) {
+    toastSet(err);
+  }
+}
+
+static void stopRec() {
+  // 'p' stops only when transport is already running, so a stale snap
+  // cannot toggle Rec back on.
+  audioCommand('p', 0);
+}
+
+static void finishBleOn(BleMidi &ble) {
+  stopRec();
+  silenceLoops();
+  bleLoad = 1;
+  bleUnloadPending = false;
+  bool ok = false;
+  if (ble.Resident()) {
+    ble.SetUserEnabled(true);
+    ok = ble.UserEnabled() && ble.Advertising();
+  } else {
+    ok = ble.Begin(uiBleName(), true) && ble.Resident();
+  }
+  if (!ok) {
+    bleOn = 0;
+    savePrefs();
+    restoreLoops();
+    toastSet(ble.Resident() ? "BLE off: not advertising" : "not enough memory, reboot to load");
+    return;
+  }
+  bleOn = 1;
+  savePrefs();
+  ble.SetPendingUnload(false);
+  toastSet("BLE on, rec off");
+}
+
+static void finishBleOff(BleMidi &ble) {
+  if (ble.Resident()) {
+    ble.SetUserEnabled(false);
+  }
+  bleOn = 0;
+  savePrefs();
+  restoreLoops();
+  toastSet("BLE off");
+}
+
+static void requestBleOn(BleMidi &ble) {
+  if (ble.UserEnabled()) {
+    return;
+  }
+  if (projectHasLoops()) {
+    bleAsk = true;
+    return;
+  }
+  finishBleOn(ble);
+}
+
+static void answerBleAsk(char c, bool cancel, BleMidi &ble) {
+  if (cancel) {
+    bleAsk = false;
+    toastSet("BLE stays off");
+    return;
+  }
+  if (c != 'y' && c != 'n') {
+    return;
+  }
+  if (c == 'y' && !doSave()) {
+    bleAsk = false;
+    toastSet("Save failed, BLE stays off");
+    return;
+  }
+  audioReadSnap(&snap);
+  int bars = snap.barCount ? (int)snap.barCount : 1;
+  audioCommand('X', bars - 1);
+  delay(40);
+  bleAsk = false;
+  finishBleOn(ble);
+}
+
+static void rearmCaptured(SongData &song) {
+  char lerr[48];
+  lerr[0] = 0;
+  loopLibrary.PrepareSong(&song, lerr, (int)sizeof(lerr));
+  for (int t = 0; t < 4; t++) {
+    LoopArm arm;
+    if (loopLibrary.TrackArm(t, &arm)) {
+      audioArmLoop(t, arm);
+    }
+  }
+}
+
+static void doLoadBle(BleMidi &ble) {
+  if (ble.Resident()) {
+    bleLoad = 1;
+    bleUnloadPending = false;
+    savePrefs();
+    ble.SetPendingUnload(false);
+    toastSet("BLE stays loaded");
+    return;
+  }
+  if (bleOn && projectHasLoops()) {
+    bleAsk = true;
+    return;
+  }
+  SongData kept;
+  bool have = false;
+  if (!bleOn) {
+    have = audioCapture(&kept);
+    if (!have) {
+      toastSet("Capture failed");
+      return;
+    }
+  }
+  silenceLoops();
+  bleLoad = 1;
+  bleUnloadPending = false;
+  savePrefs();
+  bool ok = ble.Begin(uiBleName(), bleOn != 0);
+  if (!ble.Resident()) {
+    restoreLoops();
+    if (have) {
+      rearmCaptured(kept);
+    }
+    toastSet("not enough memory, reboot to load");
+    return;
+  }
+  if (!bleOn || !ok) {
+    restoreLoops();
+    if (have) {
+      rearmCaptured(kept);
+    }
+    toastSet("BLE off");
+    return;
+  }
+  stopRec();
+  toastSet("BLE on, rec off");
+}
+
+static void doUnloadBle(BleMidi &ble) {
+  // NimBLE deinit from the UI task calls nimble_port_stop and then
+  // nimble_port_deinit without waiting for the host task to leave
+  // nimble_port_run. deinit(true) also releases controller memory and the
+  // library will not init again until reboot. Either path can reset the
+  // board while the speaker DMA is running. The choice is stored and BLE
+  // is skipped on the next boot. The stack stays resident until then.
+  if (!ble.Resident()) {
+    toastSet("BLE unloaded");
+    return;
+  }
+  bleLoad = 0;
+  bleUnloadPending = true;
+  savePrefs();
+  ble.SetPendingUnload(true);
+  toastSet("Reboot to unload BLE");
+}
+
+static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool fn, BleMidi &ble) {
   if (fn) {
     if (c == ';') {
+      if (page == 0 && rollView) {
+        rollPitch = clampi(rollPitch + 1, 0, kRollRows - 1);
+        return;
+      }
       if (page == 1) {
         cursor = clampi(cursor - 1, 0, instCount() - 1);
       } else if (page == kFxPage) {
@@ -987,13 +1583,21 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       } else if (page == kMixerPage) {
         audioCommand('v', clampi((int)snap.vol[snap.track] + 1, 0, 8));
       } else if (page == kLoopsPage) {
-        loopRow = clampi(loopRow - 1, 0, 7);
+        int n = 0;
+        if (loopLibrary.Count() > 0) {
+          n = loopLibrary.At(loopLib).entryCount - 1;
+        }
+        loopRow = clampi(loopRow - 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor - 1, 0, 6);
+        cursor = clampi(cursor - 1, 0, 8);
       }
       return;
     }
     if (c == '.') {
+      if (page == 0 && rollView) {
+        rollPitch = clampi(rollPitch - 1, 0, kRollRows - 1);
+        return;
+      }
       if (page == 1) {
         cursor = clampi(cursor + 1, 0, instCount() - 1);
       } else if (page == kFxPage) {
@@ -1007,7 +1611,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         }
         loopRow = clampi(loopRow + 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor + 1, 0, 6);
+        cursor = clampi(cursor + 1, 0, 8);
       }
       return;
     }
@@ -1029,9 +1633,18 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         bright = (uint8_t)clampi((int)bright - 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
-      } else if (page == kSettingsPage && cursor == 6) {
+      } else if (page == kSettingsPage && cursor == 3) {
+        bleAsk = false;
+        finishBleOff(ble);
+      } else if (page == kSettingsPage && cursor == 4 && bleUnloadPending) {
+        doLoadBle(ble);
+      } else if (page == kSettingsPage && cursor == 8) {
         int bars = snap.barCount ? (int)snap.barCount : 1;
         audioCommand('Y', clampi(bars - 1, 1, 8));
+      } else if (page == 0 && rollView) {
+        rollFollow = false;
+        rollStep = clampi(rollStep - 1, 0, rollPatLen() - 1);
+        clampRoll();
       } else if (page == 0) {
         audioCommand('W', -1);
       }
@@ -1055,9 +1668,21 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         bright = (uint8_t)clampi((int)bright + 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
-      } else if (page == kSettingsPage && cursor == 6) {
+      } else if (page == kSettingsPage && cursor == 3) {
+        requestBleOn(ble);
+      } else if (page == kSettingsPage && cursor == 4) {
+        if (ble.Resident()) {
+          doUnloadBle(ble);
+        } else {
+          doLoadBle(ble);
+        }
+      } else if (page == kSettingsPage && cursor == 8) {
         int bars = snap.barCount ? (int)snap.barCount : 1;
         audioCommand('Y', clampi(bars + 1, 1, 8));
+      } else if (page == 0 && rollView) {
+        rollFollow = false;
+        rollStep = clampi(rollStep + 1, 0, rollPatLen() - 1);
+        clampRoll();
       } else if (page == 0) {
         audioCommand('W', 1);
       }
@@ -1130,6 +1755,23 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     int add = 0;
     if (pianoKey(c, &pitch, &add)) {
       int oct = clampi((int)snap.octave + add + (shift ? 1 : 0) + (alt ? 1 : 0) - (opt ? 1 : 0), 0, 3);
+      if (rollView) {
+        rollPitch = clampi(pitch + oct * 12, 0, kRollRows - 1);
+      }
+      // Live record still lands on the playhead. Stopped, the roll writes
+      // the cell under the cursor and auditions it.
+      bool record = snap.playing && snap.armed;
+      if (rollView && !record) {
+        int lenCode = 0;
+        if (rollStep >= 0 && rollStep < (int)snap.rollCount) {
+          uint8_t cell = snap.roll[rollStep];
+          if ((cell & 0x0F) > 0) {
+            lenCode = (cell >> 4) & 3;
+          }
+        }
+        audioCommand('r', (rollStep & 0xFF) | ((pitch & 0x0F) << 8) | ((oct & 0x0F) << 12) | (lenCode << 16));
+        return;
+      }
       if (oct != (int)snap.octave) {
         audioCommand('O', oct);
         audioCommand('N', pitch);
@@ -1143,7 +1785,14 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     else if (c == 'f') audioCommand('A', 2);
     else if (c == 'k') audioCommand('A', 3);
     else if (c == 'l') audioCommand('D', 0);
-    else if (c == ';') audioCommand('L', (snap.envLen) & 3);
+    else if (c == ';') {
+      int cover = rollView ? rollCoverStart() : -1;
+      if (cover >= 0) {
+        audioCommand('g', cover);
+      } else {
+        audioCommand('L', (snap.envLen) & 3);
+      }
+    }
     else if (c == '\'') audioCommand('*', 3);
     else if (c == '\\') audioCommand('O', ((int)snap.octave + 1) & 3);
     else if (c == '.') audioCommand('*', 0);
@@ -1156,8 +1805,12 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       instrumentBank.Scan();
       drumKit.Scan();
       loopLibrary.Scan();
-      loopLibrary.PreloadInstrument(nullptr, 0);
-      toastSet(sdCard.Mounted() ? "Rescanned" : "No SD card");
+      if (loopsBlocked) {
+        toastSet("Loops off under MIDI");
+      } else {
+        loopLibrary.PreloadInstrument(nullptr, 0);
+        toastSet(sdCard.Mounted() ? "Rescanned" : "No SD card");
+      }
     } else if (c == ',') {
       cycleKit(-1);
     } else if (c == '/') {
@@ -1287,19 +1940,36 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
     return;
   }
   if (st.enter) {
-    if (page == 1) assignInstrument();
+    if (page == 0) {
+      rollView = !rollView;
+      if (rollView) {
+        rollFollow = true;
+      }
+      toastSet(rollView ? "Piano roll" : "Step view");
+    } else if (page == 1) assignInstrument();
     else if (page == kFxPage) tweakFx(1);
     else if (page == kSongPage) doLoad();
     else if (page == kLoopsPage) launchLoop(false);
     else if (page == kSettingsPage && cursor == 2) {
       naming = true;
       snprintf(edit, sizeof(edit), "%s", bleName);
+    } else if (page == kSettingsPage && cursor == 4) {
+      if (ble.Resident()) {
+        doUnloadBle(ble);
+      } else {
+        doLoadBle(ble);
+      }
     }
     return;
   }
   if (st.del) {
     if (page == 0) {
-      audioCommand('_', 0);
+      if (rollView) {
+        int cover = rollCoverStart();
+        audioCommand('e', cover >= 0 ? cover : rollStep);
+      } else {
+        audioCommand('_', 0);
+      }
     } else if (page != 0) {
       page = 0;
       overlay = false;
@@ -1310,6 +1980,7 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
     if (!audioRunning()) {
       toastSet(audioFaultText());
     }
+    rollFollow = true;
     audioCommand('P', 0);
     return;
   }
@@ -1318,11 +1989,12 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
       continue;
     }
     char c = (char)tolower((unsigned char)raw);
-    handleChar(c, st.ctrl, st.shift, st.alt, st.opt, st.fn);
+    handleChar(c, st.ctrl, st.shift, st.alt, st.opt, st.fn, ble);
   }
 }
 
 void uiPoll(BleMidi &ble) {
+  loopsBlocked = ble.UserEnabled();
   auto &kb = M5Cardputer.Keyboard;
   bool esc = kb.isKeyPressed('`');
   bool btn = M5Cardputer.BtnA.isPressed();
@@ -1351,6 +2023,16 @@ void uiPoll(BleMidi &ble) {
   if (kb.isChange() && kb.isPressed()) {
     Keyboard_Class::KeysState st = kb.keysState();
     KeyEvent ev = eventFrom(st);
+    if (bleAsk) {
+      if (st.del || ev.ch == '`') {
+        answerBleAsk(0, true, ble);
+        return;
+      }
+      if (ev.ch == 'y' || ev.ch == 'n') {
+        answerBleAsk(ev.ch, false, ble);
+      }
+      return;
+    }
     ModalKind kind = activeModal(overlay, naming, page == kExitPage);
     if (kind != MODAL_NONE) {
       ModalAction action;

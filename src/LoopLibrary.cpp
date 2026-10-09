@@ -29,7 +29,7 @@ bool loopInstrumentHit(int note, LoopHit *out) {
 
 LoopLibrary loopLibrary;
 
-static const int kLoopCache = 4;
+static const int kLoopCache = 8;
 
 struct LoopCache {
   char key[56];
@@ -105,7 +105,10 @@ void LoopLibrary::Scan() {
     lib.bpm = man.bpm;
     lib.bars = man.bars;
     strncpy(lib.tags, man.tags, sizeof(lib.tags) - 1);
-    lib.entryCount = man.entryCount < 8 ? man.entryCount : 8;
+    lib.entryCount = man.entryCount;
+    if (lib.entryCount > kLoopEntryMax) {
+      lib.entryCount = kLoopEntryMax;
+    }
     for (int e = 0; e < lib.entryCount; e++) {
       lib.entries[e] = man.entries[e];
     }
@@ -276,21 +279,52 @@ bool LoopLibrary::PrepareSong(SongData *song, char *err, int errLen) {
   return ok;
 }
 
+static bool memoryLimit(const char *msg) {
+  return msg && (strstr(msg, "memory") != nullptr || strstr(msg, "cache full") != nullptr);
+}
+
+void LoopLibrary::DropAudio() {
+  for (int i = 0; i < kLoopCache; i++) {
+    if (cache[i].hold > 0) {
+      pcmHoldClose(cache[i].hold);
+    }
+    memset(&cache[i], 0, sizeof(cache[i]));
+  }
+  memset(instLoops, 0, sizeof(instLoops));
+  instLoopCount = 0;
+  ready = 0;
+  memset(loaded, 0, sizeof(loaded));
+  memset(loadedOk, 0, sizeof(loadedOk));
+  limitMsg[0] = 0;
+}
+
 int LoopLibrary::PreloadInstrument(char *err, int errLen) {
   LoopHit next[kInstLoopMax];
   memset(next, 0, sizeof(next));
+  limitMsg[0] = 0;
+  ready = 0;
+  audio = 0;
   int n = 0;
   setErr(err, errLen, "");
   if (!sdCard.Ensure()) {
     instLoopCount = 0;
     setErr(err, errLen, "Loops need the SD card");
+    snprintf(limitMsg, sizeof(limitMsg), "%s", "Loops need the SD card");
     return 0;
   }
   if (count == 0) {
     Scan();
   }
-  for (int i = 0; i < count && n < kInstLoopMax; i++) {
-    for (int e = 0; e < libs[i].entryCount && n < kInstLoopMax; e++) {
+  for (int i = 0; i < count; i++) {
+    for (int e = 0; e < libs[i].entryCount; e++) {
+      if (libs[i].entries[e].kind == LOOP_AUDIO) {
+        audio++;
+      }
+    }
+  }
+  bool stopped = false;
+  for (int i = 0; i < count && n < kInstLoopMax && !stopped; i++) {
+    for (int e = 0; e < libs[i].entryCount && n < kInstLoopMax && !stopped; e++) {
       if (libs[i].entries[e].kind != LOOP_AUDIO) {
         continue;
       }
@@ -301,6 +335,16 @@ int LoopLibrary::PreloadInstrument(char *err, int errLen) {
       char local[48];
       local[0] = 0;
       if (!LoadEntry(i, e, &arm, steps, &stepCount, &pattern, local, (int)sizeof(local))) {
+        if (memoryLimit(local)) {
+          stopped = true;
+          if (strstr(local, "memory") != nullptr || pcmHoldSlots() < kPcmHolds) {
+            snprintf(limitMsg, sizeof(limitMsg), "%d of %d, not enough memory", n, audio);
+          } else {
+            snprintf(limitMsg, sizeof(limitMsg), "%d of %d loops in memory", n, audio);
+          }
+          setErr(err, errLen, limitMsg);
+          break;
+        }
         if (local[0]) {
           setErr(err, errLen, local);
         }
@@ -321,8 +365,10 @@ int LoopLibrary::PreloadInstrument(char *err, int errLen) {
   }
   memcpy(instLoops, next, sizeof(instLoops));
   instLoopCount = n;
+  ready = n;
   if (n == 0 && err && errLen > 0 && !err[0]) {
     setErr(err, errLen, "No loop samples");
+    snprintf(limitMsg, sizeof(limitMsg), "%s", "No loop samples");
   }
   return n;
 }

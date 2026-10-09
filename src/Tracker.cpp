@@ -41,7 +41,7 @@ Tracker::Tracker() {
   SetBPM(0);
 }
 
-uint16_t Tracker::PackStep(uint8_t note, int8_t oct, uint8_t inst) {
+uint16_t Tracker::PackStep(uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode) {
   if (note > 15) {
     note = 15;
   }
@@ -54,7 +54,13 @@ uint16_t Tracker::PackStep(uint8_t note, int8_t oct, uint8_t inst) {
   if (inst > 63) {
     inst = 63;
   }
-  return (uint16_t)((note & 0x0F) | ((biased & 0x0F) << 4) | ((inst & 0x3F) << 8));
+  // An empty step, or a pitch this grid does not play, has no hold.
+  if (note == 0 || note > 12) {
+    lenCode = 0;
+  } else if (lenCode > 3) {
+    lenCode = 3;
+  }
+  return (uint16_t)((note & 0x0F) | ((biased & 0x0F) << 4) | ((inst & 0x3F) << 8) | ((lenCode & 0x03) << 14));
 }
 
 uint16_t Tracker::EmptyStep() {
@@ -68,11 +74,11 @@ uint16_t Tracker::CellAt(int track, int step) const {
   return steps[track][step];
 }
 
-void Tracker::SetCell(int track, int step, uint8_t note, int8_t oct, uint8_t inst) {
+void Tracker::SetCell(int track, int step, uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode) {
   if (track < 0 || track > 3 || step < 0 || step >= kMaxSteps) {
     return;
   }
-  steps[track][step] = PackStep(note, oct, inst);
+  steps[track][step] = PackStep(note, oct, inst, lenCode);
 }
 
 void Tracker::ClearNote(int track, int step) {
@@ -90,6 +96,13 @@ int8_t Tracker::OctaveAt(int track, int step) const {
 
 uint8_t Tracker::InstAt(int track, int step) const {
   return (uint8_t)((CellAt(track, step) >> 8) & 0x3F);
+}
+
+uint8_t Tracker::NoteLenAt(int track, int step) const {
+  if (NoteAt(track, step) == 0) {
+    return 0;
+  }
+  return (uint8_t)(((CellAt(track, step) >> 14) & 0x03) + 1);
 }
 
 int Tracker::PatternSlots() const {
@@ -114,9 +127,20 @@ int Tracker::Bars() const {
   return bars;
 }
 
-static int barsFromSteps(int steps) {
+// Steps stored in the song, turned into the pattern length the tracker uses.
+// A length the previous firmware could reload is 64 or fewer (four patterns
+// had to fit in the 256-step grid). Those stay that many steps, so a 32-step
+// song is still two bars and a 64-step song is still four, each with four
+// pattern slots. A stored 256 is the grid size, not an 8-bar pattern: reading
+// it as 128 steps leaves two slots and parks the upper half of the song on
+// pattern 2. It loads as four patterns of 64. Lengths 65..255 are the 1–8
+// bar sizes, capped at 8 bars.
+static int lengthFromSong(int steps) {
   if (steps < 1) {
-    return 1;
+    return Tracker::kStepsPerBar;
+  }
+  if (steps >= Tracker::kMaxSteps) {
+    return 64;
   }
   int bars = (steps + Tracker::kStepsPerBar - 1) / Tracker::kStepsPerBar;
   if (bars < 1) {
@@ -124,7 +148,7 @@ static int barsFromSteps(int steps) {
   } else if (bars > Tracker::kMaxBars) {
     bars = Tracker::kMaxBars;
   }
-  return bars;
+  return bars * Tracker::kStepsPerBar;
 }
 
 void Tracker::ClampTransport() {
@@ -511,6 +535,12 @@ void Tracker::SetCommand(char command, int val) {
       TogglePlayStop();
       SetHint(isPlaying ? "Rec On" : "Rec Off");
       break;
+    case 'p':
+      if (isPlaying) {
+        TogglePlayStop();
+        SetHint("Rec Off");
+      }
+      break;
     case 'I':
       SetInstrument(val);
       QueueBankMidi();
@@ -549,6 +579,63 @@ void Tracker::SetCommand(char command, int val) {
       ClearNote(selectedTrack, trackIndex);
       SetHint("Step clr");
       break;
+    case 'e':
+      // Local step inside the current pattern. 0 is a real step, so this
+      // is not the playhead clear ('_'), which ignores its value.
+      if (val >= 0 && val < patternLength) {
+        int abs = patternLength * currentPattern + val;
+        if (abs >= 0 && abs < kMaxSteps) {
+          ClearNote(selectedTrack, abs);
+          SetHint("Step clr");
+        }
+      }
+      break;
+    case 'g':
+      if (val >= 0 && val < patternLength) {
+        int abs = patternLength * currentPattern + val;
+        uint8_t note = NoteAt(selectedTrack, abs);
+        if (note > 0 && abs >= 0 && abs < kMaxSteps) {
+          uint8_t code = (uint8_t)(((CellAt(selectedTrack, abs) >> 14) & 3) + 1);
+          if (code > 3) {
+            code = 0;
+          }
+          SetCell(selectedTrack, abs, note, OctaveAt(selectedTrack, abs), InstAt(selectedTrack, abs), code);
+          SetHintF("Hold %d", code + 1);
+        }
+      }
+      break;
+    case 'r': {
+      // Stopped-roll write: step | (pitch << 8) | (octave << 12) | (len << 16).
+      // Recording still goes through 'N' at the playhead.
+      int local = val & 0xFF;
+      int pitch = (val >> 8) & 0x0F;
+      int oct = (val >> 12) & 0x0F;
+      int lenCode = (val >> 16) & 3;
+      if (local < 0 || local >= patternLength) {
+        break;
+      }
+      int abs = patternLength * currentPattern + local;
+      if (abs < 0 || abs >= kMaxSteps) {
+        break;
+      }
+      if (pitch > 11) {
+        pitch = 11;
+      }
+      if (oct > 3) {
+        oct = 3;
+      }
+      int inst = trackVoice[selectedTrack];
+      SetCell(selectedTrack, abs, (uint8_t)(pitch + 1), (int8_t)oct, (uint8_t)inst, (uint8_t)lenCode);
+      if (!(isPlaying && pressedOnce)) {
+        voices[selectedTrack].SetNote(pitch, false, oct, inst);
+        if (inst == kLoopsVoice) {
+          TriggerLoopVoice(selectedTrack, pitch);
+        }
+      }
+      QueueMidi(MIDI_MSG_NOTE_ON, (uint8_t)selectedTrack, (uint8_t)synthToMidiNote(pitch, oct), 100);
+      SetHintF("Hold %d", lenCode + 1);
+      break;
+    }
     case 'b':
       NudgeBpm(val);
       break;
@@ -876,7 +963,7 @@ void Tracker::PastePatternAll() {
 void Tracker::ClearAll(int val) {
   selectedTrack = 0;
   currentPattern = 0;
-  isPlaying = true;
+  isPlaying = false;
   extSync = false;
   clockCount = 0;
   pressedOnce = false;
@@ -987,7 +1074,8 @@ void Tracker::SetInstrument(int val) {
   trackVoice[selectedTrack] = (uint8_t)val;
   for (int i = 0; i < kMaxSteps; i++) {
     uint16_t cell = steps[selectedTrack][i];
-    SetCell(selectedTrack, i, (uint8_t)(cell & 0x0F), (int8_t)(((cell >> 4) & 0x0F) - 8), (uint8_t)val);
+    uint8_t lenCode = (uint8_t)((cell >> 14) & 3);
+    SetCell(selectedTrack, i, (uint8_t)(cell & 0x0F), (int8_t)(((cell >> 4) & 0x0F) - 8), (uint8_t)val, lenCode);
   }
   if (val != kLoopsVoice) {
     StopLoop(selectedTrack);
@@ -1150,7 +1238,15 @@ void Tracker::CaptureSong(SongData *song) const {
   song->allPatternPlay = allPatternPlay ? 1 : 0;
   for (int t = 0; t < 4; t++) {
     for (int s = 0; s < kMaxSteps; s++) {
-      song->tracks[t][s] = NoteAt(t, s);
+      uint8_t note = NoteAt(t, s);
+      uint8_t len = NoteLenAt(t, s);
+      // One step keeps the historical note byte (1-12). A longer hold
+      // stores the length code in bits 4-5. Octave stays in its own grid.
+      if (note > 0 && len > 1) {
+        song->tracks[t][s] = (uint8_t)((note & 0x0F) | (((len - 1) & 3) << 4));
+      } else {
+        song->tracks[t][s] = note;
+      }
       song->octaves[t][s] = OctaveAt(t, s);
       song->instruments[t][s] = InstAt(t, s);
     }
@@ -1180,7 +1276,7 @@ void Tracker::CaptureSong(SongData *song) const {
 }
 
 void Tracker::ApplySong(const SongData &song) {
-  patternLength = barsFromSteps(song.patternLength) * kStepsPerBar;
+  patternLength = lengthFromSong(song.patternLength);
   masterVolume = song.masterVolume;
   memcpy(bpms, song.bpms, sizeof(bpms));
   currentPattern = song.currentPattern;
@@ -1195,11 +1291,24 @@ void Tracker::ApplySong(const SongData &song) {
   solo = false;
   for (int t = 0; t < 4; t++) {
     for (int s = 0; s < kMaxSteps; s++) {
-      uint8_t note = song.tracks[t][s];
-      if (note > 15) {
-        note = 0;
+      uint8_t raw = song.tracks[t][s];
+      uint8_t note;
+      uint8_t lenCode;
+      // Bytes 0-15 are the old file: the whole byte is the note, hold is
+      // one step. A longer hold is stored above 15, with the pitch in the
+      // low nibble and the length code in bits 4-5.
+      if (raw <= 15) {
+        note = raw;
+        lenCode = 0;
+      } else {
+        note = (uint8_t)(raw & 0x0F);
+        lenCode = (uint8_t)((raw >> 4) & 3);
+        if (note == 0 || note > 12) {
+          note = 0;
+          lenCode = 0;
+        }
       }
-      SetCell(t, s, note, song.octaves[t][s], song.instruments[t][s]);
+      SetCell(t, s, note, song.octaves[t][s], song.instruments[t][s], lenCode);
     }
     Voice &voice = voices[t];
     const SongVoice &in = song.voices[t];
@@ -1559,5 +1668,31 @@ void Tracker::FillSnap(Snap *snap) const {
       int idx = origin + s;
       snap->notes[t][s] = (idx >= 0 && idx < kMaxSteps) ? NoteAt(t, idx) : 0;
     }
+  }
+  int rollLen = patternLength;
+  if (rollLen < 0) {
+    rollLen = 0;
+  } else if (rollLen > 128) {
+    rollLen = 128;
+  }
+  snap->rollCount = (uint8_t)rollLen;
+  memset(snap->roll, 0, sizeof(snap->roll));
+  for (int s = 0; s < rollLen; s++) {
+    int idx = patStart + s;
+    if (idx < 0 || idx >= kMaxSteps) {
+      continue;
+    }
+    uint8_t note = NoteAt(selectedTrack, idx);
+    if (note == 0 || note > 12) {
+      continue;
+    }
+    int oct = OctaveAt(selectedTrack, idx);
+    if (oct < 0) {
+      oct = 0;
+    } else if (oct > 3) {
+      oct = 3;
+    }
+    uint8_t lenCode = (uint8_t)((CellAt(selectedTrack, idx) >> 14) & 3);
+    snap->roll[s] = (uint8_t)((note & 0x0F) | (lenCode << 4) | ((oct & 3) << 6));
   }
 }
