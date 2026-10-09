@@ -173,7 +173,7 @@ static void audioTask(void *arg) {
 static void logAudioHeap(const char *tag) {
   uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  Serial.printf("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
+  DEV_LOGF("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
 }
 
 void audioBindMidi(BleMidi *ble) {
@@ -219,7 +219,7 @@ void audioStart() {
   if (!speakerOk) {
     Serial.println("AUDIO: speaker begin failed");
   } else {
-    Serial.println("AUDIO: speaker ok");
+    DEV_LOG("AUDIO: speaker ok");
     DEV_LOG("Speaker: 44100 Hz");
   }
   M5.Speaker.setVolume(160);
@@ -236,7 +236,11 @@ void audioStart() {
   } else {
     snprintf(audioFault, sizeof(audioFault), "audio ok");
   }
-  Serial.printf("AUDIO: %s\n", audioFault);
+  if (strcmp(audioFault, "audio ok") != 0) {
+    Serial.printf("AUDIO: %s\n", audioFault);
+  } else {
+    DEV_LOGF("AUDIO: %s\n", audioFault);
+  }
   logAudioHeap("after audio");
 }
 

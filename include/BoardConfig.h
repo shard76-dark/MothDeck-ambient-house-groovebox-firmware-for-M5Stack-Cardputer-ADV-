@@ -9,7 +9,7 @@
 // directly (the SD bus and the I2S lines into the ES8311).
 
 #define BOARD_NAME "Cardputer ADV"
-#define MOTHDECK_VERSION "1.0.0"
+#define MOTHDECK_VERSION "1.1.0"
 #define MOTHDECK_BLE_NAME_DEFAULT "MothDeck"
 
 // 1 compiles serial-monitor logs for the SD card and the speaker.

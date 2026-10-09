@@ -4,6 +4,7 @@
 #include "AudioEngine.h"
 #include "BleMidi.h"
 #include "BoardConfig.h"
+#include "DevLog.h"
 #include "LauncherExit.h"
 #include "PcmHold.h"
 #include "SplashMoth.h"
@@ -134,7 +135,7 @@ static void showSplash() {
 static void logHeap(const char *tag) {
   uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  Serial.printf("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
+  DEV_LOGF("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
 }
 
 void setup() {
@@ -144,7 +145,7 @@ void setup() {
   // largest free block is under 36KB, so a failed radio alloc cannot
   // take the memory the tracker is already using.
   Serial.begin(115200);
-  Serial.println("MothDeck BLE boot");
+  Serial.printf("MothDeck %s\n", MOTHDECK_VERSION);
   uiLoadPrefs();
   bringUpDisplay();
   logHeap("after display");

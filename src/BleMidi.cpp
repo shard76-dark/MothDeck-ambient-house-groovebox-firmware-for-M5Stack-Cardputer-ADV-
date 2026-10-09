@@ -12,6 +12,7 @@
 #include "BleAdvert.h"
 #include "BleMidi.h"
 #include "BoardConfig.h"
+#include "DevLog.h"
 
 static const char *kMidiServiceUuid = "03B80E5A-EDE8-4B33-A751-6CE34EC4C700";
 static const char *kMidiCharUuid = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
@@ -120,7 +121,7 @@ static void requestShortInterval(BLEServer *server, uint16_t handle) {
   // Interval units are 1.25 ms. 6..12 is 7.5..15 ms. Timeout is in 10 ms
   // units, and it has to be longer than the interval.
   bool ok = server->requestConnParams(handle, 6, 12, 0, 500);
-  Serial.printf("BLE: conn interval request 7.5-15ms handle=%u ok=%d\n", handle, ok ? 1 : 0);
+  DEV_LOGF("BLE: conn interval request 7.5-15ms handle=%u ok=%d\n", handle, ok ? 1 : 0);
   connParamsPending = !ok;
 }
 
@@ -152,7 +153,7 @@ class MidiServerCallbacks : public BLEServerCallbacks {
   }
 
   void onConnParamsUpdate(uint16_t conn_handle, uint16_t interval, uint16_t latency, uint16_t timeout, uint8_t status) override {
-    Serial.printf(
+    DEV_LOGF(
       "BLE: conn params handle=%u interval=%u (%.1fms) latency=%u timeout=%u status=%u\n",
       conn_handle,
       interval,
@@ -284,7 +285,7 @@ bool BleMidi::Begin(const char *name) {
   memset(&running, 0, sizeof(running));
   snapHeap(&heapFreeAtInit, &heapLargestAtInit);
   esp_bt_controller_status_t ctrl = esp_bt_controller_get_status();
-  Serial.printf(
+  DEV_LOGF(
     "BLE: before init free=%u largest=%u ctrl=%s psram=%d\n",
     (unsigned)heapFreeAtInit,
     (unsigned)heapLargestAtInit,
@@ -370,12 +371,12 @@ bool BleMidi::Begin(const char *name) {
     return false;
   }
   midiChar->setCallbacks(new MidiCharCallbacks());
-  Serial.println("BLE: write and write-without-response enabled");
+  DEV_LOG("BLE: write and write-without-response enabled");
   service->start();
   serverOk = true;
   failReason[0] = 0;
 
-  bool active = radioStart(true);
+  bool active = radioStart(MOTHOS_DEV_LOG != 0);
   started = true;
   if (active) {
     Serial.printf("BLE MIDI advertising as %s (air %s)\n", pkts.gapName, pkts.advName);
@@ -395,8 +396,8 @@ bool BleMidi::Restart(const char *name) {
   }
   buildBleMidiAdvert(name, MOTHDECK_BLE_NAME_DEFAULT, &pkts);
   int rc = ble_svc_gap_device_name_set(pkts.gapName);
-  Serial.printf("BLE: rename rc=%d name=%s air=%s\n", rc, pkts.gapName, pkts.advName);
-  bool active = radioStart(true);
+  DEV_LOGF("BLE: rename rc=%d name=%s air=%s\n", rc, pkts.gapName, pkts.advName);
+  bool active = radioStart(MOTHOS_DEV_LOG != 0);
   if (active) {
     failReason[0] = 0;
     Serial.printf("BLE MIDI advertising as %s (air %s)\n", pkts.gapName, pkts.advName);
@@ -412,21 +413,21 @@ void BleMidi::RecommitAfter(const char *where) {
   snapHeap(&freeB, &largest);
   const char *tag = where && where[0] ? where : "later";
   if (!initOk || !serverOk) {
-    Serial.printf(
+    DEV_LOGF(
       "BLE: after %s free=%u largest=%u active=0 (init never came up)\n",
       tag,
       (unsigned)freeB,
       (unsigned)largest);
     return;
   }
-  Serial.printf("BLE: after %s free=%u largest=%u recommit\n", tag, (unsigned)freeB, (unsigned)largest);
+  DEV_LOGF("BLE: after %s free=%u largest=%u recommit\n", tag, (unsigned)freeB, (unsigned)largest);
   bool active = radioStart(false);
   if (active) {
     failReason[0] = 0;
   } else {
     snprintf(failReason, sizeof(failReason), "not advertising");
   }
-  Serial.printf("BLE: after %s active=%d\n", tag, active ? 1 : 0);
+  DEV_LOGF("BLE: after %s active=%d\n", tag, active ? 1 : 0);
 }
 
 void BleMidi::Maintain() {
@@ -435,7 +436,7 @@ void BleMidi::Maintain() {
     lastStatMs = now;
     uint32_t packets = __atomic_load_n(&statPackets, __ATOMIC_RELAXED);
     if (connected || packets != 0) {
-      Serial.printf(
+      DEV_LOGF(
         "MIDI: pk=%lu msg=%lu clk=%lu note=%lu ovf=%lu\n",
         (unsigned long)packets,
         (unsigned long)__atomic_load_n(&statMessages, __ATOMIC_RELAXED),
@@ -457,14 +458,17 @@ void BleMidi::Maintain() {
   if (Advertising()) {
     return;
   }
-  Serial.println("BLE: advertising dropped; restarting");
+  DEV_LOG("BLE: advertising dropped; restarting");
   bool active = radioStart(false);
   if (active) {
     failReason[0] = 0;
   } else {
     snprintf(failReason, sizeof(failReason), "not advertising");
   }
-  Serial.printf("BLE: restart active=%d\n", active ? 1 : 0);
+  if (!active) {
+    Serial.println("BLE: advertising failed to restart");
+  }
+  DEV_LOGF("BLE: restart active=%d\n", active ? 1 : 0);
 }
 
 bool BleMidi::Advertising() {

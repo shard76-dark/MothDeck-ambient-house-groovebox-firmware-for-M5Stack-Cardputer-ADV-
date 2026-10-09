@@ -8,9 +8,10 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- SHA-256: `ac13390947360fa20de01e39a5ceb9e564af5612c051aa9a440c347dc976dc72`
-- Size: 1,129,152 bytes (app image, magic `E9`)
-- This image mixes overlapping drum hits and one-shots on a track, and the insert effects are the smoother full-rate versions. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
+- Version 1.1.0
+- SHA-256: `f8d9ab44082ab7ff5921dca9d30eb68ed8a440430bb019df31e4d82212569a4a`
+- Size: 1,134,080 bytes (app image, magic `E9`)
+- BLE MIDI pairs with an MPC Live II, patterns run from 1 to 8 bars, and playback stays up if the radio cannot start. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
@@ -23,7 +24,7 @@ The public source and releases live in this repository. Flash the application im
 - Groovebox session on the ESP32-S3: 4 tracks, patterns of 1–8 bars (16–128 steps of 16th notes)
 - Per-track FX (filter, delay, reverb, bitcrush, drive, chorus, tremolo) and a mixer with volume, mute, and solo
 - SD kits, plugin instruments, and loops. Loops stream from the card instead of filling RAM
-- BLE MIDI peripheral (notes, bank, volume, pitch bend)
+- BLE MIDI peripheral (notes, clock, transport, bank, volume, pitch bend), named MothDeck in the advertising packet
 - Built-in sounds are unsigned 8-bit mono at 22050 Hz so they fit the 8MB flash and the internal SRAM
 - One-second amber moth splash, then the Play page, with a checked exit back to Launcher
 
@@ -45,9 +46,9 @@ Unzip `releases/mothdeck-sd-pack.zip` onto the card root when you want the extra
 
 ## Boot
 
-Power-on turns the backlight on, draws an amber moth on a grey panel for about one second, then draws the Play page. The splash does not wait for a key. After Play is on screen, the firmware scans the card, starts the ES8311 headphone output, and starts BLE. That order is what keeps the panel lit and the codec clocked: the codec is not started inside `M5.begin`, and GPIO42 is the codec data line, not an amplifier pin to drive high. Sound comes out of the 3.5 mm jack. The internal speaker stays quiet.
+Power-on turns the backlight on, draws an amber moth on a grey panel for about one second, then draws the Play page. The splash does not wait for a key. Audio starts before the screen sprite. BLE starts after that first frame, and only when a contiguous internal block of at least 36KB is still free. The card scan is last. That order keeps playback alive if the radio cannot allocate: Space still starts the tracker. The codec is not started inside `M5.begin`, and GPIO42 is the codec data line, not an amplifier pin to drive high. Sound comes out of the 3.5 mm jack. The internal speaker stays quiet.
 
-The moth is amber (`0xFD20`) on grey (`0x1082`). An earlier image sent that amber buffer as already byte-swapped RGB565, so the panel showed blue. The splash now marks the buffer as logical RGB565 before `pushImage`. The UI sprite stays RGB565 as well. An 8-bit sprite had to be expanded through the SPI DMA path on every frame, and the loop windows used to sit in static RAM before the speaker and BLE started. Together those reset the ADV a moment after Play. The windows are allocated only when a loop opens. The image that stays on Play is the one in `releases/`.
+The moth is amber (`0xFD20`) on grey (`0x1082`). The splash marks that buffer as logical RGB565 before `pushImage`, so the moth stays amber instead of blue. The UI sprite is rgb332 (32,400 bytes) and is copied to the panel eight rows at a time. A full-frame 8-bit push grew a second DMA buffer and reset the ADV once the speaker was running. Loop windows are allocated only when a loop opens.
 
 Hold Esc (the `` ` `` key) or the front button for about 0.7 seconds to leave for Launcher, including during that boot. Exit is offered only when the `APP_TEST` slot holds a real ESP32-S3 app image (header magic `E9`). Otherwise the menu entry is grey, the page says "Launcher not found", and the hold does not erase `otadata`. Details are in [releases/INSTALL.md](releases/INSTALL.md).
 
@@ -106,7 +107,7 @@ A loop is not copied into the heap. Playback reads a short window from the card 
 
 ## Memory
 
-Settings prints Free RAM as free heap over the heap size, for example `86/312k`. That is internal SRAM still unused, over the heap the allocator knows about. It is not flash, and it is not a measurement of the whole chip. The legend on that row is the largest contiguous block a load can take. BLE, the screen buffer, and the audio DMA already sit in that heap, so the free number is small on a healthy boot. A `P` suffix would be free PSRAM. This Stamp-S3A has none, so the suffix stays off.
+Settings prints Free RAM as internal kilobytes still free, the largest free block, and whether BLE is advertising, connected, or off (`120k blk 80k adv`). That is the heap after audio and the sprite, not flash and not the whole chip. The Stamp-S3A has no PSRAM. BLE init is skipped when that largest block is under 36KB, and the MIDI page says so. Each pattern step in RAM is two bytes (note, octave, instrument). The song file on the card stays the unpacked 256-step layout.
 
 Loads that do not fit say how many kilobytes they need and how many are free (`Need Nk, Mk free`). The previous kit or plugin stays selected. Without PSRAM the caps are:
 
@@ -256,7 +257,7 @@ Described above. Fn+`;` moves the row up and will not pass row 8. Fn+`.` moves d
 
 ### MIDI
 
-The page shows the real radio state, the stored name, and the channel map. It says "MIDI advertising" only while the controller is advertising. If init failed it says `BLE off: init failed (reason)`, and the next line is the free internal heap and largest free block measured just before `BLEDevice::init`, plus whether advertising is active. The same lines are printed on the USB serial port. A stored name longer than 8 characters is shortened in the advertising packet, and the page shows that shorter name in parentheses. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
+The page shows the real radio state, the stored name, and the channel map. It says "MIDI advertising" only while the controller is advertising. If init failed it says `BLE off: init failed (reason)`, and the next line is the free internal heap and the largest free block measured just before `BLEDevice::init`. Under that it counts packets, parsed messages, overflows, clocks, and notes (`pk`, `msg`, `ovf`, `clk`, `note`). A stored name longer than 8 characters is shortened in the advertising packet, and the page shows that shorter name in parentheses. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
 
 ### Settings
 
@@ -268,13 +269,15 @@ The Exit page is a confirm, and it is in the page list only when a Launcher imag
 
 ## MIDI
 
-Advertised as a BLE MIDI peripheral on legacy connectable advertising. The stack is NimBLE, and its controller memory is internal RAM. The Stamp-S3A has no PSRAM. Audio starts before the screen sprite, and BLE starts only if a contiguous internal block of at least 36KB is still free; otherwise the MIDI page says init failed and playback keeps running. The sprite is rgb332 (32,400 bytes) and is expanded to the panel eight rows at a time, so the blit does not allocate a second full frame. The default name is `MothDeck`.
+On an MPC Live II, open Menu, then Preferences, then Bluetooth. Pair MothDeck, then Connect. Then open MIDI / Sync and enable MothDeck on the MIDI input ports. Turn Sync receive on when the MPC should drive the pattern clock.
+
+Advertised as a BLE MIDI peripheral on legacy connectable advertising. The name `MothDeck` and the MIDI service UUID are both in the primary advertising packet, which is what an MPC lists. A name longer than 8 characters is shortened there; the full name is in the scan response and on the MIDI page. The stack is NimBLE, and its controller memory is internal RAM. The Stamp-S3A has no PSRAM. Audio starts before the screen sprite, and BLE starts only if a contiguous internal block of at least 36KB is still free; otherwise the MIDI page says init failed and playback keeps running. The sprite is rgb332 (32,400 bytes) and is expanded to the panel eight rows at a time, so the blit does not allocate a second full frame. Pairing is Just Works with bonding and no passkey. The host starts pairing. MIDI bytes are not gated on encryption, so a host that never finishes pairing can still connect.
 
 Incoming BLE MIDI is parsed a whole packet at a time. One packet may hold several notes and interleaved `0xF8` clocks; Note On with velocity 0 is Note Off. Channels 1–4 play the four tracks, and any other channel plays the track that is already selected. MIDI Start, Continue, Stop, and Song Position move the transport. Clock is 24 per quarter note, and a pattern step is a 16th, so six clocks advance one step. Start puts the current pattern on bar 1 step 1 and plays that step. Continue resumes without moving. Song Position is a sixteenth-note index taken modulo the pattern length, and it does not switch patterns. The tempo shown on screen is averaged over one beat of those clocks. Space still starts and stops the internal clock.
 
 MIDI has no message for the other machine's sequence length. Auto-length watches for Start, or a Song Position of 0, after a whole number of bars of clocks (one bar is 96 clocks, and the count has to land within half a beat of that). It rounds to 1–8 bars and adopts that length. The MPC Live II manual documents MIDI Clock, Start, Stop, and Continue. It does not document a message at the sequence loop point, and in practice the Live II keeps the clock running through the loop and does not send Start or Song Position there. When nothing comes back to zero, auto-length leaves the length set on the device. Phase still follows the clock from the last Start: a 1-bar pattern stays locked to a longer MPC sequence, and a length that does not divide the MPC sequence drifts until the next Start or Song Position. Stop, Space, and a Song Position that is not zero throw away the measurement so the next Start does not resize from a partial pass.
 
-After a connection the link asks for a 7.5–15 ms interval. The MIDI page and the Settings screen count packets, parsed messages, clocks, notes, and buffer overflows. Change the BLE name on Settings. The name is stored in NVS. The primary advertising packet is general-discoverable and carries both the name and the 128-bit MIDI service UUID. A stored name longer than 8 characters is shortened there; the full name is in the scan response. Pairing is Just Works with bonding and no passkey. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
+After a connection the link asks for a 7.5–15 ms interval, and it accepts write and write-without-response. The MIDI page and the Settings screen count packets, parsed messages, clocks, notes, and buffer overflows. Settings also repeats the free heap, the largest block, and whether BLE is off, advertising, or connected. Change the BLE name on Settings. The name is stored in NVS. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
 
 | Message | Map |
 | --- | --- |
@@ -300,7 +303,7 @@ pip install platformio
 ./build.sh
 ```
 
-`pio run -e cardputer-adv-dev` builds the same firmware with SD and speaker logs, plus Arduino error logs, on the USB serial port. BLE init and advertising lines are printed by both builds.
+`pio run -e cardputer-adv-dev` builds the same firmware with SD, speaker, heap, and MIDI-counter logs, plus Arduino error logs, on the USB serial port. The release image prints the version at boot, a line when advertising starts, and a line when audio or BLE init fails. Packet, clock, and note counts stay on the MIDI page in both builds.
 
 `build.sh` regenerates the built-in waveforms, the example card tree, runs the host tests, and writes:
 

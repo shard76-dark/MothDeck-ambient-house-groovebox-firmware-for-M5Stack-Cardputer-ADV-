@@ -10,6 +10,7 @@
 #include "BleAdvert.h"
 #include "BleMidi.h"
 #include "BoardConfig.h"
+#include "DevLog.h"
 #include <M5Cardputer.h>
 #include <Preferences.h>
 #include <ctype.h>
@@ -230,7 +231,7 @@ static void pushCanvas() {
 static void logUiHeap(const char *tag) {
   uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  Serial.printf("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
+  DEV_LOGF("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
 }
 
 void uiBegin() {
@@ -245,7 +246,7 @@ void uiBegin() {
   if (!buf) {
     Serial.println("UI: sprite alloc failed");
   } else {
-    Serial.printf("UI: sprite 8-bit bytes=%u\n", (unsigned)(kSpriteW * kSpriteH));
+    DEV_LOGF("UI: sprite 8-bit bytes=%u\n", (unsigned)(kSpriteW * kSpriteH));
   }
   logUiHeap("after sprite");
   canvas->setTextSize(1);
