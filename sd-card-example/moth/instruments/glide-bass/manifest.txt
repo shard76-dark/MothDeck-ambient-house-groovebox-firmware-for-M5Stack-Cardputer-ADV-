@@ -1,0 +1,16 @@
+mothdeck-patch 1
+name=glide-bass
+source=builtin
+builtin=bass
+osc2=saw
+coarse=-12
+blend=40
+glide=90
+scale=off
+arp=0
+envelope=2
+envlen=1
+filter=1
+cutoff=36
+res=16
+drive=20

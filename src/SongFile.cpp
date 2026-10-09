@@ -3,6 +3,7 @@
 #include <ctype.h>
 
 static_assert(sizeof(TrackFx) == kSongFxBytes, "insert block is 12 bytes");
+static_assert(sizeof(TrackBlock) == kSongBlockBytes, "patch block is 8 bytes");
 
 static void writeU16(uint8_t *dst, int &i, uint16_t value) {
   dst[i++] = (uint8_t)(value & 0xFF);
@@ -105,6 +106,20 @@ bool trackFxActive(const TrackFx &fx) {
   return false;
 }
 
+void trackBlockClamp(TrackBlock *block) {
+  if (!block) {
+    return;
+  }
+  if (block->scaleMode > 6) block->scaleMode = 0;
+  if (block->scaleRoot > 11) block->scaleRoot = 11;
+  if (block->arpMode > 3) block->arpMode = 0;
+  if (block->osc2Wave > 4) block->osc2Wave = 0;
+  if (block->osc2Coarse > 24) block->osc2Coarse = 24;
+  if (block->osc2Coarse < -24) block->osc2Coarse = -24;
+  if (block->blend > 100) block->blend = 100;
+  if (block->glideMs > 2000) block->glideMs = 2000;
+}
+
 void trackFxClamp(TrackFx *fx) {
   if (!fx) {
     return;
@@ -122,6 +137,16 @@ void trackFxClamp(TrackFx *fx) {
   if (fx->tremolo > 100) fx->tremolo = 100;
 }
 
+bool songNeedsV4(const SongData &song) {
+  for (int t = 0; t < kSongTracks; t++) {
+    const TrackBlock &b = song.blocks[t];
+    if (b.scaleMode || b.arpMode >= 3 || b.osc2Wave || b.blend || b.glideMs || b.osc2Coarse) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool songNeedsV3(const SongData &song) {
   for (int t = 0; t < kSongTracks; t++) {
     if (trackFxActive(song.fx[t])) {
@@ -132,7 +157,7 @@ bool songNeedsV3(const SongData &song) {
 }
 
 bool songNeedsV2(const SongData &song) {
-  if (songNeedsV3(song) || song.pluginCount > 0 || song.currentVoice > 11) {
+  if (songNeedsV4(song) || songNeedsV3(song) || song.pluginCount > 0 || song.currentVoice > 11) {
     return true;
   }
   for (int t = 0; t < kSongTracks; t++) {
@@ -164,8 +189,11 @@ int songEncodedSize(const SongData &song) {
     return kSongFileBytes;
   }
   int n = v2Payload(song) + 2;
-  if (songNeedsV3(song)) {
+  if (songNeedsV3(song) || songNeedsV4(song)) {
     n += kSongTracks * kSongFxBytes;
+  }
+  if (songNeedsV4(song)) {
+    n += kSongTracks * kSongBlockBytes;
   }
   return n;
 }
@@ -204,6 +232,19 @@ static void writeRefs(const SongData &song, uint8_t *dst, int &i, int count) {
     i += kPluginNameLen;
     memcpy(dst + i, song.loops[t].name, kPluginNameLen);
     i += kPluginNameLen;
+  }
+}
+
+static void writeBlocks(const SongData &song, uint8_t *dst, int &i) {
+  for (int t = 0; t < kSongTracks; t++) {
+    const TrackBlock &b = song.blocks[t];
+    dst[i++] = b.scaleMode;
+    dst[i++] = b.scaleRoot;
+    dst[i++] = b.arpMode;
+    dst[i++] = b.osc2Wave;
+    dst[i++] = (uint8_t)b.osc2Coarse;
+    dst[i++] = b.blend;
+    writeU16(dst, i, b.glideMs);
   }
 }
 
@@ -267,13 +308,14 @@ int songEncode(const SongData &song, uint8_t *dst, int dstLen) {
   if (!dst) {
     return 0;
   }
-  bool v3 = songNeedsV3(song);
+  bool v4 = songNeedsV4(song);
+  bool v3 = v4 || songNeedsV3(song);
   bool v2 = songNeedsV2(song);
   int need = songEncodedSize(song);
   if (dstLen < need) {
     return 0;
   }
-  uint8_t version = v3 ? kSongVersionV3 : (v2 ? kSongVersionV2 : kSongVersion);
+  uint8_t version = v4 ? kSongVersionV4 : (v3 ? kSongVersionV3 : (v2 ? kSongVersionV2 : kSongVersion));
   int i = writeBody(song, dst, version);
   if (!v2) {
     if (i != kSongFileBytes - 2) {
@@ -292,6 +334,9 @@ int songEncode(const SongData &song, uint8_t *dst, int dstLen) {
   writeRefs(song, dst, i, count);
   if (v3) {
     writeFx(song, dst, i);
+  }
+  if (v4) {
+    writeBlocks(song, dst, i);
   }
   if (i != need - 2) {
     return 0;
@@ -343,7 +388,7 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
     return false;
   }
   uint8_t version = src[4];
-  if (version != kSongVersion && version != kSongVersionV2 && version != kSongVersionV3) {
+  if (version != kSongVersion && version != kSongVersionV2 && version != kSongVersionV3 && version != kSongVersionV4) {
     return false;
   }
   memset(song, 0, sizeof(*song));
@@ -394,8 +439,11 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
     return false;
   }
   int expect = kSongV1Payload + 1 + (int)count * (1 + kPluginNameLen) + kSongTracks * (2 + kPluginNameLen * 2);
-  if (version == kSongVersionV3) {
+  if (version == kSongVersionV3 || version == kSongVersionV4) {
     expect += kSongTracks * kSongFxBytes;
+  }
+  if (version == kSongVersionV4) {
+    expect += kSongTracks * kSongBlockBytes;
   }
   if (expect != payload) {
     return false;
@@ -426,7 +474,7 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
       return false;
     }
   }
-  if (version == kSongVersionV3) {
+  if (version == kSongVersionV3 || version == kSongVersionV4) {
     for (int t = 0; t < kSongTracks; t++) {
       TrackFx &fx = song->fx[t];
       fx.filter = src[i++];
@@ -442,6 +490,19 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
       fx.tremolo = src[i++];
       fx.reserved = src[i++];
       trackFxClamp(&fx);
+    }
+  }
+  if (version == kSongVersionV4) {
+    for (int t = 0; t < kSongTracks; t++) {
+      TrackBlock &b = song->blocks[t];
+      b.scaleMode = src[i++];
+      b.scaleRoot = src[i++];
+      b.arpMode = src[i++];
+      b.osc2Wave = src[i++];
+      b.osc2Coarse = (int8_t)src[i++];
+      b.blend = src[i++];
+      b.glideMs = readU16(src, i);
+      trackBlockClamp(&b);
     }
   }
   if (i != payload) {

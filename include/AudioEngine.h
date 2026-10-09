@@ -3,6 +3,7 @@
 #include "MidiProtocol.h"
 #include "SongFile.h"
 #include "Snap.h"
+#include "PluginFormat.h"
 
 class BleMidi;
 
@@ -12,6 +13,10 @@ bool audioRunning();
 // "audio ok", or "audio off: no queue|no task|no speaker".
 const char *audioFaultText();
 void audioCommand(char kind, int val);
+// Copied onto the selected track when the audio task handles command 'J'.
+// The caller fills it before audioCommand, on the UI task.
+void audioStagePatch(const PatchAssign &in);
+void audioCopyStaged(PatchAssign *out);
 void audioMidi(const MidiEvent &event);
 bool audioCapture(SongData *song);
 void audioApplySong(const SongData &song);

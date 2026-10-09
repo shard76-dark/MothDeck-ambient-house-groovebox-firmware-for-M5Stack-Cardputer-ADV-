@@ -4,6 +4,7 @@
 #include "MidiProtocol.h"
 #include "SongFile.h"
 #include "Snap.h"
+#include "PluginFormat.h"
 
 class Tracker {
 public:
@@ -153,6 +154,7 @@ private:
   void SetOctave(int val);
   void SetVolume(int val);
   void AdjustFx(int packed);
+  void ApplyPatch(const PatchAssign &patch);
   void SetTrackNum(int val);
   void ClearTrackNum(int val);
   void SetPatternNum(int val);

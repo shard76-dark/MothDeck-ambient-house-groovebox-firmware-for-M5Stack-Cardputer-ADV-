@@ -21,4 +21,9 @@ struct ToneVoice {
 void toneNoteOn(ToneVoice *voice, int id);
 int toneSample(ToneVoice *voice, int id, int baseFreq);
 
+// wave is InstWave: 0 sine, 1 square, 2 saw, 3 triangle.
+// toneInc is the phase step for a tracker frequency (1000 is about C4).
+int toneWave(int wave, uint32_t phase);
+uint32_t toneInc(int baseFreq);
+
 #endif

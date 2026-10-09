@@ -35,6 +35,7 @@ echo "Modal input"
   "$ROOT/src/Tracker.cpp" \
   "$ROOT/src/Voice.cpp" \
   "$ROOT/src/ToneSynth.cpp" \
+  "$ROOT/src/PatchBlocks.cpp" \
   "$ROOT/src/SongFile.cpp" \
   "$ROOT/src/default_samples.cpp" \
   "$ROOT/test/pcm_hold_stub.cpp" \
@@ -47,6 +48,7 @@ echo "Per-track FX and mixer volume"
   "$ROOT/src/Tracker.cpp" \
   "$ROOT/src/Voice.cpp" \
   "$ROOT/src/ToneSynth.cpp" \
+  "$ROOT/src/PatchBlocks.cpp" \
   "$ROOT/src/SongFile.cpp" \
   "$ROOT/src/default_samples.cpp" \
   "$ROOT/test/pcm_hold_stub.cpp" \
@@ -59,6 +61,7 @@ echo "Per-track instruments"
   "$ROOT/src/Tracker.cpp" \
   "$ROOT/src/Voice.cpp" \
   "$ROOT/src/ToneSynth.cpp" \
+  "$ROOT/src/PatchBlocks.cpp" \
   "$ROOT/src/SongFile.cpp" \
   "$ROOT/src/default_samples.cpp" \
   "$ROOT/test/pcm_hold_stub.cpp" \
@@ -85,6 +88,7 @@ echo "Plugins, loops, WAV, synth render"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_plugins.cpp" \
   "$ROOT/src/PluginFormat.cpp" \
+  "$ROOT/src/PatchBlocks.cpp" \
   "$ROOT/src/LoopFormat.cpp" \
   "$ROOT/src/WavPcm.cpp" \
   "$ROOT/src/SynthRender.cpp" \

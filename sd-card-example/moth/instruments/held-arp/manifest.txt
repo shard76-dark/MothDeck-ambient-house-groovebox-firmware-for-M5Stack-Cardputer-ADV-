@@ -1,0 +1,13 @@
+mothdeck-patch 1
+name=held-arp
+source=builtin
+builtin=saw
+arp=held
+scale=off
+envelope=2
+envlen=2
+filter=1
+cutoff=70
+res=8
+osc2=off
+glide=0

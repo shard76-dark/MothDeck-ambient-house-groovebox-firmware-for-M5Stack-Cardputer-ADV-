@@ -193,21 +193,24 @@ static bool loadAudioFile(const char *path, const InstrumentManifest &man, int16
   return true;
 }
 
-int InstrumentBank::Load(int index, char *err, int errLen) {
+int InstrumentBank::Load(int index, char *err, int errLen, PatchAssign *assign) {
   if (index < 0 || index >= count) {
     setErr(err, errLen, "No such instrument");
     return -1;
   }
-  return LoadFolder(items[index].folder, err, errLen);
+  return LoadFolder(items[index].folder, err, errLen, assign);
 }
 
-int InstrumentBank::LoadFolder(const char *folder, char *err, int errLen) {
+int InstrumentBank::LoadFolder(const char *folder, char *err, int errLen, PatchAssign *assign) {
+  if (assign) {
+    memset(assign, 0, sizeof(*assign));
+  }
   if (!manifestNameSafe(folder)) {
     setErr(err, errLen, "Bad instrument folder");
     return -1;
   }
   int have = findLive(folder);
-  if (have >= 0) {
+  if (have >= 0 && !assign) {
     return liveSlots[have].id;
   }
   if (!sdCard.Ensure()) {
@@ -222,9 +225,45 @@ int InstrumentBank::LoadFolder(const char *folder, char *err, int errLen) {
     return -1;
   }
   InstrumentManifest man;
-  if (!parseInstrumentManifest(text, (int)strlen(text), &man)) {
+  memset(&man, 0, sizeof(man));
+  if (patchManifestMagic(text, (int)strlen(text))) {
+    PatchAssign parsed;
+    if (!parsePatchManifest(text, (int)strlen(text), &parsed)) {
+      setErr(err, errLen, parsed.error[0] ? parsed.error : "Bad patch");
+      return -1;
+    }
+    if (assign) {
+      *assign = parsed;
+    }
+    if (parsed.source == PATCH_BUILTIN) {
+      for (int i = 0; i < count; i++) {
+        if (strcmp(items[i].folder, folder) == 0) {
+          items[i].id = parsed.instrument;
+          items[i].loaded = 1;
+          items[i].isPatch = 1;
+          items[i].kind = 0;
+          items[i].error[0] = 0;
+          if (parsed.name[0]) {
+            strncpy(items[i].name, parsed.name, sizeof(items[i].name) - 1);
+          }
+        }
+      }
+      setErr(err, errLen, "");
+      return parsed.instrument;
+    }
+    man = parsed.audio;
+    if (have >= 0) {
+      if (assign) {
+        assign->instrument = liveSlots[have].id;
+      }
+      setErr(err, errLen, "");
+      return liveSlots[have].id;
+    }
+  } else if (!parseInstrumentManifest(text, (int)strlen(text), &man)) {
     setErr(err, errLen, man.error[0] ? man.error : "Bad manifest");
     return -1;
+  } else if (have >= 0) {
+    return liveSlots[have].id;
   }
   int16_t *pcm = nullptr;
   int frames = 0;
@@ -286,6 +325,7 @@ int InstrumentBank::LoadFolder(const char *folder, char *err, int errLen) {
       items[i].id = id;
       items[i].loaded = 1;
       items[i].kind = (uint8_t)man.kind;
+      items[i].isPatch = (assign && assign->active) ? 1 : 0;
       items[i].error[0] = 0;
     }
   }
@@ -315,6 +355,23 @@ void InstrumentBank::Scan() {
       count++;
       continue;
     }
+    if (patchManifestMagic(text, (int)strlen(text))) {
+      PatchAssign parsed;
+      if (!parsePatchManifest(text, (int)strlen(text), &parsed)) {
+        strncpy(info.error, parsed.error[0] ? parsed.error : "Bad patch", sizeof(info.error) - 1);
+        strncpy(info.name, info.folder, sizeof(info.name) - 1);
+        info.isPatch = 1;
+        count++;
+        continue;
+      }
+      strncpy(info.name, parsed.name, sizeof(info.name) - 1);
+      info.isPatch = 1;
+      info.kind = parsed.source == PATCH_BUILTIN ? 0 : (uint8_t)parsed.audio.kind;
+      if (parsed.source == PATCH_BUILTIN) {
+        info.id = parsed.instrument;
+        info.loaded = 1;
+      }
+    } else {
     InstrumentManifest man;
     if (!parseInstrumentManifest(text, (int)strlen(text), &man)) {
       strncpy(info.error, man.error, sizeof(info.error) - 1);
@@ -324,6 +381,7 @@ void InstrumentBank::Scan() {
     }
     strncpy(info.name, man.name, sizeof(info.name) - 1);
     info.kind = (uint8_t)man.kind;
+    }
     int live = findLive(info.folder);
     if (live >= 0) {
       info.loaded = 1;

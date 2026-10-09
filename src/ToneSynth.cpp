@@ -213,3 +213,17 @@ int toneSample(ToneVoice *voice, int id, int baseFreq) {
   voice->phase += inc;
   return dspSat16(y);
 }
+
+int toneWave(int wave, uint32_t phase) {
+  ensureSine();
+  switch (wave) {
+    case 1: return squareAt(phase);
+    case 2: return sawAt(phase);
+    case 3: return triAt(phase);
+    default: return sineAt(phase);
+  }
+}
+
+uint32_t toneInc(int baseFreq) {
+  return freqInc(baseFreq);
+}

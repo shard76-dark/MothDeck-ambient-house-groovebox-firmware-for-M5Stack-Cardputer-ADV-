@@ -45,6 +45,8 @@ Quantize is 0 immediate, 1 next beat, 2 next bar. A version 2 file is at most 35
 
 Version 3 is version 2 plus 48 bytes, 12 per track, written only when an insert effect is in use. The largest file is 3604 bytes. Each track's 12 bytes are: filter (0 off, 1 low pass, 2 high pass), cutoff 0..127, resonance 0..80, delay division (0 off, 1 = 1/32, 2 = 1/16, 3 = 1/8), delay feedback 0..70, delay mix 0..100, reverb send 0..100, bitcrush 0..4, drive 0..100, chorus 0..100, tremolo 0..100, and one reserved byte. Values above those ranges are clamped on load. A version 1 or 2 file loads with every insert off. Per-track volume is the first byte of the 16-byte voice and is stored in every version.
 
+Version 4 is version 3's layout plus 32 bytes, 8 per track, written when a track uses scale lock, the held arpeggiator, a second oscillator, blend, coarse, or glide. The largest file is 3636 bytes. Interval walks (`arp` 1 and 2) stay in the version 1 voice byte and do not force version 4. A version 4 file always includes the 48 insert bytes, even when every insert is off. Each track's 8 bytes are: scale mode (0 off, 1 major, 2 minor, 3 harmonic minor, 4 mixolydian, 5 phrygian, 6 chromatic), scale root 0..11, arp mode (0 off, 3 held), second-oscillator wave (0 off, 1 sine, 2 square, 3 saw, 4 triangle), coarse transpose −24..24, blend 0..100, and glide time in milliseconds as uint16 (0..2000).
+
 ## Instrument folder
 
 `/moth/instruments/<folder>/manifest.txt`
@@ -75,6 +77,33 @@ fm_index=40
 
 The folder name is the id stored in a song. Up to 4 instruments stay in memory. Without PSRAM a sample is kept to 4096 frames. Plugin ids are 12..62. Id 63 is the Loops instrument, not a plugin folder.
 
+## Patch folder
+
+The same path, `/moth/instruments/<folder>/manifest.txt`, with a different header:
+
+```
+mothdeck-patch 1
+name=a-minor
+source=builtin
+builtin=bass
+scale=minor
+root=9
+envelope=2
+envlen=1
+filter=1
+cutoff=42
+res=12
+arp=0
+osc2=off
+glide=0
+```
+
+`source` is `builtin`, `sample`, `wavetable`, `subtractive`, or `fm`. A built-in needs `builtin=` (`drums`, `sfx`, `sine`, `square`, `saw`, `tri`, `organ`, `pluck`, `bell`, `flute`, `bass`, `pad`). A sample needs `sample=` and uses `root=` as the MIDI note the recording is at. `scaleroot=` is the scale pitch class when a sample also needs a scale. On a built-in or a baked cycle, `root=` is the scale pitch class (0..11, or a MIDI note taken modulo 12). `cutoff=` before `filter=` is the baked cycle cutoff (1..100). `cutoff=` after `filter=` is the track insert (0..127). `resonance=` is the baked cycle. `res=` is the insert.
+
+`scale` is `off`, `major`, `minor`, `harmonic`, `mixolydian`, `phrygian`, or `chromatic`. `arp` is `0`, `1`, `2`, or `held`. `osc2` is `off`, `sine`, `square`, `saw`, or `tri`. `coarse` is −24..24. `blend` is 0..100. `glide` is 0..2000 milliseconds. Missing keys leave that track field alone. A patch that should clear the previous track sets `scale=off`, `arp=0`, `osc2=off`, and `glide=0`. Unknown keys, including `attack`, `decay`, `sustain`, and `release`, fail the load and the previous instrument stays. The text stays inside the 1024-byte read.
+
+Assigning the folder copies the numbers once. Later FX-page edits are what a save stores. Loading the song does not paint the patch file back over those edits. A built-in patch does not store a folder name. A sample, subtractive, or FM patch stores the folder the way an instrument folder does, and the new blocks ride in the version 4 tail.
+
 ## Loop library
 
 `/moth/loops/<library>/manifest.txt`
@@ -92,7 +121,7 @@ pattern=offbeat.pat
 
 `bpm` is 40..240. `bars` is 1..8. Up to 16 entries in a file, and the browser lists all of them. Audio is unsigned 8-bit mono WAV at 22050 Hz, or raw int16. A 16-bit WAV still loads. Playback resamples with linear interpolation so the loop's BPM matches the project BPM. Pitch moves with tempo. Launch quantize is immediate, next beat, or next bar.
 
-The **Loops** instrument (id 63, the row after Pad) plays these audio loops from the keyboard. The stream windows are one heap block, reserved before BLE when that still leaves 36KB for the controller, otherwise cut from the block BLE leaves behind. If that block cannot hold every audio loop, the Loops page and the toast say how many opened and that there is not enough memory. Playback reads the WAV from the card through a short window, so the file is not copied into the heap. A song that selects Loops is version 2. Plugin folders use ids 12..62 so they do not collide with it.
+The **Loops** instrument (id 63, the row after Pad) plays these audio loops from the keyboard. The stream windows are one heap block. BLE is off at boot, so the preferred pool (20480 bytes) is reserved then. Turning BLE on frees that pool before NimBLE starts. Turning it off loads the windows that still fit beside the stack. If the pool cannot hold every audio loop, the Loops page and the toast say how many opened and that there is not enough memory. Playback reads the WAV from the card through a short window, so the file is not copied into the heap. A song that selects Loops is version 2. Plugin folders use ids 12..62 so they do not collide with it. A patch that does not assign Loops stays loaded while BLE is on.
 
 ## Drum kit
 
