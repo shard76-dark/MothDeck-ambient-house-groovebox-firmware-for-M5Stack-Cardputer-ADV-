@@ -24,7 +24,7 @@ A song that only uses the built-in instruments, and no loop assignment, is versi
 | 14 | 1 | selected track 0..3 |
 | 15 | 1 | current pattern 0..3 |
 | 16 | 1 | song mode (non-zero = all patterns) |
-| 17 | 1024 | notes, 4 tracks × 256 steps |
+| 17 | 1024 | notes, 4 tracks × 256 steps. A byte 0 is empty and 1–12 is a one-step pitch, the same as before. When the byte is above 15, bits 4–5 are a hold of two, three, or four steps and the low nibble is still the pitch. A one-step note is stored unchanged, so an old song byte is untouched |
 | 1041 | 1024 | octaves, signed |
 | 2065 | 1024 | instruments per step |
 | 3089 | 64 | 4 voices × 16 bytes |

@@ -12,7 +12,7 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 - SHA-256: `f8d9ab44082ab7ff5921dca9d30eb68ed8a440430bb019df31e4d82212569a4a`
 - Size: 1,134,080 bytes (app image, magic `E9`)
 - BLE MIDI pairs with an MPC Live II, patterns run from 1 to 8 bars, and playback stays up if the radio cannot start. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
-- 1.1.1 is unreleased. It adds a Settings BLE on/off switch and an Unload BLE row, and it fixes SD loops that only opened two files after BLE started. The image above is still 1.1.0.
+- 1.1.1 is unreleased. It adds a Settings BLE on/off switch and an Unload BLE row, fixes SD loops that only opened two files after BLE started, and draws the Play page as a piano roll. The image above is still 1.1.0.
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
@@ -59,7 +59,7 @@ Tab moves between pages: Play, Instrument, FX, Mixer, Song, Loops, MIDI, Setting
 
 There are 4 tracks. A pattern is 1 to 8 bars, and a bar is 4 beats of 4 sixteenth-notes, so 16 to 128 steps. A new song is 1 bar. The grid is still 256 steps, so four patterns fit up through 4 bars, three fit at 5 bars, and two fit at 6, 7, or 8 bars. Keys 5–8 select a pattern and stop at the last one that fits. Step timing matches MothOS: the mix is 44100 Hz, and one step is `11025 / beats-per-second` samples. Each track keeps its own instrument. Selecting another track recalls that track's instrument. It does not copy the previous one across.
 
-The Play page shows the bar being edited as `B3/8`. Fn+`,` and Fn+`/` page that 16-step view. While playback is running the view follows the playhead until you page it. Settings has a Bars row; Fn+`,` and Fn+`/` on that row change the length without clearing notes. Song `N` still starts a new song, and it steps the length through 1–8 bars. A song saved with 16 steps loads as 1 bar. A song saved with 32 steps stays 2 bars. Other stored lengths round up to a whole bar, capped at 8.
+The Play page is a piano roll: pitches down the left (C2 at the bottom through B5), time across, notes as blocks as wide as their hold. A one-bar pattern draws 8 pixels per step. Two bars use 6. Three bars and longer use 4, and the grid scrolls to keep the cursor on screen. While playback is running the cursor follows the playhead until you move it in time. Enter switches to the old 16-step strip, where Fn+`,` and Fn+`/` still page the bar (`B3/8`). Enter again returns to the roll. Settings has a Bars row; Fn+`,` and Fn+`/` on that row change the length without clearing notes. Song `N` still starts a new song, and it steps the length through 1–8 bars. A song saved with 16 steps loads as 1 bar. A song saved with 32 steps stays 2 bars. Other stored lengths round up to a whole bar, capped at 8. A one-step note is stored as before. A longer hold (2–4 steps) uses two spare bits in that same note byte.
 
 Audio runs on its own task on core 1. The UI reads a snapshot. It does not write the tracker from the draw path. The speaker is fed 256-frame blocks while fewer than two blocks are queued.
 
@@ -186,7 +186,7 @@ The drawings follow `src/Ui.cpp` and the 4×14 matrix in M5Cardputer `Keyboard.h
 
 ![Exit](docs/keymap-exit.png)
 
-Esc is the grave key. The arrow legends are `;` up, `,` left, `.` down, `/` right, and they only move something while Fn is held, except on the Instrument page where `,` and `/` load kits by themselves. Fn+`-` and Fn+`=` change speaker volume by 12 on every page. Fn plus any other key still does that key's normal action.
+Esc is the grave key. The arrow legends are `;` up, `,` left, `.` down, `/` right, and they only move something while Fn is held, except on the Instrument page where `,` and `/` load kits by themselves. On the piano roll those four move the cursor. On the 16-step strip, Fn+`,` and Fn+`/` page the bar. Fn+`-` and Fn+`=` change speaker volume by 12 on every page. Fn plus any other key still does that key's normal action.
 
 Ctrl or Shift substitutes the key's shifted glyph before the UI lowercases it. Letter commands still match. Digit and punctuation commands do not: Ctrl+1–8 is `!@#$%^&*` and does not clear a track or pattern, and Shift+`,` is `<` rather than the high C. Ctrl+N still starts a new song.
 
@@ -213,12 +213,12 @@ Ctrl or Shift substitutes the key's shifted glyph before the UI lowercases it. L
 | F | Retrig, cycles 0–2 |
 | K | Wobble, cycles 0–2 |
 | L | Echo, cycles 0–2 |
-| `;` | Sends note-length `L` with the stored length. It does not step. The voice stores 4 minus that value. Fn+`;` moves the page list up when the list is open |
+| `;` | On the roll, if the cursor is on a note, cycle that note's hold through 1–4 steps. On an empty cell, or on the 16-step strip, send note-length `L` with the stored length. It does not step. The voice stores 4 minus that value. Fn+`;` moves the roll cursor up a semitone, and moves the page list up when the list is open |
 | `'` | Toggle sampler mode |
 | `\` | Cycle the octave |
-| `.` | Copy pattern. Fn+`.` moves the page list down when the list is open |
-| `/` | Paste pattern. Fn+`/` pages to the next bar |
-| Enter | No action |
+| `.` | Copy pattern. Fn+`.` moves the roll cursor down a semitone, and moves the page list down when the list is open |
+| `/` | Paste pattern. Fn+`/` moves the roll cursor one step later. On the 16-step strip it pages to the next bar |
+| Enter | Toggle the piano roll and the 16-step strip |
 
 Played keys are also sent as BLE MIDI note-on on the selected track's channel.
 

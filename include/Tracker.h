@@ -36,6 +36,8 @@ public:
   uint8_t NoteAt(int track, int step) const;
   int8_t OctaveAt(int track, int step) const;
   uint8_t InstAt(int track, int step) const;
+  // 0 when the step is empty, otherwise 1–4 steps. Code 0 is one step.
+  uint8_t NoteLenAt(int track, int step) const;
   int PatternSlots() const;
   int Bars() const;
 
@@ -108,9 +110,10 @@ private:
   MidiEvent midiOutQ[4];
   uint8_t midiOutCount;
   // One word per step: note in bits 0-3 (0 empty, 1-12 pitch), octave+8 in
-  // bits 4-7 (-8..7), instrument in bits 8-13 (0-63). The song file stays
-  // unpacked. 4*256*2 bytes replaces the old 4*256*3 note/octave/instrument
-  // grids.
+  // bits 4-7 (-8..7), instrument in bits 8-13 (0-63), hold length in bits
+  // 14-15 (0 = one step, then two, three, four). A one-step note leaves
+  // those bits clear, so its song byte stays 1-12. 4*256*2 bytes replaces
+  // the old 4*256*3 note/octave/instrument grids.
   uint16_t steps[4][kMaxSteps];
   uint16_t patternCopy[4][kMaxPatternSteps];
   int patternCopyLen;
@@ -135,9 +138,9 @@ private:
   void ClampTransport();
   void SyncEditBar();
   uint16_t CellAt(int track, int step) const;
-  void SetCell(int track, int step, uint8_t note, int8_t oct, uint8_t inst);
+  void SetCell(int track, int step, uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode = 0);
   void ClearNote(int track, int step);
-  static uint16_t PackStep(uint8_t note, int8_t oct, uint8_t inst);
+  static uint16_t PackStep(uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode = 0);
   static uint16_t EmptyStep();
   void QueueBankMidi();
   void QueueVolumeMidi();

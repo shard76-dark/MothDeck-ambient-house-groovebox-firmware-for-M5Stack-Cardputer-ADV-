@@ -128,15 +128,15 @@
 <text x="1143.9" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Echo</text>
 <rect x="1246.6" y="316.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
 <text x="1254.6" y="334.0" fill="#1a0e06" font-size="13" opacity="0.72">;</text>
-<text x="1254.6" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Note len</text>
-<text x="1254.6" y="418.0" fill="#1a0e06" font-size="11" opacity="0.9">Fn: list −</text>
+<text x="1254.6" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Hold / len</text>
+<text x="1254.6" y="418.0" fill="#1a0e06" font-size="11" opacity="0.9">Fn: pitch +</text>
 <rect x="1357.4" y="316.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
 <text x="1365.4" y="334.0" fill="#1a0e06" font-size="13" opacity="0.72">'</text>
 <text x="1365.4" y="362.0" fill="#1a0e06" font-size="14" font-weight="700">Sampler</text>
-<rect x="1468.2" y="316.0" width="103.8" height="112.0" rx="8" fill="#262b32"/>
-<text x="1476.2" y="334.0" fill="#8b939c" font-size="13" opacity="0.72">Enter</text>
-<text x="1476.2" y="362.0" fill="#8b939c" font-size="14" font-weight="700">Idle</text>
-<text x="1476.2" y="418.0" fill="#8b939c" font-size="11" opacity="0.9">Enter unused</text>
+<rect x="1468.2" y="316.0" width="103.8" height="112.0" rx="8" fill="#c44784"/>
+<text x="1476.2" y="334.0" fill="#fff5fa" font-size="13" opacity="0.72">Enter</text>
+<text x="1476.2" y="362.0" fill="#fff5fa" font-size="14" font-weight="700">Roll</text>
+<text x="1476.2" y="418.0" fill="#fff5fa" font-size="11" opacity="0.9">toggle steps</text>
 <rect x="28.0" y="435.0" width="103.8" height="112.0" rx="8" fill="#4c5562"/>
 <text x="36.0" y="453.0" fill="#eef2f6" font-size="13" opacity="0.72">Ctrl</text>
 <text x="36.0" y="481.0" fill="#eef2f6" font-size="14" font-weight="700">Ctrl</text>
@@ -173,15 +173,15 @@
 <rect x="1135.9" y="435.0" width="103.8" height="112.0" rx="8" fill="#f4efe6"/>
 <text x="1143.9" y="453.0" fill="#1b1814" font-size="13" opacity="0.72">,</text>
 <text x="1143.9" y="481.0" fill="#1b1814" font-size="14" font-weight="700">C +oct</text>
-<text x="1143.9" y="537.0" fill="#1b1814" font-size="11" opacity="0.9">Shift is &lt;</text>
+<text x="1143.9" y="537.0" fill="#1b1814" font-size="11" opacity="0.9">Fn: step −</text>
 <rect x="1246.6" y="435.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
 <text x="1254.6" y="453.0" fill="#1a0e06" font-size="13" opacity="0.72">.</text>
 <text x="1254.6" y="481.0" fill="#1a0e06" font-size="14" font-weight="700">Copy pat</text>
-<text x="1254.6" y="537.0" fill="#1a0e06" font-size="11" opacity="0.9">Fn: list +</text>
+<text x="1254.6" y="537.0" fill="#1a0e06" font-size="11" opacity="0.9">Fn: pitch −</text>
 <rect x="1357.4" y="435.0" width="103.8" height="112.0" rx="8" fill="#d86a28"/>
 <text x="1365.4" y="453.0" fill="#1a0e06" font-size="13" opacity="0.72">/</text>
 <text x="1365.4" y="481.0" fill="#1a0e06" font-size="14" font-weight="700">Paste pat</text>
-<text x="1365.4" y="537.0" fill="#1a0e06" font-size="11" opacity="0.9">Fn: idle</text>
+<text x="1365.4" y="537.0" fill="#1a0e06" font-size="11" opacity="0.9">Fn: step +</text>
 <rect x="1468.2" y="435.0" width="103.8" height="112.0" rx="8" fill="#2b9d55"/>
 <text x="1476.2" y="453.0" fill="#f3fff7" font-size="13" opacity="0.72">Space</text>
 <text x="1476.2" y="481.0" fill="#f3fff7" font-size="14" font-weight="700">Play / Stop</text>
@@ -214,14 +214,14 @@
 <text x="1048" y="605" fill="#8b939c" font-size="12">No action</text>
 <text x="28" y="630" fill="#c5ccd3" font-size="13">Bottom letters are the current octave. Q through ] is the next octave, chromatic. Comma is the C above that row.</text>
 <text x="28" y="650" fill="#c5ccd3" font-size="13">Shift or Alt adds an octave on letter notes. Opt subtracts one. They stack and clamp to MIDI C2–B5.</text>
-<text x="28" y="670" fill="#c5ccd3" font-size="13">Fn+; and Fn+. change page only while the page list is open. Fn+, and Fn+/ do nothing on Play. Other Fn chords</text>
-<text x="28" y="690" fill="#c5ccd3" font-size="13">still do the key's normal action.</text>
+<text x="28" y="670" fill="#c5ccd3" font-size="13">On the piano roll, Fn+; and Fn+. move the cursor by a semitone, and Fn+, and Fn+/ move it by a step. On the</text>
+<text x="28" y="690" fill="#c5ccd3" font-size="13">16-step strip, Fn+, and Fn+/ page the bar. Other Fn chords still do the key's normal action.</text>
 <text x="28" y="710" fill="#c5ccd3" font-size="13">Fn+− and Fn+= change speaker volume on every page (step 12). Hold ` or the front button about 0.7s to exit when</text>
 <text x="28" y="730" fill="#c5ccd3" font-size="13">Launcher is present.</text>
 <text x="28" y="750" fill="#c5ccd3" font-size="13">While the page list is open it takes every key. Fn+; , Fn+. , and Tab move the highlight. Enter stays there. `</text>
 <text x="28" y="770" fill="#c5ccd3" font-size="13">or Backspace returns to Play. Notes, space, and track keys do nothing.</text>
-<text x="28" y="790" fill="#c5ccd3" font-size="13">; sends note-length L with the stored length, and does not step it. The voice stores 4 minus that value. Enter</text>
-<text x="28" y="810" fill="#c5ccd3" font-size="13">does nothing on Play.</text>
+<text x="28" y="790" fill="#c5ccd3" font-size="13">On the roll, ; cycles the hold of the note under the cursor through 1–4 steps. On an empty cell it sends</text>
+<text x="28" y="810" fill="#c5ccd3" font-size="13">note-length L, and the voice stores 4 minus that value. Enter toggles the 16-step strip.</text>
 <text x="28" y="830" fill="#c5ccd3" font-size="13">Ctrl or Shift sends the shifted glyph, then the UI lowercases it. Digits and punctuation no longer match, so</text>
 <text x="28" y="850" fill="#c5ccd3" font-size="13">Ctrl+1–8 (!@#$%^&amp;*) does not clear a track or pattern, and Shift+, is &lt; rather than high C. Ctrl+N still starts</text>
 <text x="28" y="870" fill="#c5ccd3" font-size="13">a new song.</text>

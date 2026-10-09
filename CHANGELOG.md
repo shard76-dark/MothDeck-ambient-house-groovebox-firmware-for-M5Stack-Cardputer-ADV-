@@ -4,7 +4,7 @@ Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHAN
 
 ## 1.1.1 (unreleased)
 
-Settings can turn the BLE radio off and on without unloading NimBLE, and a separate Unload BLE row skips the stack on the next boot. SD loop windows are reserved so a library no longer stops at two files after BLE starts. A stored 256-step song loads as four patterns of 64. Notes are in [releases/CHANGELOG.md](releases/CHANGELOG.md). The download image is still 1.1.0.
+Settings can turn the BLE radio off and on without unloading NimBLE, and a separate Unload BLE row skips the stack on the next boot. SD loop windows are reserved so a library no longer stops at two files after BLE starts. A stored 256-step song loads as four patterns of 64. Play opens on a piano roll (Enter returns to the 16-step strip). Notes are in [releases/CHANGELOG.md](releases/CHANGELOG.md). The download image is still 1.1.0.
 
 ## 1.1.0 (2026-10-09)
 
