@@ -109,6 +109,9 @@ static void testMenuBlocksPage() {
       Tracker open;
       open.SetCommand('T', 3);
       open.SetCommand('$', 2);
+      if (ev.ch == 'z' || ev.ch == 'n') {
+        open.SetCommand('P', 0);
+      }
       Shot openBefore = shoot(open);
       leakToTracker(open, ev);
       expect(!same(openBefore, shoot(open)), "the same key changes the tracker when no menu is open");

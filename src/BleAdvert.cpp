@@ -26,9 +26,9 @@ static const uint8_t kFlagGeneralDiscoverable = 0x06;
 static const uint8_t kAppearanceUnknown[2] = {0x00, 0x00};
 
 // Peripheral preferred connection interval, units of 1.25 ms.
-// 0x0006 .. 0x0012 is 7.5 ms .. 22.5 ms.
+// 0x0006 .. 0x000C is 7.5 ms .. 15 ms, the same range the link update asks for.
 static const uint8_t kConnIntervalMin[2] = {0x06, 0x00};
-static const uint8_t kConnIntervalMax[2] = {0x12, 0x00};
+static const uint8_t kConnIntervalMax[2] = {0x0C, 0x00};
 
 static const char *selectName(const char *name, const char *fallback) {
   if (name && name[0]) {
@@ -37,7 +37,7 @@ static const char *selectName(const char *name, const char *fallback) {
   if (fallback && fallback[0]) {
     return fallback;
   }
-  return "MothDeck";
+  return "Mothdeck";
 }
 
 static int copyBounded(char *dst, int dstCap, const char *src) {
@@ -71,7 +71,7 @@ void buildBleMidiAdvert(const char *name, const char *fallback, BleAdvertPackets
     airLen = kBleAdvNameMax;
   }
   if (airLen < 1) {
-    fullLen = copyBounded(out->gapName, (int)sizeof(out->gapName), "MothDeck");
+    fullLen = copyBounded(out->gapName, (int)sizeof(out->gapName), "Mothdeck");
     airLen = fullLen;
   }
   memcpy(out->advName, out->gapName, (size_t)airLen);

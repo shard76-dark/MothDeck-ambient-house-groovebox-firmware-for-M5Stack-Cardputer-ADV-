@@ -22,6 +22,10 @@ public:
   bool Resident() const;
   // Boot skipped BLE, or init never succeeded.
   void MarkSkipped();
+  // Stack was not started. The switch reads Off, not unloaded.
+  void MarkIdle();
+  // Negotiated connection interval, or "link --" while disconnected.
+  const char *LinkLine();
   // Unload is stored for the next boot. The stack is not torn down now.
   void SetPendingUnload(bool pending);
   // "On adv", "On conn", "Off", "unloaded", "reboot unload", or "no mem".

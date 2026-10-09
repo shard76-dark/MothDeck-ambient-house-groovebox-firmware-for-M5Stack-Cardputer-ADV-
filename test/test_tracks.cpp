@@ -60,6 +60,9 @@ static void testAssignStaysOnTrack() {
   tracker.SetCommand('T', 0);
   expect(tracker.currentVoice == 14 && tracker.trackVoice[1] == 5, "returning to track 1 recalls the plugin");
 
+  expect(!tracker.isPlaying, "rec is off at boot");
+  tracker.SetCommand('P', 0);
+  expect(tracker.isPlaying, "space starts rec");
   tracker.SetCommand('N', 0);
   expect(tracker.NoteAt(0, 0) == 1 && tracker.InstAt(0, 0) == 14, "recorded note uses track 1");
   tracker.SetCommand('T', 1);
@@ -223,7 +226,6 @@ static void testBarsAndExternalLoop() {
 
 static void testNoteHold() {
   Tracker tracker;
-  tracker.SetCommand('P', 0);
   expect(!tracker.isPlaying, "stopped for roll edits");
 
   tracker.SetCommand('r', 0 | (0 << 8) | (1 << 12));

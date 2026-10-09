@@ -324,6 +324,18 @@ void pcmHoldClose(int id) {
   slot.frames = 0;
 }
 
+void pcmHoldDropAll() {
+  for (int id = 1; id <= kPcmHolds; id++) {
+    pcmHoldClose(id);
+  }
+  if (pool) {
+    heap_caps_free(pool);
+    pool = nullptr;
+  }
+  poolSlots = 0;
+  winFrames = kWinMax;
+}
+
 void pcmHoldWant(int id, int frame) {
   if (id < 1 || id > kPcmHolds) {
     return;

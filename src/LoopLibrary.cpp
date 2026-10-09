@@ -283,6 +283,21 @@ static bool memoryLimit(const char *msg) {
   return msg && (strstr(msg, "memory") != nullptr || strstr(msg, "cache full") != nullptr);
 }
 
+void LoopLibrary::DropAudio() {
+  for (int i = 0; i < kLoopCache; i++) {
+    if (cache[i].hold > 0) {
+      pcmHoldClose(cache[i].hold);
+    }
+    memset(&cache[i], 0, sizeof(cache[i]));
+  }
+  memset(instLoops, 0, sizeof(instLoops));
+  instLoopCount = 0;
+  ready = 0;
+  memset(loaded, 0, sizeof(loaded));
+  memset(loadedOk, 0, sizeof(loadedOk));
+  limitMsg[0] = 0;
+}
+
 int LoopLibrary::PreloadInstrument(char *err, int errLen) {
   LoopHit next[kInstLoopMax];
   memset(next, 0, sizeof(next));

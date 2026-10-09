@@ -100,8 +100,6 @@ static void drainMidi() {
   if (!midiIn) {
     return;
   }
-  // The UI loop draws and then waits. MIDI is read here, once per audio
-  // block, so a chord-plus-clock packet is not stuck behind that wait.
   MidiEvent ev[12];
   for (int pass = 0; pass < 6; pass++) {
     int n = midiIn->Poll(ev, 12);
@@ -114,11 +112,32 @@ static void drainMidi() {
   }
 }
 
-static void renderBlock(int16_t *dst) {
+static int renderCount() {
+  // A connected link renders half a block and keeps one buffer queued.
+  // Local playback stays at 256 samples and two buffers.
+  if (midiIn && midiIn->Connected()) {
+    return kBlock / 2;
+  }
+  return kBlock;
+}
+
+static int queueLimit() {
+  if (midiIn && midiIn->Connected()) {
+    return 1;
+  }
+  return 2;
+}
+
+static void renderBlock(int16_t *dst, int count) {
   drainMidi();
   drainSide();
   int peak[4] = {0, 0, 0, 0};
-  for (int i = 0; i < kBlock; i++) {
+  for (int i = 0; i < count; i++) {
+    // 32 samples is about 0.7 ms. A note that arrived mid-block starts
+    // on the next slice instead of waiting for the following buffer.
+    if ((i & 31) == 0) {
+      drainMidi();
+    }
     dst[i] = (int16_t)dspSat16(tracker.UpdateTracker());
     for (int t = 0; t < 4; t++) {
       int a = dspAbs(tracker.lastSamples[t]);
@@ -156,13 +175,18 @@ static void audioTask(void *arg) {
   (void)arg;
   int fill = 0;
   for (;;) {
+    // Drain even while the speaker still has a buffer. The old path
+    // skipped this until two blocks had finished, so a note sat for the
+    // whole queue.
+    drainMidi();
     int queued = (int)M5.Speaker.isPlaying(0);
-    if (queued >= 2) {
+    if (queued >= queueLimit()) {
       vTaskDelay(1);
       continue;
     }
-    renderBlock(blocks[fill]);
-    if (!M5.Speaker.playRaw(blocks[fill], kBlock, (uint32_t)kSampleRate, false, 1, 0, false)) {
+    int count = renderCount();
+    renderBlock(blocks[fill], count);
+    if (!M5.Speaker.playRaw(blocks[fill], count, (uint32_t)kSampleRate, false, 1, 0, false)) {
       vTaskDelay(1);
       continue;
     }

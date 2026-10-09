@@ -31,6 +31,9 @@ public:
   // Loads audio loops into the stream cache for the Loops instrument.
   // Returns how many are ready. If some were skipped, LimitLine() says why.
   int PreloadInstrument(char *err, int errLen);
+  // Close cached streams and the Loops instrument hits. The pool stays
+  // until pcmHoldDropAll().
+  void DropAudio();
   int ReadyCount() const { return ready; }
   int AudioCount() const { return audio; }
   const char *LimitLine() const { return limitMsg; }

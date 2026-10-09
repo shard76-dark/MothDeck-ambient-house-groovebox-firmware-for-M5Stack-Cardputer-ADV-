@@ -14,6 +14,8 @@ static const int kPcmHolds = 5;
 // to whatever contiguous RAM is left.
 bool pcmHoldReservePreferred();
 void pcmHoldReleaseReserve();
+// Close every stream and free the pool, including slots that are open.
+void pcmHoldDropAll();
 bool pcmHoldReserved();
 void pcmHoldReserveFit();
 int pcmHoldSlots();

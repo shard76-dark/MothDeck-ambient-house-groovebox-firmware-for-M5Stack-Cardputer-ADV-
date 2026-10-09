@@ -22,7 +22,7 @@ struct BleAdvertPackets {
 
 // name is the stored name. fallback is used when name is null or empty
 // (the firmware passes MOTHDECK_BLE_NAME_DEFAULT). A null fallback becomes
-// "MothDeck", so the primary packet always carries a name.
+// "Mothdeck", so the primary packet always carries a name.
 void buildBleMidiAdvert(const char *name, const char *fallback, BleAdvertPackets *out);
 
 #endif

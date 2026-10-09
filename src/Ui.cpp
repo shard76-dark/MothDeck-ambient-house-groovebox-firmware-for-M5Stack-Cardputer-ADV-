@@ -3,6 +3,7 @@
 #include "AudioEngine.h"
 #include "InstrumentBank.h"
 #include "LoopLibrary.h"
+#include "PcmHold.h"
 #include "DrumKit.h"
 #include "SdStorage.h"
 #include "SdCard.h"
@@ -110,7 +111,7 @@ static void toastSet(const char *msg) {
   toastUntil = millis() + 2200;
 }
 
-static uint8_t bleOn = 1;
+static uint8_t bleOn = 0;
 static uint8_t bleLoad = 1;
 static bool bleUnloadPending = false;
 
@@ -119,6 +120,7 @@ static void savePrefs() {
   prefs.putUChar("bri", bright);
   prefs.putString("ble", bleName);
   prefs.putUChar("bleOn", bleOn);
+  prefs.putUChar("bleEn", bleOn);
   prefs.putUChar("bleLoad", bleLoad);
 }
 
@@ -212,10 +214,18 @@ void uiLoadPrefs() {
   bright = prefs.getUChar("bri", 180);
   String stored = prefs.getString("ble", MOTHDECK_BLE_NAME_DEFAULT);
   snprintf(bleName, sizeof(bleName), "%s", stored.c_str());
-  if (!bleName[0]) {
+  // 1.1.2 advertises Mothdeck. A stored MothDeck / MothSynth, or any name
+  // from before this image, is replaced once so the primary packet matches.
+  bool migrateName = prefs.getUChar("nm12", 0) == 0;
+  if (!bleName[0] || migrateName || strcmp(bleName, "MothDeck") == 0 || strcmp(bleName, "MothSynth") == 0) {
     snprintf(bleName, sizeof(bleName), "%s", MOTHDECK_BLE_NAME_DEFAULT);
   }
-  bleOn = prefs.getUChar("bleOn", 1) ? 1 : 0;
+  if (migrateName || strcmp(bleName, stored.c_str()) != 0) {
+    prefs.putString("ble", bleName);
+    prefs.putUChar("nm12", 1);
+  }
+  // bleEn is new in 1.1.2. A 1.1.1 bleOn of 1 must not start the radio.
+  bleOn = prefs.getUChar("bleEn", 0) ? 1 : 0;
   bleLoad = prefs.getUChar("bleLoad", 1) ? 1 : 0;
   prefsLoaded = true;
 }
@@ -294,10 +304,13 @@ void uiBegin() {
   launcherOk = launcherInstalled();
 }
 
-void uiMountStorage() {
+void uiMountStorage(bool withLoops) {
   instrumentBank.Scan();
   loopLibrary.Scan();
   drumKit.Scan();
+  if (!withLoops) {
+    return;
+  }
   char err[48];
   err[0] = 0;
   loopLibrary.PreloadInstrument(err, (int)sizeof(err));
@@ -326,6 +339,9 @@ static void statusBar(BleMidi &ble) {
     canvas->printf("%d%%", pct);
   }
 }
+
+static bool loopsBlocked = false;
+static bool bleAsk = false;
 
 static void legend(const char *text) {
   canvas->fillRect(0, 122, 240, 13, COL_BAR);
@@ -921,6 +937,16 @@ static void drawSong() {
 static void drawLoops() {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
+  if (loopsBlocked) {
+    canvas->setTextColor(COL_WARN);
+    canvas->setCursor(2, 40);
+    canvas->print("Loops off under MIDI");
+    canvas->setTextColor(COL_TEXT);
+    canvas->setCursor(2, 56);
+    canvas->print("Turn BLE off to load them");
+    legend("Settings  Fn ,  BLE off");
+    return;
+  }
   if (!sdCard.Mounted()) {
     canvas->setTextColor(COL_TEXT);
     canvas->setCursor(2, 40);
@@ -994,6 +1020,11 @@ static void drawMidi(BleMidi &ble) {
   }
   canvas->setCursor(2, 16);
   canvas->print(ble.StatusLine());
+  if (ble.Connected()) {
+    canvas->setTextColor(COL_TEXT);
+    canvas->setCursor(148, 16);
+    canvas->print(ble.LinkLine());
+  }
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(2, 28);
   canvas->print(ble.DiagLine());
@@ -1157,10 +1188,27 @@ static void drawOverlay() {
   }
 }
 
+static void drawBleAsk() {
+  canvas->fillRect(8, 28, 224, 78, COL_BAR);
+  canvas->drawRect(8, 28, 224, 78, COL_WARN);
+  canvas->setTextColor(COL_WARN);
+  canvas->setCursor(16, 36);
+  canvas->print("Loops off under MIDI");
+  canvas->setTextColor(COL_TEXT);
+  canvas->setCursor(16, 50);
+  canvas->print("A new project will load");
+  canvas->setCursor(16, 66);
+  canvas->print("Save this one?  Y / N");
+  canvas->setTextColor(COL_DIM);
+  canvas->setCursor(16, 84);
+  canvas->print("` cancel, BLE stays off");
+}
+
 void uiDraw(BleMidi &ble) {
   if (!canvas) {
     return;
   }
+  loopsBlocked = ble.UserEnabled();
   audioReadSnap(&snap);
   canvas->fillSprite(COL_BG);
   statusBar(ble);
@@ -1182,7 +1230,9 @@ void uiDraw(BleMidi &ble) {
     default: drawExit(); break;
   }
   drawToast();
-  if (overlay) {
+  if (bleAsk) {
+    drawBleAsk();
+  } else if (overlay) {
     drawOverlay();
   }
   if (canvas->getBuffer()) {
@@ -1194,6 +1244,10 @@ static void assignInstrument() {
   if (cursor < 12) {
     audioCommand('I', cursor);
     toastSet(InstrumentBank::BuiltinName(cursor));
+    return;
+  }
+  if (cursor == 12 && loopsBlocked) {
+    toastSet("Loops off under MIDI");
     return;
   }
   if (cursor == 12) {
@@ -1221,17 +1275,16 @@ static void assignInstrument() {
   toastSet(instrumentBank.At(index).name);
 }
 
-static void doSave() {
+static bool doSave() {
   SongData song;
   if (!audioCapture(&song)) {
     toastSet("Capture failed");
-    return;
+    return false;
   }
   instrumentBank.FillSongRefs(&song);
-  char err[48];
   SdResult r = storage.Save(songSlot, song);
-  (void)err;
   toastSet(SdStorage::ResultText(r, songSlot));
+  return r == SD_SAVED;
 }
 
 static void doLoad() {
@@ -1248,12 +1301,29 @@ static void doLoad() {
   }
   char lerr[48];
   lerr[0] = 0;
-  loopLibrary.PrepareSong(&song, lerr, (int)sizeof(lerr));
-  audioApplySong(song);
+  bool hadLoops = false;
   for (int t = 0; t < 4; t++) {
-    LoopArm arm;
-    if (loopLibrary.TrackArm(t, &arm)) {
-      audioArmLoop(t, arm);
+    if (song.loops[t].enabled) {
+      hadLoops = true;
+    }
+  }
+  if (loopsBlocked) {
+    for (int t = 0; t < 4; t++) {
+      song.loops[t].enabled = 0;
+    }
+    if (hadLoops) {
+      snprintf(lerr, sizeof(lerr), "Loops off under MIDI");
+    }
+  } else {
+    loopLibrary.PrepareSong(&song, lerr, (int)sizeof(lerr));
+  }
+  audioApplySong(song);
+  if (!loopsBlocked) {
+    for (int t = 0; t < 4; t++) {
+      LoopArm arm;
+      if (loopLibrary.TrackArm(t, &arm)) {
+        audioArmLoop(t, arm);
+      }
     }
   }
   if (!err[0]) {
@@ -1262,6 +1332,10 @@ static void doLoad() {
 }
 
 static void launchLoop(bool audition) {
+  if (loopsBlocked) {
+    toastSet("Loops off under MIDI");
+    return;
+  }
   if (loopLibrary.Count() <= 0) {
     toastSet("No libraries");
     return;
@@ -1309,15 +1383,125 @@ static void cycleKit(int dir) {
   toastSet(drumKit.Name(s));
 }
 
-static void applyBleRadio(BleMidi &ble, bool on) {
-  if (!ble.Resident()) {
-    toastSet("BLE unloaded");
+static bool projectHasLoops() {
+  audioReadSnap(&snap);
+  for (int t = 0; t < 4; t++) {
+    if (snap.loopOn[t] || snap.trackVoice[t] == kLoopsVoice) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void silenceLoops() {
+  for (int t = 0; t < 4; t++) {
+    audioStopLoop(t);
+  }
+  audioStopAudition();
+  delay(30);
+  loopLibrary.DropAudio();
+  pcmHoldDropAll();
+}
+
+static void restoreLoops() {
+  if (!pcmHoldReserved()) {
+    pcmHoldReservePreferred();
+  }
+  if (!pcmHoldReserved()) {
+    pcmHoldReserveFit();
+  }
+  char err[48];
+  err[0] = 0;
+  loopLibrary.PreloadInstrument(err, (int)sizeof(err));
+  if (loopLibrary.AudioCount() > loopLibrary.ReadyCount() && err[0]) {
+    toastSet(err);
+  }
+}
+
+static void stopRec() {
+  // 'p' stops only when transport is already running, so a stale snap
+  // cannot toggle Rec back on.
+  audioCommand('p', 0);
+}
+
+static void finishBleOn(BleMidi &ble) {
+  stopRec();
+  silenceLoops();
+  bleLoad = 1;
+  bleUnloadPending = false;
+  bool ok = false;
+  if (ble.Resident()) {
+    ble.SetUserEnabled(true);
+    ok = ble.UserEnabled() && ble.Advertising();
+  } else {
+    ok = ble.Begin(uiBleName(), true) && ble.Resident();
+  }
+  if (!ok) {
+    bleOn = 0;
+    savePrefs();
+    restoreLoops();
+    toastSet(ble.Resident() ? "BLE off: not advertising" : "not enough memory, reboot to load");
     return;
   }
-  bleOn = on ? 1 : 0;
+  bleOn = 1;
   savePrefs();
-  ble.SetUserEnabled(on);
-  toastSet(on ? "BLE on" : "BLE off");
+  ble.SetPendingUnload(false);
+  toastSet("BLE on, rec off");
+}
+
+static void finishBleOff(BleMidi &ble) {
+  if (ble.Resident()) {
+    ble.SetUserEnabled(false);
+  }
+  bleOn = 0;
+  savePrefs();
+  restoreLoops();
+  toastSet("BLE off");
+}
+
+static void requestBleOn(BleMidi &ble) {
+  if (ble.UserEnabled()) {
+    return;
+  }
+  if (projectHasLoops()) {
+    bleAsk = true;
+    return;
+  }
+  finishBleOn(ble);
+}
+
+static void answerBleAsk(char c, bool cancel, BleMidi &ble) {
+  if (cancel) {
+    bleAsk = false;
+    toastSet("BLE stays off");
+    return;
+  }
+  if (c != 'y' && c != 'n') {
+    return;
+  }
+  if (c == 'y' && !doSave()) {
+    bleAsk = false;
+    toastSet("Save failed, BLE stays off");
+    return;
+  }
+  audioReadSnap(&snap);
+  int bars = snap.barCount ? (int)snap.barCount : 1;
+  audioCommand('X', bars - 1);
+  delay(40);
+  bleAsk = false;
+  finishBleOn(ble);
+}
+
+static void rearmCaptured(SongData &song) {
+  char lerr[48];
+  lerr[0] = 0;
+  loopLibrary.PrepareSong(&song, lerr, (int)sizeof(lerr));
+  for (int t = 0; t < 4; t++) {
+    LoopArm arm;
+    if (loopLibrary.TrackArm(t, &arm)) {
+      audioArmLoop(t, arm);
+    }
+  }
 }
 
 static void doLoadBle(BleMidi &ble) {
@@ -1329,15 +1513,42 @@ static void doLoadBle(BleMidi &ble) {
     toastSet("BLE stays loaded");
     return;
   }
+  if (bleOn && projectHasLoops()) {
+    bleAsk = true;
+    return;
+  }
+  SongData kept;
+  bool have = false;
+  if (!bleOn) {
+    have = audioCapture(&kept);
+    if (!have) {
+      toastSet("Capture failed");
+      return;
+    }
+  }
+  silenceLoops();
   bleLoad = 1;
   bleUnloadPending = false;
   savePrefs();
-  ble.Begin(uiBleName(), bleOn != 0);
+  bool ok = ble.Begin(uiBleName(), bleOn != 0);
   if (!ble.Resident()) {
+    restoreLoops();
+    if (have) {
+      rearmCaptured(kept);
+    }
     toastSet("not enough memory, reboot to load");
     return;
   }
-  toastSet(bleOn ? "BLE on" : "BLE off");
+  if (!bleOn || !ok) {
+    restoreLoops();
+    if (have) {
+      rearmCaptured(kept);
+    }
+    toastSet("BLE off");
+    return;
+  }
+  stopRec();
+  toastSet("BLE on, rec off");
 }
 
 static void doUnloadBle(BleMidi &ble) {
@@ -1423,7 +1634,8 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
       } else if (page == kSettingsPage && cursor == 3) {
-        applyBleRadio(ble, false);
+        bleAsk = false;
+        finishBleOff(ble);
       } else if (page == kSettingsPage && cursor == 4 && bleUnloadPending) {
         doLoadBle(ble);
       } else if (page == kSettingsPage && cursor == 8) {
@@ -1457,7 +1669,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
       } else if (page == kSettingsPage && cursor == 3) {
-        applyBleRadio(ble, true);
+        requestBleOn(ble);
       } else if (page == kSettingsPage && cursor == 4) {
         if (ble.Resident()) {
           doUnloadBle(ble);
@@ -1593,8 +1805,12 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       instrumentBank.Scan();
       drumKit.Scan();
       loopLibrary.Scan();
-      loopLibrary.PreloadInstrument(nullptr, 0);
-      toastSet(sdCard.Mounted() ? "Rescanned" : "No SD card");
+      if (loopsBlocked) {
+        toastSet("Loops off under MIDI");
+      } else {
+        loopLibrary.PreloadInstrument(nullptr, 0);
+        toastSet(sdCard.Mounted() ? "Rescanned" : "No SD card");
+      }
     } else if (c == ',') {
       cycleKit(-1);
     } else if (c == '/') {
@@ -1778,6 +1994,7 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
 }
 
 void uiPoll(BleMidi &ble) {
+  loopsBlocked = ble.UserEnabled();
   auto &kb = M5Cardputer.Keyboard;
   bool esc = kb.isKeyPressed('`');
   bool btn = M5Cardputer.BtnA.isPressed();
@@ -1806,6 +2023,16 @@ void uiPoll(BleMidi &ble) {
   if (kb.isChange() && kb.isPressed()) {
     Keyboard_Class::KeysState st = kb.keysState();
     KeyEvent ev = eventFrom(st);
+    if (bleAsk) {
+      if (st.del || ev.ch == '`') {
+        answerBleAsk(0, true, ble);
+        return;
+      }
+      if (ev.ch == 'y' || ev.ch == 'n') {
+        answerBleAsk(ev.ch, false, ble);
+      }
+      return;
+    }
     ModalKind kind = activeModal(overlay, naming, page == kExitPage);
     if (kind != MODAL_NONE) {
       ModalAction action;

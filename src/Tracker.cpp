@@ -535,6 +535,12 @@ void Tracker::SetCommand(char command, int val) {
       TogglePlayStop();
       SetHint(isPlaying ? "Rec On" : "Rec Off");
       break;
+    case 'p':
+      if (isPlaying) {
+        TogglePlayStop();
+        SetHint("Rec Off");
+      }
+      break;
     case 'I':
       SetInstrument(val);
       QueueBankMidi();
@@ -957,7 +963,7 @@ void Tracker::PastePatternAll() {
 void Tracker::ClearAll(int val) {
   selectedTrack = 0;
   currentPattern = 0;
-  isPlaying = true;
+  isPlaying = false;
   extSync = false;
   clockCount = 0;
   pressedOnce = false;
