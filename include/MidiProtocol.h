@@ -3,23 +3,34 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// BLE MIDI (Apple spec) frames every packet with a 13-bit timestamp:
-//   byte 0 header  = 1xxxxxxx  timestamp MSB (top 6 bits)
-//   byte 1         = 1yyyyyyy  timestamp LSB (low 7 bits)
-// followed by ordinary MIDI bytes. This module enables Note, controller
-// MSB (CC 0-31) and controller LSB (CC 32-63). Pitch bend is delivered
-// as an LSB byte then an MSB byte on controller number kMidiPitchCc.
+// BLE MIDI (Apple / MMA spec) frames every packet with a 13-bit timestamp:
+//   byte 0 header  = 1xxxxxxx  timestamp high (top 6 bits)
+// then one or more messages, each preceded by its own timestamp-low byte
+// (bit 7 set). One packet often holds many notes and several 0xF8 clocks.
+// Running status stays inside the packet and is cancelled at the end.
+// System real-time may sit between messages or between the data bytes of
+// a message. SysEx may continue in the next packet.
+// Note, controller MSB (CC 0-31), controller LSB (CC 32-63), pitch bend,
+// clock, and transport are delivered. Pitch bend is an LSB byte then an
+// MSB byte on controller number kMidiPitchCc. Note On velocity 0 is Note Off.
 
 enum MidiMsgType : uint8_t {
   MIDI_MSG_NONE = 0,
   MIDI_MSG_NOTE_ON = 1,
   MIDI_MSG_NOTE_OFF = 2,
   MIDI_MSG_MSB = 3,
-  MIDI_MSG_LSB = 4
+  MIDI_MSG_LSB = 4,
+  MIDI_MSG_CLOCK = 5,
+  MIDI_MSG_START = 6,
+  MIDI_MSG_CONTINUE = 7,
+  MIDI_MSG_STOP = 8,
+  MIDI_MSG_SONG_POS = 9
 };
 
 static const uint8_t kMidiPitchCc = 128;
-static const int kMidiMaxEvents = 8;
+// One notification can carry a chord plus a run of clocks. The parser
+// keeps scanning after this fills so a long packet cannot desync the next.
+static const int kMidiMaxEvents = 48;
 
 struct MidiEvent {
   MidiMsgType type;
@@ -32,6 +43,7 @@ struct MidiEvent {
 struct MidiParseResult {
   MidiEvent events[kMidiMaxEvents];
   int count;
+  int overflow;
 };
 
 struct BleMidiTimestamp {
@@ -44,6 +56,8 @@ struct MidiRunningState {
   uint8_t lsb[32];
   uint8_t msbKnown[32];
   uint8_t lsbKnown[32];
+  // A SysEx that did not end in this packet continues in the next one.
+  uint8_t sysex;
 };
 
 BleMidiTimestamp bleMidiTimestamp(uint16_t millis13);

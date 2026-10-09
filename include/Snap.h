@@ -49,6 +49,9 @@ struct Snap {
   uint8_t fxDrive;
   uint8_t fxChorus;
   uint8_t fxTrem;
+  uint8_t barIndex;
+  uint8_t barCount;
+  uint8_t patternSlots;
 };
 
 struct LoopArm {

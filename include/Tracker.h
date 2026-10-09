@@ -8,7 +8,9 @@
 class Tracker {
 public:
   static const int kMaxSteps = 256;
-  static const int kMaxCopy = 64;
+  static const int kStepsPerBar = 16;
+  static const int kMaxBars = 8;
+  static const int kMaxPatternSteps = kStepsPerBar * kMaxBars;
 
   int lastNoteTrackIndex;
   uint8_t hintTime;
@@ -30,10 +32,12 @@ public:
   // Instrument assigned to each track. Selecting a track recalls this value.
   // It does not copy the previous track's instrument across.
   uint8_t trackVoice[4];
-  uint8_t tracks[4][kMaxSteps];
-  int8_t trackOctaves[4][kMaxSteps];
-  uint8_t trackInstruments[4][kMaxSteps];
   bool solo;
+  uint8_t NoteAt(int track, int step) const;
+  int8_t OctaveAt(int track, int step) const;
+  uint8_t InstAt(int track, int step) const;
+  int PatternSlots() const;
+  int Bars() const;
 
   struct LoopPlay {
     uint8_t enabled;
@@ -79,15 +83,37 @@ private:
   uint32_t samplesPerStep;
   uint32_t stepSampleCount;
   int barCount;
+  // Set by MIDI Start/Continue. Steps then move on clock (6 clocks = one
+  // 16th), and the internal sample counter does not also advance them.
+  bool extSync;
+  int clockCount;
+  uint16_t lastClockTs;
+  uint8_t haveClockTs;
+  uint32_t tempoMs;
+  int tempoClocks;
+  // Clocks since the last position-zero (Start or Song Position 0). Used to
+  // learn an external loop length. A Stop, Space, or a non-zero Song
+  // Position abandons the measurement.
+  int clocksSinceZero;
+  bool blockLearn;
+  bool autoLength;
+  // Bar shown on the 16-step editor. Follows the playhead unless the user
+  // pages with Fn+, and Fn+/.
+  int editBar;
+  bool followView;
   uint8_t bpms[4];
   uint8_t bpmSlot;
   uint8_t ccMsb[32];
   uint8_t ccLsb[32];
   MidiEvent midiOutQ[4];
   uint8_t midiOutCount;
-  uint8_t patternCopy[4][kMaxCopy];
-  int8_t patternCopyOctaves[4][kMaxCopy];
-  uint8_t patternCopyInstruments[4][kMaxCopy];
+  // One word per step: note in bits 0-3 (0 empty, 1-12 pitch), octave+8 in
+  // bits 4-7 (-8..7), instrument in bits 8-13 (0-63). The song file stays
+  // unpacked. 4*256*2 bytes replaces the old 4*256*3 note/octave/instrument
+  // grids.
+  uint16_t steps[4][kMaxSteps];
+  uint16_t patternCopy[4][kMaxPatternSteps];
+  int patternCopyLen;
 
   void SoloTrack(bool repeat);
   void SetInstrument(int val);
@@ -96,6 +122,23 @@ private:
   int InferTrackVoice(int track) const;
   void ArmTransport();
   void QueueMidi(MidiMsgType type, uint8_t channel, uint8_t number, uint8_t value);
+  void AdvanceStep();
+  void MidiStart();
+  void MidiContinue();
+  void MidiStop();
+  void MidiClock(uint16_t timestamp13);
+  void MidiSongPosition(int sixteenth);
+  bool LearnLoopLength();
+  void ApplyExternalBpm(int bpm);
+  void SetBars(int bars);
+  void NudgeEditBar(int dir);
+  void ClampTransport();
+  void SyncEditBar();
+  uint16_t CellAt(int track, int step) const;
+  void SetCell(int track, int step, uint8_t note, int8_t oct, uint8_t inst);
+  void ClearNote(int track, int step);
+  static uint16_t PackStep(uint8_t note, int8_t oct, uint8_t inst);
+  static uint16_t EmptyStep();
   void QueueBankMidi();
   void QueueVolumeMidi();
   void ApplyController(const MidiEvent &event);

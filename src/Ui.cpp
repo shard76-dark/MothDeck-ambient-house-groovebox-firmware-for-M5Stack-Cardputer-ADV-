@@ -7,11 +7,14 @@
 #include "SdStorage.h"
 #include "SdCard.h"
 #include "LauncherExit.h"
+#include "BleAdvert.h"
 #include "BleMidi.h"
 #include "BoardConfig.h"
+#include "DevLog.h"
 #include <M5Cardputer.h>
 #include <Preferences.h>
 #include <ctype.h>
+#include <esp_heap_caps.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -51,6 +54,15 @@ static const PianoKey kPiano[] = {
 };
 
 static M5Canvas *canvas = nullptr;
+// rgb332 rows are expanded here and pushed as RGB565. Keeping the strip in
+// BSS means the panel update never mallocs a second full frame. An 8-bit
+// pushSprite does that (LovyanGFX grows a DMA buffer toward 240*135*2) and
+// that allocation reset the ADV once I2S DMA was running.
+static const int kSpriteW = 240;
+static const int kSpriteH = 135;
+static const int kBlitRows = 8;
+static uint16_t blitBuf[kSpriteW * kBlitRows];
+static void pushCanvas();
 static Preferences prefs;
 static int page = 0;
 static int cursor = 0;
@@ -70,7 +82,6 @@ static uint8_t bright = 180;
 static uint32_t escSince = 0;
 static bool escDown = false;
 static bool escFired = false;
-static int lengthChoice = 0;
 static Snap snap;
 static SdStorage storage;
 
@@ -152,7 +163,7 @@ static void requestExit() {
   canvas->println("Clears the boot slot");
   canvas->setCursor(8, 68);
   canvas->println("Press Enter on splash");
-  canvas->pushSprite(0, 0);
+  pushCanvas();
   delay(500);
   if (!exitToLauncher()) {
     launcherOk = false;
@@ -164,15 +175,12 @@ const char *uiBleName() {
   return bleName;
 }
 
-void uiBegin() {
-  canvas = new M5Canvas(&M5Cardputer.Display);
-  // Stay on RGB565. An 8-bit sprite has to be expanded to the panel on every
-  // push, and that path reset the ADV once I2S DMA started after the first
-  // Play frame. The extra 32KB is the cost of a boot that stays up.
-  canvas->setColorDepth(16);
-  canvas->createSprite(240, 135);
-  canvas->setTextSize(1);
-  canvas->setTextColor(COL_TEXT);
+static bool prefsLoaded = false;
+
+void uiLoadPrefs() {
+  if (prefsLoaded) {
+    return;
+  }
   prefs.begin("mothdeck", false);
   outVol = prefs.getUChar("vol", 160);
   bright = prefs.getUChar("bri", 180);
@@ -181,6 +189,68 @@ void uiBegin() {
   if (!bleName[0]) {
     snprintf(bleName, sizeof(bleName), "%s", MOTHDECK_BLE_NAME_DEFAULT);
   }
+  prefsLoaded = true;
+}
+
+static uint16_t rgb332to565(uint8_t c) {
+  uint32_t r3 = c >> 5;
+  uint32_t g3 = (c >> 2) & 7;
+  uint32_t b2 = c & 3;
+  uint32_t r5 = (r3 << 2) | (r3 >> 1);
+  uint32_t g6 = (g3 << 3) | g3;
+  uint32_t b5 = (b2 << 3) | (b2 << 1) | (b2 >> 1);
+  return (uint16_t)((r5 << 11) | (g6 << 5) | b5);
+}
+
+static void pushCanvas() {
+  if (!canvas || !canvas->getBuffer()) {
+    return;
+  }
+  const uint8_t *src = static_cast<const uint8_t *>(canvas->getBuffer());
+  bool prev = M5Cardputer.Display.getSwapBytes();
+  M5Cardputer.Display.setSwapBytes(true);
+  M5Cardputer.Display.startWrite();
+  for (int y = 0; y < kSpriteH; y += kBlitRows) {
+    int rows = kSpriteH - y;
+    if (rows > kBlitRows) {
+      rows = kBlitRows;
+    }
+    for (int row = 0; row < rows; row++) {
+      const uint8_t *in = src + (size_t)(y + row) * kSpriteW;
+      uint16_t *out = blitBuf + row * kSpriteW;
+      for (int x = 0; x < kSpriteW; x++) {
+        out[x] = rgb332to565(in[x]);
+      }
+    }
+    M5Cardputer.Display.pushImage(0, y, kSpriteW, rows, blitBuf);
+  }
+  M5Cardputer.Display.endWrite();
+  M5Cardputer.Display.setSwapBytes(prev);
+}
+
+static void logUiHeap(const char *tag) {
+  uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  DEV_LOGF("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
+}
+
+void uiBegin() {
+  uiLoadPrefs();
+  logUiHeap("before sprite");
+  canvas = new M5Canvas(&M5Cardputer.Display);
+  // rgb332, 240*135 = 32400 bytes, half of the RGB565 canvas. The strip
+  // blit above is what makes that safe next to I2S: pushSprite would
+  // allocate another ~32KB DMA buffer to expand the frame.
+  canvas->setColorDepth(static_cast<uint8_t>(8));
+  void *buf = canvas->createSprite(kSpriteW, kSpriteH);
+  if (!buf) {
+    Serial.println("UI: sprite alloc failed");
+  } else {
+    DEV_LOGF("UI: sprite 8-bit bytes=%u\n", (unsigned)(kSpriteW * kSpriteH));
+  }
+  logUiHeap("after sprite");
+  canvas->setTextSize(1);
+  canvas->setTextColor(COL_TEXT);
   M5Cardputer.Display.setBrightness(bright);
   audioSetSpeakerVolume(outVol);
   launcherOk = launcherInstalled();
@@ -315,15 +385,21 @@ static void drawPlay() {
   }
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(2, 82);
-  canvas->printf("Step %u/%u  Oct %u  %s", (unsigned)(snap.step % (snap.patternLength ? snap.patternLength : 1)) + 1,
-                 snap.patternLength, snap.octave, snap.songMode ? "Song" : "Patt");
+  unsigned bars = snap.barCount ? snap.barCount : 1;
+  unsigned bar = snap.barIndex ? snap.barIndex : 1;
+  canvas->printf("B%u/%u  P%u  Oct %u  %s", bar, bars, (unsigned)snap.pattern + 1, snap.octave,
+                 snap.songMode ? "Song" : "Patt");
   canvas->setCursor(2, 94);
   canvas->setTextColor(COL_TEXT);
   canvas->print(snap.hint);
   canvas->setCursor(2, 106);
   canvas->setTextColor(COL_DIM);
   canvas->print("Z row piano   Q row +oct");
-  legend("Spc play  Tab page  ` hold exit");
+  if (audioFaultText()[0] && strcmp(audioFaultText(), "audio ok") != 0) {
+    legend(audioFaultText());
+  } else {
+    legend("Spc play  Fn ,/ bar  Tab page");
+  }
 }
 
 static int instCount() {
@@ -541,7 +617,8 @@ static void drawSong() {
   }
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(4, 92);
-  canvas->printf("Len %u  %s  Mstr %u", snap.patternLength, snap.songMode ? "song" : "patt", 2 - snap.masterVolume);
+  canvas->printf("Bars %u/8  %s  Mstr %u", snap.barCount ? snap.barCount : 1, snap.songMode ? "song" : "patt",
+                 2 - snap.masterVolume);
   canvas->setCursor(4, 104);
   canvas->print("S save L load X del T stat");
   legend("N new  C copy  V paste  G all");
@@ -597,37 +674,55 @@ static void drawLoops() {
 }
 
 static void drawMidi(BleMidi &ble) {
-  canvas->setTextColor(COL_AMBER);
+  bool onAir = ble.Advertising();
+  if (ble.Connected()) {
+    canvas->setTextColor(COL_PLAY);
+  } else if (onAir) {
+    canvas->setTextColor(COL_AMBER);
+  } else {
+    canvas->setTextColor(COL_WARN);
+  }
   canvas->setCursor(2, 16);
-  canvas->print(ble.Connected() ? "MIDI connected" : "MIDI advertising");
-  canvas->setTextColor(COL_TEXT);
-  canvas->setCursor(2, 30);
-  canvas->printf("Name %s", bleName);
+  canvas->print(ble.StatusLine());
   canvas->setTextColor(COL_DIM);
-  canvas->setCursor(2, 46);
+  canvas->setCursor(2, 28);
+  canvas->print(ble.DiagLine());
+  canvas->setTextColor(COL_TEXT);
+  canvas->setCursor(2, 40);
+  BleAdvertPackets advert;
+  buildBleMidiAdvert(bleName, MOTHDECK_BLE_NAME_DEFAULT, &advert);
+  if (advert.nameShortened) {
+    canvas->printf("Name %s (%s)", bleName, advert.advName);
+  } else {
+    canvas->printf("Name %s", bleName);
+  }
+  canvas->setTextColor(COL_DIM);
+  canvas->setCursor(2, 54);
   canvas->print("Ch 1-4 = tracks");
-  canvas->setCursor(2, 58);
+  canvas->setCursor(2, 66);
   canvas->print("Notes 36-83  C2-B5");
-  canvas->setCursor(2, 70);
+  canvas->setCursor(2, 78);
   canvas->print("CC0/32 bank  CC1 low pass");
-  canvas->setCursor(2, 82);
+  canvas->setCursor(2, 90);
   canvas->print("CC7/39 volume  bend pitch");
-  canvas->setCursor(2, 94);
-  canvas->print("Keys send Note On");
-  canvas->setCursor(2, 106);
-  canvas->print("Bank 12-63 = SD plugins");
+  canvas->setCursor(2, 102);
+  MidiCounters ctr;
+  ble.CopyCounters(&ctr);
+  canvas->printf("pk %lu  msg %lu  ovf %lu", (unsigned long)ctr.packets, (unsigned long)ctr.messages, (unsigned long)ctr.overflows);
+  canvas->setCursor(2, 114);
+  canvas->printf("clk %lu  note %lu", (unsigned long)ctr.clocks, (unsigned long)ctr.notes);
   legend("E edit name in Settings");
 }
 
-static void drawSettings() {
+static void drawSettings(BleMidi &ble) {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   canvas->print("Settings");
-  const char *rows[] = {"Speaker", "Brightness", "BLE name", "Battery", "Free RAM", "Card"};
+  const char *rows[] = {"Speaker", "Brightness", "BLE name", "Battery", "Free RAM", "Card", "Bars"};
   int top = cursor > 3 ? cursor - 3 : 0;
   for (int i = 0; i < 5; i++) {
     int idx = top + i;
-    if (idx > 5) {
+    if (idx > 6) {
       break;
     }
     int y = 30 + i * 12;
@@ -655,25 +750,25 @@ static void drawSettings() {
         canvas->printf("%dmV %d%%", mv, pct);
       }
     } else if (idx == 4) {
-      unsigned freeKb = (unsigned)(ESP.getFreeHeap() / 1024);
-      unsigned totalKb = (unsigned)(ESP.getHeapSize() / 1024);
-      canvas->printf("%u/%uk", freeKb, totalKb);
-      if (psramFound()) {
-        canvas->printf(" P%uk", (unsigned)(ESP.getFreePsram() / 1024));
-      }
-    } else {
+      unsigned freeKb = (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
+      unsigned blkKb = (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
+      const char *bleWord = ble.Connected() ? "conn" : (ble.Advertising() ? "adv" : "off");
+      canvas->printf("%uk blk %uk %s", freeKb, blkKb, bleWord);
+    } else if (idx == 5) {
       canvas->print(sdCard.Mounted() ? "mounted" : "none");
+    } else {
+      canvas->printf("%u", snap.barCount ? snap.barCount : 1);
     }
   }
   canvas->setTextColor(COL_DIM);
+  canvas->setCursor(4, 96);
+  canvas->print(ble.CounterLine());
   canvas->setCursor(4, 108);
   canvas->printf("v%s  %s", MOTHDECK_VERSION, BOARD_NAME);
   if (!naming && cursor == 4) {
-    char line[40];
-    snprintf(line, sizeof(line), "free/total  largest %uk", (unsigned)(ESP.getMaxAllocHeap() / 1024));
-    legend(line);
+    legend(ble.StatusLine());
   } else {
-    legend(naming ? "Ent apply  Bksp  ` cancel" : "Lf/Rt change  Ent name");
+    legend(naming ? "Ent apply  Bksp  ` cancel" : (cursor == 6 ? "Fn ,/ bars" : "Lf/Rt change  Ent name"));
   }
 }
 
@@ -753,7 +848,7 @@ void uiDraw(BleMidi &ble) {
     case kSongPage: drawSong(); break;
     case kLoopsPage: drawLoops(); break;
     case kMidiPage: drawMidi(ble); break;
-    case kSettingsPage: drawSettings(); break;
+    case kSettingsPage: drawSettings(ble); break;
     default: drawExit(); break;
   }
   drawToast();
@@ -761,7 +856,7 @@ void uiDraw(BleMidi &ble) {
     drawOverlay();
   }
   if (canvas->getBuffer()) {
-    canvas->pushSprite(0, 0);
+    pushCanvas();
   }
 }
 
@@ -894,7 +989,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       } else if (page == kLoopsPage) {
         loopRow = clampi(loopRow - 1, 0, 7);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor - 1, 0, 5);
+        cursor = clampi(cursor - 1, 0, 6);
       }
       return;
     }
@@ -912,7 +1007,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         }
         loopRow = clampi(loopRow + 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor + 1, 0, 5);
+        cursor = clampi(cursor + 1, 0, 6);
       }
       return;
     }
@@ -934,6 +1029,11 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         bright = (uint8_t)clampi((int)bright - 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
+      } else if (page == kSettingsPage && cursor == 6) {
+        int bars = snap.barCount ? (int)snap.barCount : 1;
+        audioCommand('Y', clampi(bars - 1, 1, 8));
+      } else if (page == 0) {
+        audioCommand('W', -1);
       }
       return;
     }
@@ -955,6 +1055,11 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         bright = (uint8_t)clampi((int)bright + 8, 10, 255);
         M5Cardputer.Display.setBrightness(bright);
         savePrefs();
+      } else if (page == kSettingsPage && cursor == 6) {
+        int bars = snap.barCount ? (int)snap.barCount : 1;
+        audioCommand('Y', clampi(bars + 1, 1, 8));
+      } else if (page == 0) {
+        audioCommand('W', 1);
       }
       return;
     }
@@ -977,7 +1082,8 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     return;
   }
   if (ctrl && c == 'n') {
-    audioCommand('X', lengthChoice & 3);
+    int bars = snap.barCount ? (int)snap.barCount : 1;
+    audioCommand('X', bars - 1);
     toastSet("New song");
     return;
   }
@@ -1072,8 +1178,9 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         toastSet(SdStorage::ResultText(st, songSlot));
       }
     } else if (c == 'n') {
-      lengthChoice = (lengthChoice + 1) & 3;
-      audioCommand('X', lengthChoice);
+      int bars = snap.barCount ? (int)snap.barCount : 1;
+      bars = bars >= 8 ? 1 : bars + 1;
+      audioCommand('X', bars - 1);
       toastSet("New song");
     } else if (c == 'c') audioCommand('*', 0);
     else if (c == 'v') audioCommand('*', 1);
@@ -1200,6 +1307,9 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
     return;
   }
   if (st.space) {
+    if (!audioRunning()) {
+      toastSet(audioFaultText());
+    }
     audioCommand('P', 0);
     return;
   }

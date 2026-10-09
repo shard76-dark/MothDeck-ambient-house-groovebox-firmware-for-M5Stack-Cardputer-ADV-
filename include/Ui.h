@@ -3,6 +3,8 @@
 
 class BleMidi;
 
+// NVS only. Safe before the display and before BLE init.
+void uiLoadPrefs();
 void uiBegin();
 // Card, kit, and loop scans. Called after the first Play frame is on screen.
 void uiMountStorage();

@@ -4,15 +4,21 @@
 #include "BoardConfig.h"
 #include "DevLog.h"
 #include "LoopFormat.h"
+#include "BleMidi.h"
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <atomic>
+#include <esp_heap_caps.h>
+#include <stdio.h>
 #include <string.h>
 
 static Tracker tracker;
+static BleMidi *midiIn = nullptr;
 static QueueHandle_t cmdQ = nullptr;
 static QueueHandle_t midiOutQ = nullptr;
 static TaskHandle_t audioTaskHandle = nullptr;
+static bool speakerOk = false;
+static char audioFault[28] = "audio off: not started";
 static std::atomic<int> songPending{0};
 static std::atomic<int> captureState{0};
 static std::atomic<int> loopPending{0};
@@ -90,7 +96,26 @@ static void drainSide() {
   }
 }
 
+static void drainMidi() {
+  if (!midiIn) {
+    return;
+  }
+  // The UI loop draws and then waits. MIDI is read here, once per audio
+  // block, so a chord-plus-clock packet is not stuck behind that wait.
+  MidiEvent ev[12];
+  for (int pass = 0; pass < 6; pass++) {
+    int n = midiIn->Poll(ev, 12);
+    if (n <= 0) {
+      return;
+    }
+    for (int i = 0; i < n; i++) {
+      tracker.HandleMidi(ev[i]);
+    }
+  }
+}
+
 static void renderBlock(int16_t *dst) {
+  drainMidi();
   drainSide();
   int peak[4] = {0, 0, 0, 0};
   for (int i = 0; i < kBlock; i++) {
@@ -145,13 +170,30 @@ static void audioTask(void *arg) {
   }
 }
 
+static void logAudioHeap(const char *tag) {
+  uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  DEV_LOGF("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
+}
+
+void audioBindMidi(BleMidi *ble) {
+  midiIn = ble;
+}
+
 void audioStart() {
   if (audioTaskHandle) {
     return;
   }
+  logAudioHeap("before audio");
   memset(snapSlots, 0, sizeof(snapSlots));
   cmdQ = xQueueCreate(24, sizeof(Cmd));
   midiOutQ = xQueueCreate(16, sizeof(MidiEvent));
+  if (!cmdQ || !midiOutQ) {
+    snprintf(audioFault, sizeof(audioFault), "audio off: no queue");
+    Serial.println("AUDIO: queue create failed");
+    logAudioHeap("after audio");
+    return;
+  }
   M5.Speaker.end();
   auto cfg = M5.Speaker.config();
   // Pins and port are what _begin_audio installs for the ADV. Setting them
@@ -173,17 +215,41 @@ void audioStart() {
   cfg.stereo = false;
   M5.Speaker.config(cfg);
   es8311PowerUp();
-  if (!M5.Speaker.begin()) {
-    DEV_LOG("Speaker: begin failed");
+  speakerOk = M5.Speaker.begin();
+  if (!speakerOk) {
+    Serial.println("AUDIO: speaker begin failed");
   } else {
+    DEV_LOG("AUDIO: speaker ok");
     DEV_LOG("Speaker: 44100 Hz");
   }
   M5.Speaker.setVolume(160);
-  xTaskCreatePinnedToCore(audioTask, "mothdeck-audio", 8192, nullptr, 5, &audioTaskHandle, 1);
+  BaseType_t created = xTaskCreatePinnedToCore(audioTask, "mothdeck-audio", 8192, nullptr, 5, &audioTaskHandle, 1);
+  if (created != pdPASS || !audioTaskHandle) {
+    audioTaskHandle = nullptr;
+    snprintf(audioFault, sizeof(audioFault), "audio off: no task");
+    Serial.println("AUDIO: task create failed");
+    logAudioHeap("after audio");
+    return;
+  }
+  if (!speakerOk) {
+    snprintf(audioFault, sizeof(audioFault), "audio off: no speaker");
+  } else {
+    snprintf(audioFault, sizeof(audioFault), "audio ok");
+  }
+  if (strcmp(audioFault, "audio ok") != 0) {
+    Serial.printf("AUDIO: %s\n", audioFault);
+  } else {
+    DEV_LOGF("AUDIO: %s\n", audioFault);
+  }
+  logAudioHeap("after audio");
 }
 
 bool audioRunning() {
   return audioTaskHandle != nullptr;
+}
+
+const char *audioFaultText() {
+  return audioFault;
 }
 
 void audioCommand(char kind, int val) {

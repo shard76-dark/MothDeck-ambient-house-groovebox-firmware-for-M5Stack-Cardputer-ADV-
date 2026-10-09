@@ -208,5 +208,5 @@
 <rect x="1040" y="588" width="81" height="26" rx="5" fill="#262b32"/>
 <text x="1048" y="605" fill="#8b939c" font-size="12">No action</text>
 <text x="28" y="630" fill="#c5ccd3" font-size="13">E jumps to Settings and starts editing the BLE name. Enter does nothing on this page.</text>
-<text x="28" y="650" fill="#c5ccd3" font-size="13">The page is a status view: connection, advertised name, and the channel map.</text>
+<text x="28" y="650" fill="#c5ccd3" font-size="13">The page is a status view: real BLE state, heap at init, advertised name, and the channel map.</text>
 </svg>

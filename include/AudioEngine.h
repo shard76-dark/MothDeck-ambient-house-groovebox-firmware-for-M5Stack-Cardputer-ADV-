@@ -4,8 +4,13 @@
 #include "SongFile.h"
 #include "Snap.h"
 
+class BleMidi;
+
 void audioStart();
+void audioBindMidi(BleMidi *ble);
 bool audioRunning();
+// "audio ok", or "audio off: no queue|no task|no speaker".
+const char *audioFaultText();
 void audioCommand(char kind, int val);
 void audioMidi(const MidiEvent &event);
 bool audioCapture(SongData *song);

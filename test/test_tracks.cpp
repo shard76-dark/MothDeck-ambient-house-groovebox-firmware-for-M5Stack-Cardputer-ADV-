@@ -25,7 +25,7 @@ bool instrumentView(int id, ExtSampleView *out) {
 
 static bool stepsAre(const Tracker &tracker, int track, uint8_t id) {
   for (int s = 0; s < Tracker::kMaxSteps; s++) {
-    if (tracker.trackInstruments[track][s] != id) {
+    if (tracker.InstAt(track, s) != id) {
       return false;
     }
   }
@@ -61,17 +61,17 @@ static void testAssignStaysOnTrack() {
   expect(tracker.currentVoice == 14 && tracker.trackVoice[1] == 5, "returning to track 1 recalls the plugin");
 
   tracker.SetCommand('N', 0);
-  expect(tracker.tracks[0][0] == 1 && tracker.trackInstruments[0][0] == 14, "recorded note uses track 1");
+  expect(tracker.NoteAt(0, 0) == 1 && tracker.InstAt(0, 0) == 14, "recorded note uses track 1");
   tracker.SetCommand('T', 1);
   tracker.SetCommand('N', 3);
-  expect(tracker.tracks[1][0] == 4 && tracker.trackInstruments[1][0] == 5, "recorded note uses track 2, not the plugin");
+  expect(tracker.NoteAt(1, 0) == 4 && tracker.InstAt(1, 0) == 5, "recorded note uses track 2, not the plugin");
   expect(tracker.trackVoice[0] == 14, "recording on track 2 leaves track 1's plugin");
 
   tracker.SetCommand('P', 0);
   expect(!tracker.isPlaying, "transport stopped");
   tracker.SetCommand('T', 2);
   tracker.SetCommand('N', 2);
-  expect(tracker.tracks[2][0] == 0 && tracker.trackInstruments[2][0] == 0, "live note does not stamp another track's instrument");
+  expect(tracker.NoteAt(2, 0) == 0 && tracker.InstAt(2, 0) == 0, "live note does not stamp another track's instrument");
   expect(tracker.currentVoice == 0 && tracker.trackVoice[0] == 14, "stopped track 3 stays on drums");
 
   tracker.SetCommand('I', 0);
@@ -116,14 +116,98 @@ static void testSongRecallDoesNotSmear() {
   tracker.ApplySong(song);
   expect(tracker.trackVoice[0] == 9 && tracker.currentVoice == 9, "empty selected track keeps its editor instrument");
   expect(tracker.trackVoice[1] == 4 && tracker.trackVoice[2] == 14 && tracker.trackVoice[3] == 0, "other tracks keep their own instruments");
-  expect(tracker.trackInstruments[1][3] == 4 && tracker.trackInstruments[0][0] == 0, "load does not paint the editor instrument across the song");
-  expect(tracker.tracks[1][3] == 2, "loaded notes stay put");
+  expect(tracker.InstAt(1, 3) == 4 && tracker.InstAt(0, 0) == 0, "load does not paint the editor instrument across the song");
+  expect(tracker.NoteAt(1, 3) == 2, "loaded notes stay put");
+  expect(tracker.patternLength == 32 && tracker.Bars() == 2, "a saved 32-step pattern stays two bars");
+}
+
+static void clocks(Tracker &tracker, int count) {
+  for (int i = 0; i < count; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value14 = (uint16_t)((i * 20) & 0x1FFF);
+    tracker.HandleMidi(clk);
+  }
+}
+
+static void transport(Tracker &tracker, MidiMsgType type, int value) {
+  MidiEvent ev = {};
+  ev.type = type;
+  ev.value14 = (uint16_t)value;
+  tracker.HandleMidi(ev);
+}
+
+static void testBarsAndExternalLoop() {
+  Tracker tracker;
+  expect(tracker.patternLength == 16 && tracker.Bars() == 1 && tracker.PatternSlots() == 4, "a new pattern is one bar");
+
+  tracker.SetCommand('Y', 8);
+  expect(tracker.patternLength == 128 && tracker.Bars() == 8 && tracker.PatternSlots() == 2, "eight bars is 128 steps and two pattern slots");
+  tracker.SetCommand('$', 3);
+  expect(tracker.currentPattern == 1, "pattern 4 clamps to the last slot that fits");
+  tracker.SetCommand('Y', 1);
+  expect(tracker.patternLength == 16 && tracker.PatternSlots() == 4, "shrinking back to one bar restores four slots");
+
+  SongData song;
+  std::memset(&song, 0, sizeof(song));
+  song.patternLength = 16;
+  song.bpms[0] = 120;
+  song.tracks[0][0] = 5;
+  song.octaves[0][0] = -1;
+  song.instruments[0][0] = 9;
+  song.tracks[0][20] = 3;
+  song.voices[0].bend14 = 8192;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 16 && tracker.Bars() == 1, "a 16-step song loads as one bar");
+  expect(tracker.NoteAt(0, 0) == 5 && tracker.OctaveAt(0, 0) == -1 && tracker.InstAt(0, 0) == 9, "packed step keeps note, octave, and instrument");
+  expect(tracker.NoteAt(0, 20) == 3, "steps past the old 16 stay in the grid");
+  tracker.SetCommand('Y', 4);
+  expect(tracker.patternLength == 64 && tracker.NoteAt(0, 0) == 5 && tracker.NoteAt(0, 20) == 3, "changing length does not wipe steps");
+  tracker.SetCommand('Y', 1);
+  expect(tracker.NoteAt(0, 20) == 3, "a shorter pattern keeps the hidden steps");
+
+  song.patternLength = 4;
+  tracker.ApplySong(song);
+  expect(tracker.patternLength == 16, "a short saved length rounds up to one bar");
+
+  tracker.SetCommand('Y', 1);
+  transport(tracker, MIDI_MSG_START, 0);
+  expect(tracker.patternLength == 16, "the first Start does not invent a length");
+  clocks(tracker, 96 * 4);
+  transport(tracker, MIDI_MSG_START, 0);
+  expect(tracker.patternLength == 64 && tracker.Bars() == 4, "Start back at zero after four bars adopts four bars");
+  expect(tracker.currentPattern == 0, "Start stays on the current pattern");
+
+  tracker.SetCommand('Y', 2);
+  transport(tracker, MIDI_MSG_START, 0);
+  clocks(tracker, 96 * 4);
+  transport(tracker, MIDI_MSG_STOP, 0);
+  transport(tracker, MIDI_MSG_START, 0);
+  expect(tracker.patternLength == 32, "Stop cancels auto-length, so the next Start keeps two bars");
+
+  tracker.SetCommand('Y', 2);
+  transport(tracker, MIDI_MSG_START, 0);
+  transport(tracker, MIDI_MSG_SONG_POS, 40);
+  expect(tracker.currentPattern == 0 && tracker.trackIndex == 8, "song position is modulo the 32-step pattern");
+  clocks(tracker, 96 * 2);
+  transport(tracker, MIDI_MSG_SONG_POS, 0);
+  expect(tracker.patternLength == 32, "a song position of zero after a locate does not learn");
+  clocks(tracker, 96 * 3);
+  transport(tracker, MIDI_MSG_SONG_POS, 0);
+  expect(tracker.patternLength == 48 && tracker.trackIndex == 0, "the next return to zero learns three bars and restarts the pattern");
+
+  Snap snap;
+  std::memset(&snap, 0, sizeof(snap));
+  tracker.SetCommand('W', 1);
+  tracker.FillSnap(&snap);
+  expect(snap.barIndex == 2 && snap.barCount == 3 && snap.barOrigin == 16, "Fn pages the editor to bar 2 of 3");
 }
 
 int main() {
   testAssignStaysOnTrack();
   testMidiBankStaysOnChannel();
   testSongRecallDoesNotSmear();
+  testBarsAndExternalLoop();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

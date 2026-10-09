@@ -6,6 +6,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CXX="${CXX:-g++}"
 FLAGS=(-std=c++17 -Wall -Wextra -Werror -I"$ROOT/include")
 
+echo "BLE MIDI advertising payload"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_ble_advert.cpp" \
+  "$ROOT/src/BleAdvert.cpp" \
+  -o /tmp/mothdeck_test_ble_advert
+/tmp/mothdeck_test_ble_advert
+
 echo "MIDI and song file"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_midi_song.cpp" \

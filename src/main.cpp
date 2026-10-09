@@ -1,8 +1,10 @@
 #include <Arduino.h>
 #include <M5Cardputer.h>
+#include <esp_heap_caps.h>
 #include "AudioEngine.h"
 #include "BleMidi.h"
 #include "BoardConfig.h"
+#include "DevLog.h"
 #include "LauncherExit.h"
 #include "PcmHold.h"
 #include "SplashMoth.h"
@@ -130,26 +132,38 @@ static void showSplash() {
   }
 }
 
+static void logHeap(const char *tag) {
+  uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  DEV_LOGF("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
+}
+
 void setup() {
+  // USB CDC is on from boot. Playback is first: the speaker DMA and the
+  // audio task take their internal RAM before the sprite and before BLE.
+  // BLE is last, and Begin() refuses to touch the controller when the
+  // largest free block is under 36KB, so a failed radio alloc cannot
+  // take the memory the tracker is already using.
+  Serial.begin(115200);
+  Serial.printf("MothDeck %s\n", MOTHDECK_VERSION);
+  uiLoadPrefs();
   bringUpDisplay();
+  logHeap("after display");
   showSplash();
+  audioBindMidi(&ble);
+  audioStart();
   uiBegin();
   uiDraw(ble);
   bootExitChord();
-  uiMountStorage();
-  audioStart();
   ble.Begin(uiBleName());
+  uiMountStorage();
+  logHeap("after storage");
 }
 
 void loop() {
   M5Cardputer.update();
+  ble.Maintain();
   uiPoll(ble);
-
-  MidiEvent incoming[8];
-  int count = ble.Poll(incoming, 8);
-  for (int i = 0; i < count; i++) {
-    audioMidi(incoming[i]);
-  }
 
   MidiEvent outgoing;
   while (audioPopMidi(&outgoing)) {
