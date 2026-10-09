@@ -14,6 +14,8 @@ A built-in patch uses no heap. A subtractive or FM cycle is 168 frames, 336 byte
 
 The download image is still 1.1.0. Test images are not in `releases/`.
 
+`mothdeck-cardputer-adv-1.2.0-test.bin` is 1,153,152 bytes, magic `E9`, SHA-256 `a802ece13876ab053dac6bc8e2c8e8feab1d5b936c3b59d9f32de618946172ee`. Static RAM is 136,004 of 327,680 bytes (41.5%), 656 more than 1.1.2. `mothdeck-cardputer-adv-1.2.0-test-dev.bin` is 1,199,200 bytes, magic `E9`, SHA-256 `69687e68ce59876d24d67aef6f7f5091f0445cd4d47ccb4e0dd5813055dd9b37`. Static RAM is 136,260 of 327,680 (41.6%). IRAM stays full at 16,384 bytes. These images were not flashed.
+
 ## 1.1.2 (unreleased)
 
 BLE pairs with an MPC Live II again. 1.1.0 did. 1.1.1 stopped, and the pairing code itself did not change: same Just Works bond (no passkey, host starts pairing), same MIDI characteristic (read, write, write without response, notify), same primary advert (flags, complete name, MIDI UUID).
