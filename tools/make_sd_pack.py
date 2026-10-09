@@ -6,6 +6,7 @@ needs. Every sample is synthesized here. No third-party recordings.
 """
 import math
 import os
+import shutil
 import sys
 import zipfile
 
@@ -214,7 +215,7 @@ def readme():
 
 Unzip this archive onto the microSD card root. You should end up with a `moth` folder beside this file. Eject the card, boot MothDeck, and on the Instrument page press `R` to rescan.
 
-The built-in drum kit is already **Ambient House** and does not need the card. This pack adds two more kits, a Loops instrument's samples, and a few plugin instruments.
+The built-in drum kit is already **Ambient House** and does not need the card. This pack adds two more kits, a Loops instrument's samples, six sample instruments, and six patches (scale, held arp, glide, and the other shortlist sounds).
 
 ## What is on the card
 
@@ -229,6 +230,12 @@ The built-in drum kit is already **Ambient House** and does not need the card. T
 | `moth/instruments/soft-pad` | Slow detuned sines, looping |
 | `moth/instruments/house-pluck` | Short decaying pluck, one-shot |
 | `moth/instruments/air-bell` | FM bell, one-shot |
+| `moth/instruments/a-minor` | Patch: built-in bass locked to A minor |
+| `moth/instruments/held-arp` | Patch: built-in saw, held-note arp |
+| `moth/instruments/glide-bass` | Patch: bass plus a saw an octave down, 90 ms glide |
+| `moth/instruments/saw-pluck` | Patch: subtractive saw, short envelope, low-pass |
+| `moth/instruments/body` | Patch: short pluck sample |
+| `moth/instruments/room-drive` | Patch: sine with drive, delay, reverb, and chorus |
 
 ## Drums
 
@@ -261,7 +268,7 @@ The Loops page can still audition and launch a single loop onto a track. That is
 
 ## Plugins
 
-Assign a plugin from the Instrument list with Enter. The folder name is what a song remembers. Files follow `mothdeck-instrument 1` (see the firmware docs). Without PSRAM a plugin sample can be at most 4096 frames and at most four stay loaded. These are unsigned 8-bit mono, 22050 Hz, 3600 frames, so they load on the Cardputer ADV.
+Assign a plugin from the Instrument list with Enter. The folder name is what a song remembers. Sample folders follow `mothdeck-instrument 1`. The six patch folders follow `mothdeck-patch 1`: they set a built-in or a short sample plus scale, arp, glide, and the FX rows. On the FX page, Scale, Root, Arp, Glide, Osc2, Blend, and Coarse change those after assign. Without PSRAM a plugin sample can be at most 4096 frames and at most four stay loaded. The sample folders here are unsigned 8-bit mono, 22050 Hz, 3600 frames. `body` is 1800 frames. Both fit on the Cardputer ADV. Patches stay loaded while BLE is on. Loops do not.
 
 ## Sources and licence
 
@@ -305,6 +312,20 @@ def main():
         write_wav(os.path.join(loop_base, filename), loop_bar(kind), LOOP_RATE)
         lines.append("loop=%s" % filename)
     write(os.path.join(loop_base, "manifest.txt"), "\n".join(lines) + "\n")
+    example = os.path.join(ROOT, "sd-card-example", "moth", "instruments")
+    for name in (
+        "a-minor",
+        "held-arp",
+        "glide-bass",
+        "saw-pluck",
+        "body",
+        "room-drive",
+    ):
+        src = os.path.join(example, name)
+        dst = os.path.join(STAGE, "moth", "instruments", name)
+        if not os.path.isdir(src):
+            raise SystemExit("missing example patch %s" % src)
+        shutil.copytree(src, dst)
     write(os.path.join(STAGE, "README.md"), readme())
     os.makedirs(os.path.dirname(ZIP_PATH), exist_ok=True)
     with zipfile.ZipFile(ZIP_PATH, "w", compression=zipfile.ZIP_DEFLATED) as archive:

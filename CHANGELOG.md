@@ -2,7 +2,7 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
-## 1.2.0 (unreleased)
+## 1.2.0 (2026-10-09)
 
 A plugin on the card can be a patch: `mothdeck-patch 1` in `/moth/instruments/<folder>/manifest.txt`. It names a sound that already exists (a built-in, a short sample, a subtractive cycle, or an FM cycle) and the voice, insert, scale, arp, and glide numbers for one track. The card still has no code. Older `mothdeck-instrument 1` folders load as before.
 
@@ -12,11 +12,9 @@ Assign a folder with Enter on the Instrument page. Scale, Root, Arp, Glide, Osc2
 
 A built-in patch uses no heap. A subtractive or FM cycle is 168 frames, 336 bytes. A sample stays capped at 4096 frames, 8192 bytes, and at most four stay loaded. That sample heap is not the loop-window pool (five windows of 1024 frames, double buffered, 20480 bytes). Turning BLE on still unloads loops and leaves these plugins loaded.
 
-The download image is still 1.1.0. Test images are not in `releases/`.
+The image to flash is `releases/mothdeck-cardputer-adv.bin` (1,153,152 bytes, magic `E9`, SHA-256 `a802ece13876ab053dac6bc8e2c8e8feab1d5b936c3b59d9f32de618946172ee`). Notes for that image are in [releases/CHANGELOG.md](releases/CHANGELOG.md). Chris confirmed the piano roll on a Cardputer. BLE in this image has not been tried on hardware.
 
-`mothdeck-cardputer-adv-1.2.0-test.bin` is 1,153,152 bytes, magic `E9`, SHA-256 `a802ece13876ab053dac6bc8e2c8e8feab1d5b936c3b59d9f32de618946172ee`. Static RAM is 136,004 of 327,680 bytes (41.5%), 656 more than 1.1.2. `mothdeck-cardputer-adv-1.2.0-test-dev.bin` is 1,199,200 bytes, magic `E9`, SHA-256 `69687e68ce59876d24d67aef6f7f5091f0445cd4d47ccb4e0dd5813055dd9b37`. Static RAM is 136,260 of 327,680 (41.6%). IRAM stays full at 16,384 bytes. These images were not flashed.
-
-## 1.1.2 (unreleased)
+## 1.1.2 (shipped in 1.2.0)
 
 BLE pairs with an MPC Live II again. 1.1.0 did. 1.1.1 stopped, and the pairing code itself did not change: same Just Works bond (no passkey, host starts pairing), same MIDI characteristic (read, write, write without response, notify), same primary advert (flags, complete name, MIDI UUID).
 
@@ -28,11 +26,11 @@ The air name is `Mothdeck` (eight characters, complete in the primary packet). A
 
 MIDI notes were waiting on the audio queue. The audio task drained the ring once per 256-sample block and skipped that drain while two blocks were queued, about 17 ms worst case after the packet was already in the ring, on top of the link interval (15 ms if the 7.5–15 ms request stuck, often ~30 ms if the MPC kept its own). Connected playback now renders 128-sample blocks, keeps one buffer queued, and drains the ring while waiting and every 32 samples (about 0.7 ms). That is about 4 ms on the device plus one 256-sample I2S period (about 6 ms) that is left alone so local playback does not underrun. The interval request is sent 250 ms after connect, not inside the connect callback, and the negotiated interval is printed on serial and on the MIDI page (`link 15.0ms`). If the MPC accepts 15 ms, expect about 25 ms end to end. If it stays at 30 ms, expect about 40 ms, and the page shows that number. These are estimates from the buffer sizes. This environment has no Cardputer to measure.
 
-The download image is still 1.1.0.
+These notes are included in the 1.2.0 image.
 
-## 1.1.1 (unreleased)
+## 1.1.1 (shipped in 1.2.0)
 
-Settings can turn the BLE radio off and on without unloading NimBLE, and a separate Unload BLE row skips the stack on the next boot. SD loop windows are reserved so a library no longer stops at two files after BLE starts. A stored 256-step song loads as four patterns of 64. Play opens on a piano roll (Enter returns to the 16-step strip). Notes are in [releases/CHANGELOG.md](releases/CHANGELOG.md). The download image is still 1.1.0.
+Settings can turn the BLE radio off and on without unloading NimBLE, and a separate Unload BLE row skips the stack on the next boot. SD loops load as a set again while the radio is off. A stored 256-step song loads as four patterns of 64. Play opens on a piano roll (Enter returns to the 16-step strip). The behavior that shipped is the 1.2.0 section above: BLE is off at boot, and turning it on unloads loops.
 
 ## 1.1.0 (2026-10-09)
 

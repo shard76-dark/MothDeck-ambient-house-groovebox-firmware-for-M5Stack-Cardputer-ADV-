@@ -8,13 +8,10 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.1.0
-- SHA-256: `f8d9ab44082ab7ff5921dca9d30eb68ed8a440430bb019df31e4d82212569a4a`
-- Size: 1,134,080 bytes (app image, magic `E9`)
-- BLE MIDI pairs with an MPC Live II, patterns run from 1 to 8 bars, and playback stays up if the radio cannot start. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
-- 1.1.1 is unreleased. It adds a Settings BLE on/off switch and an Unload BLE row, fixes SD loops that only opened two files after BLE started, and draws the Play page as a piano roll. The image above is still 1.1.0.
-- 1.1.2 is unreleased. BLE is off at boot and pairs with an MPC again, the air name is `Mothdeck`, Rec starts off, and loops unload while MIDI is on. Notes are in [CHANGELOG.md](CHANGELOG.md). The image above is still 1.1.0.
-- 1.2.0 is unreleased. Instrument folders can be patches (`mothdeck-patch 1`), including scale lock, a held-note arp, and a second oscillator with glide. Notes are in [CHANGELOG.md](CHANGELOG.md). The image above is still 1.1.0.
+- Version 1.2.0
+- SHA-256: `a802ece13876ab053dac6bc8e2c8e8feab1d5b936c3b59d9f32de618946172ee`
+- Size: 1,153,152 bytes (app image, magic `E9`)
+- Play opens on a piano roll. Patterns are 1–8 bars. BLE is off until Settings turns it on, the air name is `Mothdeck`, and instrument folders can be patches (scale, held arp, glide). Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md). Chris confirmed the piano roll on a Cardputer. BLE in this image has not been tried on hardware.
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
@@ -165,6 +162,12 @@ The pack in `releases/mothdeck-sd-pack.zip` contains:
 | `moth/instruments/soft-pad` | Slow detuned sines, looping |
 | `moth/instruments/house-pluck` | Short pluck, one-shot |
 | `moth/instruments/air-bell` | FM bell, one-shot |
+| `moth/instruments/a-minor` | Patch: built-in bass, A minor |
+| `moth/instruments/held-arp` | Patch: built-in saw, held-note arp |
+| `moth/instruments/glide-bass` | Patch: bass, second saw, 90 ms glide |
+| `moth/instruments/saw-pluck` | Patch: subtractive saw and a low-pass |
+| `moth/instruments/body` | Patch: short pluck sample |
+| `moth/instruments/room-drive` | Patch: sine, drive, delay, reverb, chorus |
 
 Kit pad order is kick, rim, snare, clap, hat, openhat, perc, tom, shaker, ride, snap, crash. `perc.wav` is the low tom. Each pad file is already inside the 1800-frame and 8000-frame cache. Plugin samples in the pack are 3600 frames at 22050 Hz, under the 4096-frame cap. A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines.
 
@@ -176,7 +179,7 @@ python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \
 
 Those two commands resample to 22050 Hz and write 8-bit mono WAV. Song, instrument, loop, kit, and pattern bytes are specified in [docs/FORMATS.md](docs/FORMATS.md).
 
-Plugins get ids 12–62. Id 63 is Loops. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. A song that stays on the built-in instruments is a 3155-byte MothOS version 1 file. Plugins and loops make version 2. An insert effect makes version 3.
+Plugins get ids 12–62. Id 63 is Loops. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. A song that stays on the built-in instruments is a 3155-byte MothOS version 1 file. Plugins and loops make version 2. An insert effect makes version 3. Scale, a held arp, a second oscillator, or glide makes version 4.
 
 ## Keyboard
 

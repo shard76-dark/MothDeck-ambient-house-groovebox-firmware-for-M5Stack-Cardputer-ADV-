@@ -61,4 +61,4 @@ The first frame after power-on is a one-second amber moth on a grey panel, then 
 
 ## SD contents
 
-Optional. Unzip `mothdeck-sd-pack.zip` onto the card root so `moth/` is at the top. It holds the 808 and Dusty drum kits, four one-bar house loops, and six plugin instruments. The Ambient House kit is already in the firmware. Every WAV in the pack is unsigned 8-bit mono at 22050 Hz. On the Instrument page, `,` and `/` load a kit from `/moth/drums` onto Drums. Layout and file formats are in the pack README and in `docs/FORMATS.md`.
+Optional. Unzip `mothdeck-sd-pack.zip` onto the card root so `moth/` is at the top. It holds the 808 and Dusty drum kits, four one-bar house loops, six sample instruments, and six patches under `moth/instruments/` (`a-minor`, `held-arp`, `glide-bass`, `saw-pluck`, `body`, `room-drive`). The Ambient House kit is already in the firmware. Every WAV in the pack is unsigned 8-bit mono at 22050 Hz. On the Instrument page, `,` and `/` load a kit from `/moth/drums` onto Drums. Enter assigns a plugin or a patch. Layout and file formats are in the pack README and in `docs/FORMATS.md`.
