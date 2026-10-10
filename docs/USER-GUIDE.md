@@ -1,6 +1,6 @@
 # MothDeck user guide
 
-MothDeck 1.2.1 is groovebox firmware for the M5Stack Cardputer ADV. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.1. The behavior below is the 1.2.2 test: NimBLE is resident from boot, and On and Off only start or stop advertising. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
@@ -232,9 +232,7 @@ Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE
 
 ![Settings, Bars row](screenshots/screen-settings-bars-2x.png)
 
-BLE is off at boot, and Rec is off at boot. Off stops advertising, disconnects a host, ignores incoming MIDI, and loads loop windows again. On turns Rec off. The choice is stored. A 1.1.1 setting of on is not read, so the radio stays off until you turn it on.
-
-The first On in a session is what initialises the radio, and it does that only after the loop windows are freed. Later On calls do not allocate again.
+BLE is off at boot, and Rec is off at boot. The stack is still initialised, before the loop windows, so turning it on does not allocate. Off stops advertising, disconnects a host, ignores incoming MIDI, and loads the loop windows that fit beside the stack. On turns Rec off and starts advertising. The choice is stored. A 1.1.1 setting of on is not read, so the radio stays off until you turn it on.
 
 ### MIDI mode and loops
 
@@ -244,7 +242,7 @@ If the open project has a loop on a track, or a track on the Loops instrument, t
 
 The box says `MIDI mode: loops off.` and `Save song? Y / N`. `` ` `` cancels and leaves BLE off. The toast then says `BLE stays off`. Y saves, N skips, and either one then loads an empty project and turns BLE on. A patch that only uses a built-in, a cycle, or a short sample does not raise this question.
 
-Unload BLE stores the choice and skips the stack on the next boot. This session does not tear the stack down. The row says `next boot` until restart. Fn+`,` before the reboot cancels the unload. After that boot the BLE row says `unloaded`, and Enter on Load BLE initialises again when a 36KB block is free. If it is not, the row says `restart` and the toast says `BLE loads after restart`. The board keeps running.
+Unload BLE stores the choice and skips the stack on the next boot, so the loop windows can use that block. This session does not tear the stack down. The row says `next boot` and the toast says `BLE unloads after restart`. Fn+`,` before the reboot cancels the unload. After that boot the BLE row says `unloaded`. Enter on Load BLE stores the choice and the toast says `BLE loads after restart`. The next boot initialises the stack before the loop windows.
 
 ## Exit
 

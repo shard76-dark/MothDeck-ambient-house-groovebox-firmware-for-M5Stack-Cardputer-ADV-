@@ -1460,24 +1460,22 @@ static void stopRec() {
 }
 
 static void finishBleOn(BleMidi &ble) {
+  if (!ble.Resident()) {
+    // The stack is created at boot, before the loop pool. Starting it
+    // after the card scan would allocate, and that is the failure this
+    // switch is not allowed to have. The next boot brings it up.
+    bleOn = 1;
+    bleLoad = 1;
+    bleUnloadPending = false;
+    savePrefs();
+    toastSet("BLE loads after restart");
+    return;
+  }
   stopRec();
   silenceLoops();
   bleLoad = 1;
   bleUnloadPending = false;
-  bool ok = false;
-  if (ble.Resident()) {
-    ble.SetUserEnabled(true);
-    ok = ble.UserEnabled() && ble.Advertising();
-  } else {
-    ok = ble.Begin(uiBleName(), true) && ble.Resident();
-  }
-  if (!ok) {
-    bleOn = 0;
-    savePrefs();
-    restoreLoops();
-    toastSet(ble.Resident() ? "BLE off: not advertising" : "BLE loads after restart");
-    return;
-  }
+  ble.SetUserEnabled(true);
   bleOn = 1;
   savePrefs();
   ble.SetPendingUnload(false);
@@ -1527,18 +1525,6 @@ static void answerBleAsk(char c, bool cancel, BleMidi &ble) {
   finishBleOn(ble);
 }
 
-static void rearmCaptured(SongData &song) {
-  char lerr[48];
-  lerr[0] = 0;
-  loopLibrary.PrepareSong(&song, lerr, (int)sizeof(lerr));
-  for (int t = 0; t < 4; t++) {
-    LoopArm arm;
-    if (loopLibrary.TrackArm(t, &arm)) {
-      audioArmLoop(t, arm);
-    }
-  }
-}
-
 static void doLoadBle(BleMidi &ble) {
   if (ble.Resident()) {
     bleLoad = 1;
@@ -1548,42 +1534,12 @@ static void doLoadBle(BleMidi &ble) {
     toastSet("BLE stays loaded");
     return;
   }
-  if (bleOn && projectHasLoops()) {
-    bleAsk = true;
-    return;
-  }
-  SongData kept;
-  bool have = false;
-  if (!bleOn) {
-    have = audioCapture(&kept);
-    if (!have) {
-      toastSet("Capture failed");
-      return;
-    }
-  }
-  silenceLoops();
+  // Same boot path as a normal start: NimBLE first, then the loop pool.
+  // This session keeps the windows it already has.
   bleLoad = 1;
   bleUnloadPending = false;
   savePrefs();
-  bool ok = ble.Begin(uiBleName(), bleOn != 0);
-  if (!ble.Resident()) {
-    restoreLoops();
-    if (have) {
-      rearmCaptured(kept);
-    }
-    toastSet("BLE loads after restart");
-    return;
-  }
-  if (!bleOn || !ok) {
-    restoreLoops();
-    if (have) {
-      rearmCaptured(kept);
-    }
-    toastSet("BLE off");
-    return;
-  }
-  stopRec();
-  toastSet("BLE on, rec off");
+  toastSet("BLE loads after restart");
 }
 
 static void doUnloadBle(BleMidi &ble) {
@@ -1601,7 +1557,7 @@ static void doUnloadBle(BleMidi &ble) {
   bleUnloadPending = true;
   savePrefs();
   ble.SetPendingUnload(true);
-  toastSet("Reboot to unload BLE");
+  toastSet("BLE unloads after restart");
 }
 
 static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool fn, BleMidi &ble) {
@@ -1793,10 +1749,10 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       if (rollView) {
         rollPitch = clampi(pitch + oct * 12, 0, kRollRows - 1);
       }
-      // Live record still lands on the playhead. Stopped, the roll writes
-      // the cell under the cursor and auditions it.
-      bool record = snap.playing && snap.armed;
-      if (rollView && !record) {
+      // Stopped, the roll writes the cell under the cursor. While the
+      // transport is running, 'N' records at the playhead only if Rec is
+      // on. Rec off, including MIDI play-through, only sounds.
+      if (rollView && !snap.playing) {
         int lenCode = 0;
         if (rollStep >= 0 && rollStep < (int)snap.rollCount) {
           uint8_t cell = snap.roll[rollStep];

@@ -140,10 +140,9 @@ static void logHeap(const char *tag) {
 
 void setup() {
   // USB CDC is on from boot. Playback is first: the speaker DMA and the
-  // audio task take their internal RAM before the sprite and before BLE.
-  // BLE is last, and Begin() refuses to touch the controller when the
-  // largest free block is under 36KB, so a failed radio alloc cannot
-  // take the memory the tracker is already using.
+  // audio task take their internal RAM before the sprite. NimBLE is next,
+  // before the loop pool and before the card scan, which is the 1.1.0
+  // order that paired. The stack stays resident. Off does not advertise.
   Serial.begin(115200);
   Serial.printf("MothDeck %s\n", MOTHDECK_VERSION);
   uiLoadPrefs();
@@ -155,32 +154,23 @@ void setup() {
   uiBegin();
   uiDraw(ble);
   bootExitChord();
-  // 1.1.0 started BLE here, with the loop pool still unallocated. 1.1.1
-  // reserved that pool first and kept it whenever 36KB remained. The
-  // controller takes about 36KB and the host pools need more on top, so
-  // pairing ran out of buffers. BLE on means the pool is not allocated.
-  // BLE off (the boot default) keeps the pool and does not init NimBLE.
-  if (uiBleWantLoad() && uiBleEnabled()) {
-    ble.Begin(uiBleName(), true);
-    if (!ble.Resident()) {
-      pcmHoldReservePreferred();
-      if (!pcmHoldReserved()) {
-        pcmHoldReserveFit();
-      }
-    }
-  } else if (!uiBleWantLoad()) {
-    ble.MarkSkipped();
-    pcmHoldReservePreferred();
-    if (!pcmHoldReserved()) {
-      pcmHoldReserveFit();
-    }
+  logHeap("before ble");
+  // Unload skips the stack on this boot so the loop pool can take that
+  // block. Load brings it back on the following boot, still before the pool.
+  if (uiBleWantLoad()) {
+    ble.Begin(uiBleName(), uiBleEnabled());
   } else {
-    ble.MarkIdle();
+    ble.MarkSkipped();
+  }
+  logHeap("after ble");
+  // Loops use the leftover. While the radio is on they stay unloaded.
+  if (!ble.UserEnabled()) {
     pcmHoldReservePreferred();
     if (!pcmHoldReserved()) {
       pcmHoldReserveFit();
     }
   }
+  logHeap("after loops");
   uiMountStorage(!ble.UserEnabled());
   logHeap("after storage");
 }

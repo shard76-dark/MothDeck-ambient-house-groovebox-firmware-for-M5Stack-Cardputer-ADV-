@@ -481,31 +481,59 @@ bool BleMidi::Begin(const char *name, bool advertise) {
   if (active) {
     Serial.printf("BLE MIDI advertising as %s (air %s)\n", pkts.gapName, pkts.advName);
   } else {
-    userEnabled = false;
     snprintf(failReason, sizeof(failReason), "not advertising");
+    Serial.println("BLE: radio on, advertising retries");
   }
-  return active;
+  return true;
 }
 
 void BleMidi::SetUserEnabled(bool on) {
+  uint32_t freeBefore = 0;
+  uint32_t largeBefore = 0;
+  snapHeap(&freeBefore, &largeBefore);
   if (!initOk || !serverOk) {
     userEnabled = false;
+    DEV_LOGF(
+      "BLE: switch %s skipped, stack not resident free=%u largest=%u\n",
+      on ? "on" : "off",
+      (unsigned)freeBefore,
+      (unsigned)largeBefore);
     return;
   }
   if (!on) {
     stopRadio();
+    uint32_t freeAfter = 0;
+    uint32_t largeAfter = 0;
+    snapHeap(&freeAfter, &largeAfter);
+    DEV_LOGF(
+      "BLE: switch off free %u->%u largest %u->%u\n",
+      (unsigned)freeBefore,
+      (unsigned)freeAfter,
+      (unsigned)largeBefore,
+      (unsigned)largeAfter);
     Serial.println("BLE: radio off");
     return;
   }
+  // Already resident. Starting advertising does not call BLEDevice::init.
   userEnabled = true;
+  pendingUnload = false;
   bool active = radioStart(false);
+  uint32_t freeAfter = 0;
+  uint32_t largeAfter = 0;
+  snapHeap(&freeAfter, &largeAfter);
+  DEV_LOGF(
+    "BLE: switch on advertising=%d free %u->%u largest %u->%u\n",
+    active ? 1 : 0,
+    (unsigned)freeBefore,
+    (unsigned)freeAfter,
+    (unsigned)largeBefore,
+    (unsigned)largeAfter);
   if (active) {
     failReason[0] = 0;
     Serial.println("BLE: radio on");
   } else {
-    userEnabled = false;
     snprintf(failReason, sizeof(failReason), "not advertising");
-    Serial.println("BLE: radio on, advertising failed");
+    Serial.println("BLE: radio on, advertising retries");
   }
 }
 
@@ -577,10 +605,10 @@ const char *BleMidi::SwitchLine() {
 bool BleMidi::Restart(const char *name) {
   // deinit() gives the controller memory back, and taking it again after
   // the sprite and the audio DMA exist can fail. Change the payload in
-  // place when the stack is already up.
+  // place when the stack is already up. If it was unloaded, the next boot
+  // reads the stored name. Do not init from here.
   if (!initOk || !serverOk) {
-    started = false;
-    return Begin(name, userEnabled);
+    return true;
   }
   buildBleMidiAdvert(name, MOTHDECK_BLE_NAME_DEFAULT, &pkts);
   int rc = ble_svc_gap_device_name_set(pkts.gapName);
@@ -694,7 +722,7 @@ const char *BleMidi::StatusLine() {
     return "BLE off";
   }
   if (initOk && serverOk && !userEnabled) {
-    return pendingUnload ? "BLE reboot to unload" : "BLE off";
+    return pendingUnload ? "Unloads after restart" : "BLE off";
   }
   if (connected) {
     return "MIDI connected";
