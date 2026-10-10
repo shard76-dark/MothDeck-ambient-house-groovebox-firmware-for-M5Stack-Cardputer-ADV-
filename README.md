@@ -379,7 +379,9 @@ The splash art is `docs/splash-moth.png`. Regenerate the embedded mask with `pyt
 
 ## LilyGO TTGO T8
 
-`ttgo-t8` is a second PlatformIO target for a LilyGO TTGO T8 V1.8 (classic ESP32-WROVER, 4MB flash, 4MB PSRAM, microSD, no screen and no keyboard). It is not the Cardputer image and it is not a release. Wiring, the PCM5102A default, the GPIO25 DAC fallback, the optional ST7789, and the serial keys are in [docs/TTGO-T8.md](docs/TTGO-T8.md). Loop windows, sample buffers, and the pattern grid use PSRAM, so BLE and loops stay loaded together. With no display fitted, the board still plays, syncs, and takes notes over BLE MIDI.
+This section is on the `ttgo-t8` branch. That branch is the TTGO line. It is not merged into `main`, and `main` stays the Cardputer firmware.
+
+`ttgo-t8` is the PlatformIO target for a LilyGO TTGO T8 V1.8 (classic ESP32-WROVER, 4MB flash, 4MB PSRAM, microSD). The confirmed display is an ST7789 240×135, and the stock image drives it. Wiring, the PCM5102A default, the GPIO25 DAC fallback, and the serial keys are in [docs/TTGO-T8.md](docs/TTGO-T8.md). Loop windows, sample buffers, and the pattern grid use PSRAM, so BLE and loops stay loaded together. BLE MIDI still plays if the panel is unplugged.
 
 ## Site
 

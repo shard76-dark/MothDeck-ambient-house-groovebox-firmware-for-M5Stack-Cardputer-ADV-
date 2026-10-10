@@ -200,11 +200,13 @@ bool boardBtnHeld() {
 #if MOTHDECK_HAS_TFT
 
 #include <M5GFX.h>
+#include <lgfx/v1/platforms/esp32/Bus_SPI.hpp>
+#include <lgfx/v1/panel/Panel_ST7789.hpp>
 
 class TtgoPanel : public M5GFX {
 public:
   TtgoPanel() {
-    auto bus = new Bus_SPI();
+    auto bus = new lgfx::Bus_SPI();
     auto bcfg = bus->config();
     bcfg.freq_write = 40000000;
     bcfg.pin_sclk = PIN_TFT_SCK;
@@ -218,7 +220,7 @@ public:
     bcfg.spi_host = SPI3_HOST;
 #endif
     bus->config(bcfg);
-    auto panel = new Panel_ST7789();
+    auto panel = new lgfx::Panel_ST7789();
     auto pcfg = panel->config();
     pcfg.pin_cs = PIN_TFT_CS;
     pcfg.pin_rst = PIN_TFT_RST;

@@ -12,9 +12,9 @@
 #define MOTHDECK_BLE_NAME_DEFAULT "Mothdeck"
 
 #if MOTHDECK_BOARD_TTGO
-// LilyGO TTGO T8 V1.8: classic ESP32-WROVER, 4MB flash, 4MB PSRAM, microSD,
-// no panel and no keyboard. Wiring is in docs/TTGO-T8.md. Pins below are
-// the defaults; pass -DPIN_...= to move a wire.
+// LilyGO TTGO T8 V1.8: classic ESP32-WROVER, 4MB flash, 4MB PSRAM, microSD.
+// The board has no panel of its own. The confirmed display is an ST7789
+// 240x135 on the pins below. Wiring is in docs/TTGO-T8.md.
 
 #define BOARD_NAME "TTGO T8"
 
@@ -28,10 +28,10 @@
 #define MOTHDECK_INTERNAL_DAC 0
 #endif
 #ifndef MOTHDECK_HAS_TFT
-#define MOTHDECK_HAS_TFT 0
+#define MOTHDECK_HAS_TFT 1
 #endif
 
-// Onboard microSD, 1-bit SPI. Silkscreen: CLK 14, CMD 15, D0 2, D3 13.
+// Onboard microSD, 1-bit SDMMC. Silkscreen: CLK 14, CMD 15, D0 2, D3 13.
 #ifndef PIN_SD_SCK
 #define PIN_SD_SCK 14
 #endif
@@ -66,7 +66,8 @@
 #define PIN_DAC 25
 #endif
 
-// Optional ST7789 240x135 on the other SPI bus. Off unless the env sets it.
+// ST7789 240x135 on VSPI. The stock image drives this panel. Pass
+// -DMOTHDECK_HAS_TFT=0 to build a headless image.
 #ifndef PIN_TFT_SCK
 #define PIN_TFT_SCK 18
 #endif

@@ -1,10 +1,10 @@
 # LilyGO TTGO T8 V1.8
 
-MothDeck on a LilyGO TTGO T8 V1.8. This is a classic ESP32-WROVER: dual core, 4MB flash, 4MB PSRAM, a microSD slot, and no screen or keyboard. The Cardputer ADV image is a different build. Do not flash a TTGO binary onto a Cardputer, or the other way around.
+MothDeck on a LilyGO TTGO T8 V1.8. This is a classic ESP32-WROVER: dual core, 4MB flash, 4MB PSRAM, a microSD slot, and no keyboard. The board has no panel of its own. The display for this port is a confirmed ST7789 240×135, and the stock image drives it. The Cardputer ADV image is a different build, on `main`. Do not flash a TTGO binary onto a Cardputer, or the other way around.
 
-This port is a test image. It is not a release. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins are the same 1.2.x features. On this board the loop windows, sample buffers, pattern grid, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops.
+This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`, and it is not a release. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins are the same 1.2.x features. On this board the loop windows, sample buffers, pattern grid, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops.
 
-A board with nothing attached still plays, follows MIDI clock, and takes notes over BLE MIDI. The audio task reads the radio. The screen and the keys are optional.
+BLE MIDI still plays, follows clock, and takes notes if the panel is unplugged. Rebuild with `-DMOTHDECK_HAS_TFT=0` for an image that does not drive the panel pins.
 
 ## Build
 
@@ -26,7 +26,7 @@ Optional compile flags, added to `build_flags` in `platformio.ini`:
 
 | Flag | What it changes |
 | --- | --- |
-| `-DMOTHDECK_HAS_TFT=1` | Drive the optional ST7789. The stock image leaves this off. |
+| `-DMOTHDECK_HAS_TFT=0` | Headless image. The stock image drives the ST7789. |
 | `-DMOTHDECK_INTERNAL_DAC=1` | GPIO25 DAC. This is what `ttgo-t8-dac` sets. |
 | `-DPIN_I2S_BCLK=26` `-DPIN_I2S_WS=27` `-DPIN_I2S_DOUT=22` | PCM5102A pins. |
 | `-DPIN_TFT_SCK=18` `-DPIN_TFT_MOSI=23` `-DPIN_TFT_CS=5` `-DPIN_TFT_DC=21` `-DPIN_TFT_RST=19` `-DPIN_TFT_BL=32` | ST7789 pins. |
@@ -77,9 +77,9 @@ FLT, DEMP, and XSMT are usually tied on the module. Leave them.
 
 Do not connect a speaker directly. Use a series 1k resistor, then 10nF to ground, then a series capacitor of about 10µF into an amplifier. This is a monitor output. It is not a hi-fi output.
 
-## Optional ST7789 240×135
+## ST7789 240×135
 
-The stock `ttgo-t8` image does not touch these pins. Rebuild with `-DMOTHDECK_HAS_TFT=1` to draw the same 240×135 layout as the Cardputer (piano roll, step strip, settings). The sprite is still rgb332 and is copied eight rows at a time.
+This panel is the confirmed display. The stock `ttgo-t8` and `ttgo-t8-dac` images draw the same 240×135 layout as the Cardputer (piano roll, step strip, settings). The sprite is still rgb332 and is copied eight rows at a time.
 
 The panel sits on VSPI. The SD card uses the SDMMC host, so the two do not share a bus.
 
@@ -123,10 +123,10 @@ A 2×4 matrix, active low. Columns use `INPUT_PULLUP`. Rows idle high and one ro
 | R0 | `z` | `x` | `c` | `v` |
 | R1 | space | `1` | `p` | `/` |
 
-An example that stays clear of the SD socket, the PCM5102A, and GPIO25, when the TFT is not fitted:
+An example that stays clear of the SD socket, the PCM5102A, GPIO25, and the ST7789 (5, 18, 19, 21, 23, 32). GPIO36 and GPIO39 need external pull-ups because they are input-only:
 
 ```
--DPIN_MX_R0=33 -DPIN_MX_R1=32 -DPIN_MX_C0=4 -DPIN_MX_C1=16 -DPIN_MX_C2=17 -DPIN_MX_C3=21
+-DPIN_MX_R0=33 -DPIN_MX_R1=4 -DPIN_MX_C0=16 -DPIN_MX_C1=17 -DPIN_MX_C2=36 -DPIN_MX_C3=39
 ```
 
 GPIO34, GPIO35, GPIO36, and GPIO39 are input-only and have no internal pull-up. Do not use them as matrix columns unless you add external pull-ups. GPIO35 is the battery sense pin.
@@ -145,6 +145,6 @@ Loop windows are the same shape as the Cardputer (five slots, 1024 frames, doubl
 
 Unload BLE is still in Settings. It is not required to load loops on this board. It takes effect on the next boot, same as the Cardputer.
 
-## Headless
+## Panel unplugged
 
-With `MOTHDECK_HAS_TFT` left at 0, nothing is drawn. Serial keys and BLE MIDI still work. Connect from a host that speaks BLE MIDI, send clock and notes, and the pattern plays out of the PCM5102A (or GPIO25 on the DAC image). Plug in the line out before you raise the volume.
+The stock image expects the ST7789. Playback does not depend on it: the audio task still follows BLE MIDI clock and notes, and serial keys still work. A build with `-DMOTHDECK_HAS_TFT=0` leaves the panel pins alone. Plug in the line out before you raise the volume.
