@@ -1147,3 +1147,72 @@ int Voice::HistoryAt(int back, int frac256) {
 int Voice::GetHistorySample(int backOffset) {
   return HistoryAt(backOffset, 0);
 }
+
+#if MOTHDECK_CHORDS
+void Voice::LayerHit(int val, int oct, int inst) {
+  int8_t savedNote = note;
+  int8_t savedRec = recOctave;
+  int savedExt = extBaseStep;
+  note = (int8_t)val;
+  recOctave = (int8_t)oct;
+  if (inst >= 12) {
+    ExtSampleView view;
+    if (instrumentView(inst, &view) && view.length > 1 && view.oneshot) {
+      int midi = synthToMidiNote(note, oct);
+      int root = view.rootMidi > 0 ? view.rootMidi : 60;
+      int semis = midi - root;
+      if (semis > 36) {
+        semis = 36;
+      } else if (semis < -36) {
+        semis = -36;
+      }
+      float ratio = powf(2.0f, (float)semis / 12.0f);
+      int rate = view.rate > 0 ? view.rate : kSampleRate;
+      int step = (int)(1000.0f * ((float)rate / (float)kSampleRate) * ratio + 0.5f);
+      if (step < 1) {
+        step = 1;
+      }
+      extBaseStep = step;
+    }
+  }
+  ArmPcm(inst);
+  note = savedNote;
+  recOctave = savedRec;
+  extBaseStep = savedExt;
+}
+
+int Voice::BaseFreq(int val, int oct) {
+  return GetBaseFreq(val, oct);
+}
+
+int Voice::SideEnv(int *index, int instId) const {
+  if (!index) {
+    return 0;
+  }
+  int envCap = 50000;
+  int envDiv = 500;
+  if (instId == 11) {
+    envCap = 220000;
+    envDiv = 2200;
+  } else if (instId == 6 || instId == 9 || instId == 10) {
+    envCap = 140000;
+    envDiv = 1400;
+  }
+  int step = envelopeLength > 0 ? envelopeLength : 1;
+  *index += step;
+  if (*index > envCap) {
+    *index = (envelopeNum == 3) ? 1 : envCap;
+  }
+  int eidx = *index / envDiv;
+  if (eidx > 100) {
+    eidx = 100;
+  } else if (eidx < 0) {
+    eidx = 0;
+  }
+  int env = envelopeNum;
+  if (env < 0 || env > 3) {
+    env = 0;
+  }
+  return kEnvelopes[env][eidx];
+}
+#endif

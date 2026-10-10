@@ -55,6 +55,19 @@ echo "Per-track FX and mixer volume"
   -o /tmp/mothdeck_test_fx
 /tmp/mothdeck_test_fx
 
+echo "TTGO chords"
+"$CXX" "${FLAGS[@]}" -DMOTHDECK_CHORDS=1 \
+  "$ROOT/test/test_chords.cpp" \
+  "$ROOT/src/Tracker.cpp" \
+  "$ROOT/src/Voice.cpp" \
+  "$ROOT/src/ToneSynth.cpp" \
+  "$ROOT/src/PatchBlocks.cpp" \
+  "$ROOT/src/SongFile.cpp" \
+  "$ROOT/src/default_samples.cpp" \
+  "$ROOT/test/pcm_hold_stub.cpp" \
+  -o /tmp/mothdeck_test_chords
+/tmp/mothdeck_test_chords
+
 echo "Per-track instruments"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_tracks.cpp" \

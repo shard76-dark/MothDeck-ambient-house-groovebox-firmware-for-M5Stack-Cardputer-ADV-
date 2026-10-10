@@ -12,6 +12,10 @@
 #include <esp_heap_caps.h>
 static uint16_t stepsFallback[4][Tracker::kMaxSteps];
 static uint16_t copyFallback[4][Tracker::kMaxPatternSteps];
+#if MOTHDECK_CHORDS
+static uint16_t chordFallback[4][Tracker::kMaxSteps][3];
+static uint16_t chordCopyFallback[4][Tracker::kMaxPatternSteps][3];
+#endif
 #endif
 
 static PatchAssign stagedPatch;
@@ -43,6 +47,21 @@ Tracker::Tracker() {
   if (!patternCopy) {
     patternCopy = copyFallback;
   }
+#if MOTHDECK_CHORDS
+  chord = (uint16_t (*)[kMaxSteps][3])heap_caps_malloc(
+      sizeof(uint16_t) * 4 * kMaxSteps * 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  chordCopy = (uint16_t (*)[kMaxPatternSteps][3])heap_caps_malloc(
+      sizeof(uint16_t) * 4 * kMaxPatternSteps * 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!chord) {
+    chord = chordFallback;
+  }
+  if (!chordCopy) {
+    chordCopy = chordCopyFallback;
+  }
+#endif
+#endif
+#if MOTHDECK_CHORDS
+  memset(chordTone, 0, sizeof(chordTone));
 #endif
   memset(ccMsb, 0, sizeof(ccMsb));
   memset(ccLsb, 0, sizeof(ccLsb));
@@ -113,7 +132,253 @@ void Tracker::SetCell(int track, int step, uint8_t note, int8_t oct, uint8_t ins
 void Tracker::ClearNote(int track, int step) {
   uint16_t cell = CellAt(track, step);
   SetCell(track, step, 0, (int8_t)(((cell >> 4) & 0x0F) - 8), (uint8_t)((cell >> 8) & 0x3F));
+#if MOTHDECK_CHORDS
+  ChordClearStep(track, step);
+#endif
 }
+
+#if MOTHDECK_CHORDS
+static uint16_t packChord(uint8_t note, int8_t oct, uint8_t lenCode) {
+  if (note == 0 || note > 12) {
+    return 0;
+  }
+  int biased = (int)oct + 8;
+  if (biased < 0) {
+    biased = 0;
+  } else if (biased > 15) {
+    biased = 15;
+  }
+  if (lenCode > 3) {
+    lenCode = 3;
+  }
+  return (uint16_t)((note & 0x0F) | ((biased & 0x0F) << 4) | ((lenCode & 3) << 8));
+}
+
+uint16_t Tracker::ChordAt(int track, int step, int slot) const {
+  if (track < 0 || track > 3 || step < 0 || step >= kMaxSteps || slot < 0 || slot > 2) {
+    return 0;
+  }
+  return chord[track][step][slot];
+}
+
+void Tracker::ChordPut(int track, int step, int slot, uint8_t note, int8_t oct, uint8_t lenCode) {
+  if (track < 0 || track > 3 || step < 0 || step >= kMaxSteps || slot < 0 || slot > 2) {
+    return;
+  }
+  chord[track][step][slot] = packChord(note, oct, lenCode);
+}
+
+void Tracker::ChordClearStep(int track, int step) {
+  for (int slot = 0; slot < 3; slot++) {
+    ChordPut(track, step, slot, 0, 0, 0);
+  }
+}
+
+void Tracker::ChordWipe() {
+  for (int t = 0; t < 4; t++) {
+    for (int s = 0; s < kMaxSteps; s++) {
+      ChordClearStep(t, s);
+    }
+    for (int s = 0; s < kMaxPatternSteps; s++) {
+      for (int slot = 0; slot < 3; slot++) {
+        chordCopy[t][s][slot] = 0;
+      }
+    }
+    SilenceChord(t);
+  }
+}
+
+int Tracker::ChordFind(int track, int step, uint8_t note, int8_t oct) const {
+  for (int slot = 0; slot < 3; slot++) {
+    uint16_t cell = ChordAt(track, step, slot);
+    if ((cell & 0x0F) != note) {
+      continue;
+    }
+    int8_t stored = (int8_t)(((cell >> 4) & 0x0F) - 8);
+    if (stored == oct) {
+      return slot;
+    }
+  }
+  return -1;
+}
+
+bool Tracker::ChordStack(int track, int step, uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode) {
+  if (note == 0 || note > 12) {
+    return true;
+  }
+  if (NoteAt(track, step) == 0) {
+    SetCell(track, step, note, oct, inst, lenCode);
+    return true;
+  }
+  if (NoteAt(track, step) == note && OctaveAt(track, step) == oct) {
+    return true;
+  }
+  if (ChordFind(track, step, note, oct) >= 0) {
+    return true;
+  }
+  for (int slot = 0; slot < 3; slot++) {
+    if ((ChordAt(track, step, slot) & 0x0F) == 0) {
+      ChordPut(track, step, slot, note, oct, lenCode);
+      return true;
+    }
+  }
+  return false;
+}
+
+void Tracker::ChordRemove(int track, int step, int pitch, int oct) {
+  if (track < 0 || track > 3 || step < 0 || step >= kMaxSteps) {
+    return;
+  }
+  if (pitch < 0) {
+    pitch = 0;
+  } else if (pitch > 11) {
+    pitch = 11;
+  }
+  uint8_t want = (uint8_t)(pitch + 1);
+  int8_t o = (int8_t)oct;
+  if (NoteAt(track, step) == want && OctaveAt(track, step) == o) {
+    int promote = -1;
+    for (int slot = 0; slot < 3; slot++) {
+      if ((ChordAt(track, step, slot) & 0x0F) > 0) {
+        promote = slot;
+        break;
+      }
+    }
+    if (promote < 0) {
+      ClearNote(track, step);
+      return;
+    }
+    uint16_t cell = ChordAt(track, step, promote);
+    uint8_t note = (uint8_t)(cell & 0x0F);
+    int8_t co = (int8_t)(((cell >> 4) & 0x0F) - 8);
+    uint8_t lenCode = (uint8_t)((cell >> 8) & 3);
+    SetCell(track, step, note, co, InstAt(track, step), lenCode);
+    for (int slot = promote; slot < 2; slot++) {
+      chord[track][step][slot] = chord[track][step][slot + 1];
+    }
+    chord[track][step][2] = 0;
+    return;
+  }
+  int slot = ChordFind(track, step, want, o);
+  if (slot < 0) {
+    return;
+  }
+  for (int s = slot; s < 2; s++) {
+    chord[track][step][s] = chord[track][step][s + 1];
+  }
+  chord[track][step][2] = 0;
+}
+
+void Tracker::ChordCycle(int track, int step, int pitch, int oct) {
+  if (track < 0 || track > 3 || step < 0 || step >= kMaxSteps) {
+    return;
+  }
+  uint8_t want = (uint8_t)(pitch + 1);
+  int8_t o = (int8_t)oct;
+  if (NoteAt(track, step) == want && OctaveAt(track, step) == o) {
+    uint8_t code = (uint8_t)(((CellAt(track, step) >> 14) & 3) + 1);
+    if (code > 3) {
+      code = 0;
+    }
+    SetCell(track, step, want, o, InstAt(track, step), code);
+    SetHintF("Hold %d", code + 1);
+    return;
+  }
+  int slot = ChordFind(track, step, want, o);
+  if (slot < 0) {
+    return;
+  }
+  uint16_t cell = ChordAt(track, step, slot);
+  uint8_t code = (uint8_t)(((cell >> 8) & 3) + 1);
+  if (code > 3) {
+    code = 0;
+  }
+  ChordPut(track, step, slot, want, o, code);
+  SetHintF("Hold %d", code + 1);
+}
+
+static void lockPlayed(Voice &voice, int &pitch, int &oct) {
+  if (voice.block.scaleMode > 0 && pitch >= 0 && pitch <= 11) {
+    int midi = synthToMidiNote(pitch, oct);
+    midi = scaleLock(midi, voice.block.scaleRoot, voice.block.scaleMode);
+    midiNoteToSynth(midi, pitch, oct);
+  }
+}
+
+void Tracker::SilenceChord(int track) {
+  if (track < 0 || track > 3) {
+    return;
+  }
+  for (int slot = 0; slot < 3; slot++) {
+    chordTone[track][slot].on = 0;
+  }
+}
+
+void Tracker::StartChordTone(int track, int slot, int pitch, int oct, int id) {
+  if (track < 0 || track > 3 || slot < 0 || slot > 2) {
+    return;
+  }
+  ChordTone &tone = chordTone[track][slot];
+  tone.freq = voices[track].BaseFreq(pitch, oct);
+  tone.env = 0;
+  tone.id = (int8_t)id;
+  tone.on = 1;
+  toneNoteOn(&tone.tone, id);
+}
+
+void Tracker::TriggerChord(int track, int step, int inst) {
+  if (track < 0 || track > 3 || inst == kLoopsVoice) {
+    return;
+  }
+  SilenceChord(track);
+  bool tonal = voices[track].samplerMode || (inst >= 2 && inst <= 11);
+  int out = 0;
+  for (int slot = 0; slot < 3; slot++) {
+    uint16_t cell = ChordAt(track, step, slot);
+    uint8_t note = (uint8_t)(cell & 0x0F);
+    if (note == 0 || note > 12) {
+      continue;
+    }
+    int oct = ((cell >> 4) & 0x0F) - 8;
+    int pitch = note - 1;
+    lockPlayed(voices[track], pitch, oct);
+    if (tonal) {
+      int id = inst;
+      if (voices[track].samplerMode && pitch >= 2 && pitch <= 11) {
+        id = pitch;
+      }
+      if (id >= 2 && id <= 11) {
+        StartChordTone(track, out, pitch, oct, id);
+        out++;
+      }
+    } else {
+      voices[track].LayerHit(pitch, oct, inst);
+    }
+  }
+}
+
+int Tracker::MixChordTones(int track) {
+  if (track < 0 || track > 3) {
+    return 0;
+  }
+  Voice &voice = voices[track];
+  int acc = 0;
+  for (int slot = 0; slot < 3; slot++) {
+    ChordTone &tone = chordTone[track][slot];
+    if (!tone.on) {
+      continue;
+    }
+    int freq = tone.freq;
+    if (voice.bend14 != 8192) {
+      freq = scaleByBend(freq, voice.bend14);
+    }
+    int sample = toneSample(&tone.tone, tone.id, freq);
+    int gain = voice.SideEnv(&tone.env, tone.id);
+    acc += (sample * voice.volume * gain) / 300;
+  }
+  return acc;
+}
+#endif
 
 uint8_t Tracker::NoteAt(int track, int step) const {
   return (uint8_t)(CellAt(track, step) & 0x0F);
@@ -301,6 +566,9 @@ void Tracker::AdvanceStep() {
         TriggerLoopVoice(i, note - 1);
       }
       voices[i].SetNote(note - 1, false, OctaveAt(i, trackIndex), inst);
+#if MOTHDECK_CHORDS
+      TriggerChord(i, trackIndex, inst);
+#endif
     }
   }
 
@@ -449,6 +717,9 @@ int Tracker::UpdateTracker() {
     if (loopPlay[i].enabled && loopPlay[i].frames > 1 && (loopPlay[i].pcm || loopPlay[i].hold > 0)) {
       extra = ReadLoop(&loopPlay[i]);
     }
+#if MOTHDECK_CHORDS
+    extra += MixChordTones(i);
+#endif
     // The loop used to replace the voice, so a sample cut the drums (and
     // the insert never saw the loop). Both go through the track FX.
     int samp = voices[i].OutputWith(extra) / div;
@@ -621,6 +892,21 @@ void Tracker::SetCommand(char command, int val) {
     case 'e':
       // Local step inside the current pattern. 0 is a real step, so this
       // is not the playhead clear ('_'), which ignores its value.
+#if MOTHDECK_CHORDS
+      // Bit 24 marks a piano-roll pitch: remove that note and keep the rest
+      // of the column. A bare step index still clears the whole step.
+      if (val & (1 << 24)) {
+        int local = val & 0xFF;
+        int pitch = (val >> 8) & 0x0F;
+        int oct = (val >> 12) & 0x0F;
+        if (local >= 0 && local < patternLength) {
+          int abs = patternLength * currentPattern + local;
+          ChordRemove(selectedTrack, abs, pitch, oct);
+          SetHint("Note clr");
+        }
+        break;
+      }
+#endif
       if (val >= 0 && val < patternLength) {
         int abs = patternLength * currentPattern + val;
         if (abs >= 0 && abs < kMaxSteps) {
@@ -630,6 +916,18 @@ void Tracker::SetCommand(char command, int val) {
       }
       break;
     case 'g':
+#if MOTHDECK_CHORDS
+      if (val & (1 << 24)) {
+        int local = val & 0xFF;
+        int pitch = (val >> 8) & 0x0F;
+        int oct = (val >> 12) & 0x0F;
+        if (local >= 0 && local < patternLength) {
+          int abs = patternLength * currentPattern + local;
+          ChordCycle(selectedTrack, abs, pitch, oct);
+        }
+        break;
+      }
+#endif
       if (val >= 0 && val < patternLength) {
         int abs = patternLength * currentPattern + val;
         uint8_t note = NoteAt(selectedTrack, abs);
@@ -674,7 +972,34 @@ void Tracker::SetCommand(char command, int val) {
         QueueMidi(MIDI_MSG_NOTE_ON, (uint8_t)selectedTrack, (uint8_t)synthToMidiNote(pitch, oct), 100);
         break;
       }
+#if MOTHDECK_CHORDS
+      {
+        uint8_t want = (uint8_t)(pitch + 1);
+        int8_t o = (int8_t)oct;
+        bool full = false;
+        if (NoteAt(selectedTrack, abs) == 0) {
+          SetCell(selectedTrack, abs, want, o, (uint8_t)inst, (uint8_t)lenCode);
+        } else if (NoteAt(selectedTrack, abs) == want && OctaveAt(selectedTrack, abs) == o) {
+          SetCell(selectedTrack, abs, want, o, InstAt(selectedTrack, abs), (uint8_t)lenCode);
+        } else if (ChordFind(selectedTrack, abs, want, o) < 0) {
+          if (!ChordStack(selectedTrack, abs, want, o, (uint8_t)inst, 0)) {
+            full = true;
+            SetHint("Chord 4");
+          } else {
+            lenCode = 0;
+          }
+        } else {
+          int slot = ChordFind(selectedTrack, abs, want, o);
+          lenCode = (ChordAt(selectedTrack, abs, slot) >> 8) & 3;
+        }
+        if (!full) {
+          SetHintF("Hold %d", lenCode + 1);
+        }
+      }
+#else
       SetCell(selectedTrack, abs, (uint8_t)(pitch + 1), (int8_t)oct, (uint8_t)inst, (uint8_t)lenCode);
+      SetHintF("Hold %d", lenCode + 1);
+#endif
       if (!(recOn && isPlaying && pressedOnce)) {
         voices[selectedTrack].SetNote(pitch, false, oct, inst);
         if (inst == kLoopsVoice) {
@@ -682,7 +1007,6 @@ void Tracker::SetCommand(char command, int val) {
         }
       }
       QueueMidi(MIDI_MSG_NOTE_ON, (uint8_t)selectedTrack, (uint8_t)synthToMidiNote(pitch, oct), 100);
-      SetHintF("Hold %d", lenCode + 1);
       break;
     }
     case 'b':
@@ -926,7 +1250,19 @@ void Tracker::SetNote(int val, int track) {
     if (val >= 0) {
       note = (uint8_t)(val + 1);
     }
+#if MOTHDECK_CHORDS
+    // Notes that arrive before the clock leaves this step stack. The first
+    // one is the step word. The next three sit beside it. A fifth is dropped.
+    int8_t oct = voices[selectedTrack].octave;
+    if (note == 0) {
+      SetCell(track, trackIndex, 0, oct, (uint8_t)inst);
+      ChordClearStep(track, trackIndex);
+    } else if (!ChordStack(track, trackIndex, note, oct, (uint8_t)inst, 0)) {
+      SetHint("Chord 4");
+    }
+#else
     SetCell(track, trackIndex, note, voices[selectedTrack].octave, (uint8_t)inst);
+#endif
     int span = patternLength > 0 ? patternLength : 1;
     lastNoteTrackIndex = trackIndex % span;
   } else {
@@ -1027,8 +1363,18 @@ void Tracker::CopyPattern() {
     for (int i = 0; i < kMaxPatternSteps; i++) {
       if (i < n && start + i < kMaxSteps) {
         patternCopy[j][i] = steps[j][start + i];
+#if MOTHDECK_CHORDS
+        for (int slot = 0; slot < 3; slot++) {
+          chordCopy[j][i][slot] = chord[j][start + i][slot];
+        }
+#endif
       } else {
         patternCopy[j][i] = empty;
+#if MOTHDECK_CHORDS
+        for (int slot = 0; slot < 3; slot++) {
+          chordCopy[j][i][slot] = 0;
+        }
+#endif
       }
     }
   }
@@ -1052,6 +1398,11 @@ void Tracker::PastePattern() {
         break;
       }
       steps[j][idx] = patternCopyLen > 0 ? patternCopy[j][i] : empty;
+#if MOTHDECK_CHORDS
+      for (int slot = 0; slot < 3; slot++) {
+        chord[j][idx][slot] = patternCopyLen > 0 ? chordCopy[j][i][slot] : 0;
+      }
+#endif
     }
   }
   SyncTrackVoicesFromSteps();
@@ -1074,6 +1425,11 @@ void Tracker::PastePatternAll() {
           break;
         }
         steps[j][idx] = patternCopyLen > 0 ? patternCopy[j][i] : empty;
+#if MOTHDECK_CHORDS
+        for (int slot = 0; slot < 3; slot++) {
+          chord[j][idx][slot] = patternCopyLen > 0 ? chordCopy[j][i][slot] : 0;
+        }
+#endif
       }
     }
   }
@@ -1125,6 +1481,9 @@ void Tracker::ClearAll(int val) {
       patternCopy[t][s] = empty;
     }
   }
+#if MOTHDECK_CHORDS
+  ChordWipe();
+#endif
   memset(loopPlay, 0, sizeof(loopPlay));
   memset(&audition, 0, sizeof(audition));
 }
@@ -1497,6 +1856,13 @@ void Tracker::ApplySong(const SongData &song) {
       }
       SetCell(t, s, note, song.octaves[t][s], song.instruments[t][s], lenCode);
     }
+#if MOTHDECK_CHORDS
+    // A song stores the first note of each step. Older files have no extras.
+    for (int s = 0; s < kMaxSteps; s++) {
+      ChordClearStep(t, s);
+    }
+    SilenceChord(t);
+#endif
     Voice &voice = voices[t];
     const SongVoice &in = song.voices[t];
     voice.volume = in.volume;
@@ -1773,6 +2139,9 @@ void Tracker::WritePattern(int track, const uint8_t *steps, int count) {
       break;
     }
     SetCell(track, start + i, note, voices[track].octave, trackVoice[track]);
+#if MOTHDECK_CHORDS
+    ChordClearStep(track, start + i);
+#endif
   }
   SetHint("Pattern put");
 }
@@ -1872,6 +2241,9 @@ void Tracker::FillSnap(Snap *snap) const {
   }
   snap->rollCount = (uint8_t)rollLen;
   memset(snap->roll, 0, sizeof(snap->roll));
+#if MOTHDECK_CHORDS
+  memset(snap->rollChord, 0, sizeof(snap->rollChord));
+#endif
   for (int s = 0; s < rollLen; s++) {
     int idx = patStart + s;
     if (idx < 0 || idx >= kMaxSteps) {
@@ -1889,5 +2261,22 @@ void Tracker::FillSnap(Snap *snap) const {
     }
     uint8_t lenCode = (uint8_t)((CellAt(selectedTrack, idx) >> 14) & 3);
     snap->roll[s] = (uint8_t)((note & 0x0F) | (lenCode << 4) | ((oct & 3) << 6));
+#if MOTHDECK_CHORDS
+    for (int slot = 0; slot < 3; slot++) {
+      uint16_t extra = ChordAt(selectedTrack, idx, slot);
+      uint8_t enote = (uint8_t)(extra & 0x0F);
+      if (enote == 0 || enote > 12) {
+        continue;
+      }
+      int eoct = ((extra >> 4) & 0x0F) - 8;
+      if (eoct < 0) {
+        eoct = 0;
+      } else if (eoct > 3) {
+        eoct = 3;
+      }
+      uint8_t elen = (uint8_t)((extra >> 8) & 3);
+      snap->rollChord[s][slot] = (uint8_t)((enote & 0x0F) | (elen << 4) | ((eoct & 3) << 6));
+    }
+#endif
   }
 }

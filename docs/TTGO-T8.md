@@ -2,7 +2,17 @@
 
 MothDeck on a LilyGO TTGO T8 V1.8. This is a classic ESP32-WROVER: dual core, 4MB flash, 4MB PSRAM, a microSD slot, and no keyboard. The board has no panel of its own. The display for this port is a confirmed ST7789 240×135, and the stock image drives it. The Cardputer ADV image is a different build, on `main`. Do not flash a TTGO binary onto a Cardputer, or the other way around.
 
-This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The pre-release tag is `ttgo-t8-v1.2.2`. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins are the same 1.2.2 features. On this board the loop windows, sample buffers, pattern grid, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record.
+This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The pre-release tag is `ttgo-t8-v1.2.2`. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins are the same 1.2.2 features, plus chords (below). On this board the loop windows, sample buffers, pattern grid, chord notes, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record.
+
+## Chords
+
+A step on a track holds up to four notes. The first note stays in the pattern word, the same place a single note has always lived. The other three are stored beside it in PSRAM.
+
+With Rec on, MIDI notes that land in the same step stack. The same pitch is not stored twice. A fifth note is left out. Rec off still only plays the note and does not write it. The piano roll draws each note as its own block in that column. A key on an empty column writes the first note. A key on another row adds a note. Backspace removes the note under the cursor and, if that was the first note, the next one takes its place. `;` changes the length of the note under the cursor. The 16-step strip still shows the first note.
+
+Playback sounds the notes together. Drums, sound effects, and one-shot samples add extra hits. The built-in synths add oscillators and run them through the same track effect. A loop track keeps a single loop.
+
+A song file still stores one note per step, the first of the chord. Songs from the Cardputer, and older TTGO songs, load as single notes. Extra chord notes stay in the pattern until a song is loaded. Saving a song writes that first note and leaves the others out of the file.
 
 BLE MIDI still plays, follows clock, and takes notes if the panel is unplugged. Rebuild with `-DMOTHDECK_HAS_TFT=0` for an image that does not drive the panel pins.
 

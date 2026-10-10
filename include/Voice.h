@@ -1,6 +1,7 @@
 #ifndef Voice_h
 #define Voice_h
 #include <stdint.h>
+#include "BoardConfig.h"
 #include "ToneSynth.h"
 #include "SongFile.h"
 #include "PatchBlocks.h"
@@ -54,6 +55,14 @@ public:
     envelopeNum = num;
     envelopeLength = length;
   }
+#if MOTHDECK_CHORDS
+  // A drum, effect, or one-shot on top of the note already playing.
+  // The primary oscillator is left as it was.
+  void LayerHit(int val, int oct, int inst);
+  int BaseFreq(int val, int oct);
+  // Same fade the primary tone uses. index is advanced. Gain is 0..100.
+  int SideEnv(int *index, int instId) const;
+#endif
 
 private:
   // Full-rate delay line. 8192 samples is about 186 ms at 44100 Hz.

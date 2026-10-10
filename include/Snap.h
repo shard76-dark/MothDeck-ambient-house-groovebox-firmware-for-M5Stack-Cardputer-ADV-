@@ -1,6 +1,7 @@
 #ifndef Snap_h
 #define Snap_h
 #include <stdint.h>
+#include "BoardConfig.h"
 
 // Published by the audio task. The UI only reads a copy.
 struct Snap {
@@ -41,6 +42,11 @@ struct Snap {
   // (0 = one step), bits 6-7 the octave 0-3. The 16-step strip above is
   // the classic view. Two snap slots, so this is 256 bytes, not a buffer.
   uint8_t roll[128];
+#if MOTHDECK_CHORDS
+  // Up to three extra notes in the same step, packed the same way as roll[].
+  // Empty is 0. The Cardputer snap does not carry this.
+  uint8_t rollChord[128][3];
+#endif
   uint8_t rollCount;
   uint8_t loopOn[4];
   uint16_t barOrigin;

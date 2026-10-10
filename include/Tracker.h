@@ -127,6 +127,27 @@ private:
   uint16_t steps[4][kMaxSteps];
   uint16_t patternCopy[4][kMaxPatternSteps];
 #endif
+#if MOTHDECK_CHORDS
+  // Extra notes beside the step word. Bits 0-3 are the note (0 empty),
+  // bits 4-7 the octave+8, bits 8-9 the hold code. The step word stays the
+  // first note, which is what a song file stores. On the TTGO this grid is
+  // PSRAM. A host build with the flag uses the static arrays.
+#if MOTHDECK_PSRAM_PATTERNS
+  uint16_t (*chord)[kMaxSteps][3];
+  uint16_t (*chordCopy)[kMaxPatternSteps][3];
+#else
+  uint16_t chord[4][kMaxSteps][3];
+  uint16_t chordCopy[4][kMaxPatternSteps][3];
+#endif
+  struct ChordTone {
+    ToneVoice tone;
+    int freq;
+    int env;
+    int8_t id;
+    uint8_t on;
+  };
+  ChordTone chordTone[4][3];
+#endif
   int patternCopyLen;
 
   void SoloTrack(bool repeat);
@@ -151,6 +172,20 @@ private:
   uint16_t CellAt(int track, int step) const;
   void SetCell(int track, int step, uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode = 0);
   void ClearNote(int track, int step);
+#if MOTHDECK_CHORDS
+  uint16_t ChordAt(int track, int step, int slot) const;
+  void ChordPut(int track, int step, int slot, uint8_t note, int8_t oct, uint8_t lenCode);
+  void ChordClearStep(int track, int step);
+  void ChordWipe();
+  int ChordFind(int track, int step, uint8_t note, int8_t oct) const;
+  bool ChordStack(int track, int step, uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode);
+  void ChordRemove(int track, int step, int pitch, int oct);
+  void ChordCycle(int track, int step, int pitch, int oct);
+  void SilenceChord(int track);
+  void StartChordTone(int track, int slot, int pitch, int oct, int id);
+  void TriggerChord(int track, int step, int inst);
+  int MixChordTones(int track);
+#endif
   static uint16_t PackStep(uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode = 0);
   static uint16_t EmptyStep();
   void QueueBankMidi();

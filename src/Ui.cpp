@@ -450,9 +450,24 @@ static void followRollHead() {
   rollStep = clampi(head, 0, patLen - 1);
 }
 
+static uint8_t rollPacked(int step, int which) {
+  if (step < 0 || step >= 128) {
+    return 0;
+  }
+#if MOTHDECK_CHORDS
+  if (which > 0 && which <= 3) {
+    return snap.rollChord[step][which - 1];
+  }
+#else
+  (void)which;
+#endif
+  return snap.roll[step];
+}
+
 // Step where the note under the cursor starts, or -1. A hold of 2–4
 // covers the steps after it, and edits land on that start cell.
-static int rollCoverStart() {
+// cellOut receives the packed note that matched, primary or extra.
+static int rollCoverStartAt(uint8_t *cellOut) {
   int from = rollStep - 3;
   if (from < 0) {
     from = 0;
@@ -461,22 +476,73 @@ static int rollCoverStart() {
   if (limit > 128) {
     limit = 128;
   }
+  int slots = 1;
+#if MOTHDECK_CHORDS
+  slots = 4;
+#endif
   for (int s = from; s <= rollStep && s < limit; s++) {
-    uint8_t cell = snap.roll[s];
-    int note = cell & 0x0F;
-    if (note < 1 || note > 12) {
-      continue;
-    }
-    int len = ((cell >> 4) & 3) + 1;
-    if (s + len <= rollStep) {
-      continue;
-    }
-    int oct = (cell >> 6) & 3;
-    if ((note - 1) + oct * 12 == rollPitch) {
-      return s;
+    for (int which = 0; which < slots; which++) {
+      uint8_t cell = rollPacked(s, which);
+      int note = cell & 0x0F;
+      if (note < 1 || note > 12) {
+        continue;
+      }
+      int len = ((cell >> 4) & 3) + 1;
+      if (s + len <= rollStep) {
+        continue;
+      }
+      int oct = (cell >> 6) & 3;
+      if ((note - 1) + oct * 12 == rollPitch) {
+        if (cellOut) {
+          *cellOut = cell;
+        }
+        return s;
+      }
     }
   }
   return -1;
+}
+
+static int rollCoverStart() {
+  return rollCoverStartAt(nullptr);
+}
+
+#if MOTHDECK_CHORDS
+static int rollPitchPack(int step) {
+  int pitch = rollPitch % 12;
+  int oct = rollPitch / 12;
+  return (step & 0xFF) | ((pitch & 0x0F) << 8) | ((oct & 0x0F) << 12) | (1 << 24);
+}
+#endif
+
+static void drawRollBlock(int s, uint8_t cell, int origin, int stepW, uint16_t noteColor) {
+  int note = cell & 0x0F;
+  if (note < 1 || note > 12) {
+    return;
+  }
+  int len = ((cell >> 4) & 3) + 1;
+  int oct = (cell >> 6) & 3;
+  int pitch = (note - 1) + oct * 12;
+  if (pitch < 0 || pitch >= kRollRows) {
+    return;
+  }
+  int x0 = kGridX + (s - origin) * stepW;
+  int x1 = x0 + len * stepW - 1;
+  if (x1 < kGridX || x0 >= kSpriteW) {
+    return;
+  }
+  if (x0 < kGridX) {
+    x0 = kGridX;
+  }
+  if (x1 >= kSpriteW) {
+    x1 = kSpriteW - 1;
+  }
+  int w = x1 - x0 + 1;
+  if (w < 1) {
+    return;
+  }
+  int y = kRollY + (kRollRows - 1 - pitch) * kRowH;
+  canvas->fillRect(x0, y, w, kRowH, noteColor);
 }
 
 static void drawRollDigit(int x, int y, int digit) {
@@ -518,11 +584,11 @@ static void drawRoll() {
   if (bars < 1) {
     bars = 1;
   }
-  int cover = rollCoverStart();
+  uint8_t coverCell = 0;
+  int cover = rollCoverStartAt(&coverCell);
   canvas->setTextColor(COL_DIM);
   if (cover >= 0) {
-    uint8_t cell = snap.roll[cover];
-    int len = ((cell >> 4) & 3) + 1;
+    int len = ((coverCell >> 4) & 3) + 1;
     canvas->printf(" x%d  B%d/%d", len, bar, bars);
   } else {
     canvas->printf("  rest  B%d/%d", bar, bars);
@@ -579,34 +645,12 @@ static void drawRoll() {
   }
   uint16_t noteColor = COL_TRACK[snap.track & 3];
   for (int s = from; s < to && s < count; s++) {
-    uint8_t cell = snap.roll[s];
-    int note = cell & 0x0F;
-    if (note < 1 || note > 12) {
-      continue;
+    drawRollBlock(s, snap.roll[s], origin, stepW, noteColor);
+#if MOTHDECK_CHORDS
+    for (int slot = 0; slot < 3; slot++) {
+      drawRollBlock(s, snap.rollChord[s][slot], origin, stepW, noteColor);
     }
-    int len = ((cell >> 4) & 3) + 1;
-    int oct = (cell >> 6) & 3;
-    int pitch = (note - 1) + oct * 12;
-    if (pitch < 0 || pitch >= kRollRows) {
-      continue;
-    }
-    int x0 = kGridX + (s - origin) * stepW;
-    int x1 = x0 + len * stepW - 1;
-    if (x1 < kGridX || x0 >= kSpriteW) {
-      continue;
-    }
-    if (x0 < kGridX) {
-      x0 = kGridX;
-    }
-    if (x1 >= kSpriteW) {
-      x1 = kSpriteW - 1;
-    }
-    int w = x1 - x0 + 1;
-    if (w < 1) {
-      continue;
-    }
-    int y = kRollY + (kRollRows - 1 - pitch) * kRowH;
-    canvas->fillRect(x0, y, w, kRowH, noteColor);
+#endif
   }
 
   int len = snap.patternLength ? (int)snap.patternLength : patLen;
@@ -1799,7 +1843,11 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     else if (c == ';') {
       int cover = rollView ? rollCoverStart() : -1;
       if (cover >= 0) {
+#if MOTHDECK_CHORDS
+        audioCommand('g', rollPitchPack(cover));
+#else
         audioCommand('g', cover);
+#endif
       } else {
         audioCommand('L', (snap.envLen) & 3);
       }
@@ -1978,7 +2026,15 @@ static void handleState(const DeckKeys &st, BleMidi &ble) {
     if (page == 0) {
       if (rollView) {
         int cover = rollCoverStart();
+#if MOTHDECK_CHORDS
+        if (cover >= 0) {
+          audioCommand('e', rollPitchPack(cover));
+        } else {
+          audioCommand('e', rollStep);
+        }
+#else
         audioCommand('e', cover >= 0 ? cover : rollStep);
+#endif
       } else {
         audioCommand('_', 0);
       }

@@ -172,6 +172,13 @@
 
 #endif
 
+// Recorded chords (up to four notes on one step) use PSRAM on the TTGO.
+// The Cardputer build leaves this at 0, so its step word, song file, and
+// piano-roll snap stay the same size.
+#ifndef MOTHDECK_CHORDS
+#define MOTHDECK_CHORDS MOTHDECK_BOARD_TTGO
+#endif
+
 // 1 compiles serial-monitor logs for the SD card and the speaker.
 // 0 omits those Serial statements. Override with -DMOTHOS_DEV_LOG=1.
 #ifndef MOTHOS_DEV_LOG
