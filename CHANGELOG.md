@@ -6,7 +6,7 @@ Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHAN
 
 NimBLE is initialised at boot, before the loop pool and before the card scan, whether or not it is advertising. On and off only start or stop advertising, so turning BLE on does not allocate and does not fail. Loop windows use whatever is left. Unload BLE still waits for the next boot, and the toast says `BLE unloads after restart`. Load BLE says `BLE loads after restart`. The download image in `releases/` stays 1.2.1 until this build is confirmed on a Cardputer.
 
-Test images, not published: `mothdeck-cardputer-adv-1.2.2-test.bin` (SIZEBYTES bytes, SHA-256 `HASH256`) and `mothdeck-cardputer-adv-1.2.2-test-dev.bin` (DEVSIZE bytes, SHA-256 `DEVHASH`).
+Test images, not published: `mothdeck-cardputer-adv-1.2.2-test.bin` (1,151,568 bytes, SHA-256 `368e5b2c68f6f5cc13f4d82f3ee2a9a878ef9c3342bcb5e0733fd41605fc6e1c`) and `mothdeck-cardputer-adv-1.2.2-test-dev.bin` (1,198,832 bytes, SHA-256 `3865deea43520c91b40fe22b6cc0e6800052122cbf6b8c1e484291920e1ae00d`). Host tests passed. Static RAM is 136004/327680 on the test image and 136260/327680 on the dev image. This environment has no Cardputer, so the heap log and pairing have not been run here. The dev image prints free and largest internal heap before NimBLE, after it, after the loop pool, and across the on/off switch (`BLE: switch on` with the before and after sizes).
 
 ## 1.2.1 (2026-10-09)
 
