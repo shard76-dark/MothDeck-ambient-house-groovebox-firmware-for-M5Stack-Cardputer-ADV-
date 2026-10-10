@@ -2,7 +2,7 @@
 
 MothDeck on a LilyGO TTGO T8 V1.8. This is a classic ESP32-WROVER: dual core, 4MB flash, 4MB PSRAM, a microSD slot, and no keyboard. The board has no panel of its own. The display for this port is a confirmed ST7789 240×135, and the stock image drives it. The Cardputer ADV image is a different build, on `main`. Do not flash a TTGO binary onto a Cardputer, or the other way around.
 
-This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`, and it is not a release. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins are the same 1.2.x features. On this board the loop windows, sample buffers, pattern grid, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops.
+This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The pre-release tag is `ttgo-t8-v1.2.2`. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins are the same 1.2.2 features. On this board the loop windows, sample buffers, pattern grid, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record.
 
 BLE MIDI still plays, follows clock, and takes notes if the panel is unplugged. Rebuild with `-DMOTHDECK_HAS_TFT=0` for an image that does not drive the panel pins.
 
