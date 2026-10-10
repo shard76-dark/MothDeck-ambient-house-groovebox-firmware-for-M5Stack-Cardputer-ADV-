@@ -2,6 +2,12 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.2.2 test (not released)
+
+NimBLE is initialised at boot, before the loop pool and before the card scan, whether or not it is advertising. On and off only start or stop advertising, so turning BLE on does not allocate and does not fail. Loop windows use whatever is left. Unload BLE still waits for the next boot, and the toast says `BLE unloads after restart`. Load BLE says `BLE loads after restart`. The download image in `releases/` stays 1.2.1 until this build is confirmed on a Cardputer.
+
+Test images, not published: `mothdeck-cardputer-adv-1.2.2-test.bin` (SIZEBYTES bytes, SHA-256 `HASH256`) and `mothdeck-cardputer-adv-1.2.2-test-dev.bin` (DEVSIZE bytes, SHA-256 `DEVHASH`).
+
 ## 1.2.1 (2026-10-09)
 
 Screen notices no longer mention memory or read as errors. MIDI mode asks `Save song? Y / N` before loops unload. A short library says `Loops: N of M ready`. BLE that cannot start says `restart`, and the toast says `BLE loads after restart`. Kits and plugins that do not fit say `Kit unchanged` or `Sound unchanged`.

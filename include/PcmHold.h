@@ -8,10 +8,9 @@
 
 static const int kPcmHolds = 5;
 
-// One block for every stream window. Prefer this before BLE, and only keep
-// it when the largest free block is still at least 36KB. Otherwise release
-// it, let BLE take its block, then pcmHoldReserveFit() sizes the windows
-// to whatever contiguous RAM is left.
+// One block for every stream window. Call this after NimBLE is resident.
+// The windows are whatever contiguous RAM is left beside the stack.
+// pcmHoldReserveFit() shrinks the windows when the preferred pool does not fit.
 bool pcmHoldReservePreferred();
 void pcmHoldReleaseReserve();
 // Close every stream and free the pool, including slots that are open.
