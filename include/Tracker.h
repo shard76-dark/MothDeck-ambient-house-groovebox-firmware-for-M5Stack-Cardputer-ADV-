@@ -20,6 +20,9 @@ public:
   uint8_t masterVolume;
   bool pressedOnce;
   bool isPlaying;
+  // Space arms this. MIDI Start runs the pattern and does not.
+  // Incoming notes write steps only while it is on.
+  bool recOn;
   int sample;
   uint8_t tempoBlink;
   int selectedTrack;

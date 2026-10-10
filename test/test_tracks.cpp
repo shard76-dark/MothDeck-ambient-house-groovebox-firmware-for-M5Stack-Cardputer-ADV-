@@ -295,12 +295,122 @@ static void testNoteHold() {
   expect(snap.roll[0] == 0 && snap.roll[3] == (uint8_t)(5 | (0 << 6)), "empty steps stay empty and the one-step note is packed");
 }
 
+static bool gridEmpty(const Tracker &tracker) {
+  for (int t = 0; t < 4; t++) {
+    for (int s = 0; s < Tracker::kMaxSteps; s++) {
+      if (tracker.NoteAt(t, s) != 0) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static void noteOn(Tracker &tracker, int channel, int note) {
+  MidiEvent ev = {};
+  ev.type = MIDI_MSG_NOTE_ON;
+  ev.channel = (uint8_t)channel;
+  ev.number = (uint8_t)note;
+  ev.value = 100;
+  tracker.HandleMidi(ev);
+}
+
+static void testMidiNotesRespectRec() {
+  Tracker live;
+  expect(!live.isPlaying && !live.recOn, "rec is off at boot");
+  int head = live.trackIndex;
+  noteOn(live, 0, 60);
+  noteOn(live, 2, 64);
+  expect(gridEmpty(live), "midi notes with rec off do not write the pattern");
+  expect(live.trackIndex == head && !live.pressedOnce && !live.recOn, "play-through does not arm rec or rewind");
+
+  transport(live, MIDI_MSG_START, 0);
+  expect(live.isPlaying && !live.recOn, "midi start plays and leaves rec off");
+  head = live.trackIndex;
+  noteOn(live, 0, 60);
+  clocks(live, 6);
+  noteOn(live, 1, 67);
+  expect(gridEmpty(live), "notes during midi play stay out of the pattern");
+  expect(!live.recOn, "those notes still do not arm rec");
+
+  live.SetCommand('P', 0);
+  expect(!live.recOn && !live.isPlaying, "space stops the midi transport and leaves rec off");
+  live.SetCommand('P', 0);
+  expect(live.recOn && live.isPlaying, "space turns rec on");
+  head = live.trackIndex;
+  noteOn(live, 0, 60);
+  expect(live.NoteAt(0, head) == 1 && live.OctaveAt(0, head) == 2, "rec on writes the midi note at the playhead");
+  noteOn(live, 3, 62);
+  expect(live.NoteAt(3, head) == 3, "rec on writes the channel's track");
+
+  transport(live, MIDI_MSG_STOP, 0);
+  expect(!live.isPlaying && live.recOn, "midi stop pauses transport and keeps rec");
+  int kept = 0;
+  for (int s = 0; s < Tracker::kMaxSteps; s++) {
+    kept += live.NoteAt(0, s) != 0;
+  }
+  noteOn(live, 0, 72);
+  int after = 0;
+  for (int s = 0; s < Tracker::kMaxSteps; s++) {
+    after += live.NoteAt(0, s) != 0;
+  }
+  expect(after == kept, "a note while stopped does not write, even if rec was on");
+
+  transport(live, MIDI_MSG_START, 0);
+  expect(live.recOn && live.isPlaying, "midi start keeps rec when it was already on");
+  head = live.trackIndex;
+  noteOn(live, 0, 60);
+  expect(live.NoteAt(0, head) == 1, "rec stays on across midi stop and start");
+
+  live.SetCommand('P', 0);
+  expect(!live.recOn && !live.isPlaying, "space turns rec off");
+  int notes = 0;
+  for (int t = 0; t < 4; t++) {
+    for (int s = 0; s < Tracker::kMaxSteps; s++) {
+      notes += live.NoteAt(t, s) != 0;
+    }
+  }
+  noteOn(live, 0, 65);
+  int notesAfter = 0;
+  for (int t = 0; t < 4; t++) {
+    for (int s = 0; s < Tracker::kMaxSteps; s++) {
+      notesAfter += live.NoteAt(t, s) != 0;
+    }
+  }
+  expect(notesAfter == notes, "rec off leaves the pattern unchanged");
+
+  Tracker keys;
+  keys.SetCommand('P', 0);
+  keys.SetCommand('N', 0);
+  expect(keys.NoteAt(0, 0) == 1, "the keyboard still records with rec on");
+  keys.SetCommand('p', 0);
+  expect(!keys.recOn && !keys.isPlaying, "stopping clears rec");
+  keys.SetCommand('N', 5);
+  expect(keys.NoteAt(0, 0) == 1, "a key with rec off does not write");
+
+  Tracker roll;
+  transport(roll, MIDI_MSG_START, 0);
+  roll.SetCommand('r', 3 | (4 << 8) | (1 << 12));
+  expect(roll.NoteAt(0, 3) == 0, "a roll key does not write while midi is playing and rec is off");
+  transport(roll, MIDI_MSG_STOP, 0);
+  roll.SetCommand('r', 3 | (4 << 8) | (1 << 12));
+  expect(roll.NoteAt(0, 3) == 5 && roll.OctaveAt(0, 3) == 1, "a stopped roll key still writes the cursor");
+
+  Tracker held;
+  held.voices[0].block.arpMode = 3;
+  held.SetCommand('P', 0);
+  noteOn(held, 0, 60);
+  noteOn(held, 0, 64);
+  expect(gridEmpty(held), "held arp does not stamp steps when rec is on");
+}
+
 int main() {
   testAssignStaysOnTrack();
   testMidiBankStaysOnChannel();
   testSongRecallDoesNotSmear();
   testBarsAndExternalLoop();
   testNoteHold();
+  testMidiNotesRespectRec();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

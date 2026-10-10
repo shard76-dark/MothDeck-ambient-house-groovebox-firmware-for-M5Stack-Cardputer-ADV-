@@ -337,6 +337,7 @@ void Tracker::MidiStart() {
   extSync = true;
   isPlaying = true;
   pressedOnce = true;
+  // Rec stays wherever Space left it. Start is transport, not record.
   clockCount = 0;
   stepSampleCount = 0;
   barCount = 0;
@@ -356,6 +357,7 @@ void Tracker::MidiContinue() {
   extSync = true;
   isPlaying = true;
   pressedOnce = true;
+  // Same as Start: transport only, Rec is unchanged.
   clockCount = 0;
   SetHint("MIDI Cont");
 }
@@ -562,12 +564,14 @@ void Tracker::SetCommand(char command, int val) {
       break;
     case 'P':
       TogglePlayStop();
-      SetHint(isPlaying ? "Rec On" : "Rec Off");
+      SetHint(recOn ? "Rec On" : "Rec Off");
       break;
     case 'p':
       if (isPlaying) {
         TogglePlayStop();
         SetHint("Rec Off");
+      } else {
+        recOn = false;
       }
       break;
     case 'J': {
@@ -660,8 +664,18 @@ void Tracker::SetCommand(char command, int val) {
         oct = 3;
       }
       int inst = trackVoice[selectedTrack];
+      // Playing with Rec off is live play-through, including a roll key.
+      // Stopped, this is the cursor edit and it does write the cell.
+      if (isPlaying && !recOn) {
+        voices[selectedTrack].SetNote(pitch, false, oct, inst);
+        if (inst == kLoopsVoice) {
+          TriggerLoopVoice(selectedTrack, pitch);
+        }
+        QueueMidi(MIDI_MSG_NOTE_ON, (uint8_t)selectedTrack, (uint8_t)synthToMidiNote(pitch, oct), 100);
+        break;
+      }
       SetCell(selectedTrack, abs, (uint8_t)(pitch + 1), (int8_t)oct, (uint8_t)inst, (uint8_t)lenCode);
-      if (!(isPlaying && pressedOnce)) {
+      if (!(recOn && isPlaying && pressedOnce)) {
         voices[selectedTrack].SetNote(pitch, false, oct, inst);
         if (inst == kLoopsVoice) {
           TriggerLoopVoice(selectedTrack, pitch);
@@ -906,7 +920,8 @@ void Tracker::SetNote(int val, int track) {
     return;
   }
   int inst = trackVoice[track];
-  if (isPlaying && pressedOnce) {
+  // Rec off always sounds and never stores, even if MIDI Start is playing.
+  if (recOn && isPlaying && pressedOnce) {
     uint8_t note = 0;
     if (val >= 0) {
       note = (uint8_t)(val + 1);
@@ -990,6 +1005,7 @@ void Tracker::TogglePlayStop() {
   clocksSinceZero = 0;
   blockLearn = true;
   isPlaying = !isPlaying;
+  recOn = isPlaying;
   if (isPlaying) {
     followView = true;
     SyncEditBar();
@@ -1071,6 +1087,7 @@ void Tracker::ClearAll(int val) {
   extSync = false;
   clockCount = 0;
   pressedOnce = false;
+  recOn = false;
   allPatternPlay = false;
   currentVoice = 0;
   trackIndex = 0;
@@ -1361,7 +1378,10 @@ void Tracker::HandleMidi(const MidiEvent &event) {
   }
   switch (event.type) {
     case MIDI_MSG_NOTE_ON: {
-      ArmTransport();
+      // Arming rewinds to step 0 the first time. Play-through must not.
+      if (recOn && isPlaying) {
+        ArmTransport();
+      }
       if (voices[selectedTrack].block.arpMode == 3) {
         int inst = trackVoice[selectedTrack];
         voices[selectedTrack].HeldNote(event.number, true, inst);

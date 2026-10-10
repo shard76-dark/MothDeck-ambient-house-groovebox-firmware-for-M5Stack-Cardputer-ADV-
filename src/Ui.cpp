@@ -1769,10 +1769,10 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       if (rollView) {
         rollPitch = clampi(pitch + oct * 12, 0, kRollRows - 1);
       }
-      // Live record still lands on the playhead. Stopped, the roll writes
-      // the cell under the cursor and auditions it.
-      bool record = snap.playing && snap.armed;
-      if (rollView && !record) {
+      // Stopped, the roll writes the cell under the cursor. While the
+      // transport is running, 'N' records at the playhead only if Rec is
+      // on. Rec off, including MIDI play-through, only sounds.
+      if (rollView && !snap.playing) {
         int lenCode = 0;
         if (rollStep >= 0 && rollStep < (int)snap.rollCount) {
           uint8_t cell = snap.roll[rollStep];
