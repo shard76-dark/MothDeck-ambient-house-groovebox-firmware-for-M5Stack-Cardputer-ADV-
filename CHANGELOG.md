@@ -2,13 +2,11 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
-## 1.2.2 test (not released)
+## 1.2.2 (2026-10-10)
 
-NimBLE is initialised at boot, before the loop pool and before the card scan, whether or not it is advertising. On and off only start or stop advertising, so turning BLE on does not allocate and does not fail. Loop windows use whatever is left. Unload BLE still waits for the next boot, and the toast says `BLE unloads after restart`. Load BLE says `BLE loads after restart`. The download image in `releases/` stays 1.2.1 until this build is confirmed on a Cardputer.
+BLE memory is reserved at boot, before the loop windows, so turning BLE on only starts advertising and does not fail for lack of a free block. Unload BLE skips the stack on the next boot and frees that block for a large loop library. The toast says `BLE unloads after restart`. Incoming MIDI notes play and are not written into the pattern while Rec is off. MIDI Start does not arm Rec. Space still arms it, and with Rec on those notes record on the playhead.
 
-Incoming MIDI notes sound and are not stored while Rec is off. MIDI Start and Continue play the pattern and do not arm Rec. Space still arms Rec, and with Rec on those notes record on the playhead as before. A piano-roll key while the transport is running follows that same rule. Stopped, the roll still writes the cell under the cursor.
-
-Test images, not published: `mothdeck-cardputer-adv-1.2.2-test.bin` (1,151,680 bytes, SHA-256 `db42620b1a79ca2c581ffc5df771400e3f5b2e7fb88eb7f2b3b9718e03121629`) and `mothdeck-cardputer-adv-1.2.2-test-dev.bin` (1,198,912 bytes, SHA-256 `3695b88977b5262df353a7a4477e8818c17bbdd0110e68218a009df81f53f3ae`). Host tests passed. Static RAM is 136004/327680 on the test image and 136260/327680 on the dev image. This environment has no Cardputer, so the heap log and pairing have not been run here. The dev image prints free and largest internal heap before NimBLE, after it, after the loop pool, and across the on/off switch (`BLE: switch on` with the before and after sizes).
+The image to flash is `releases/mothdeck-cardputer-adv.bin` (1,151,680 bytes, magic `E9`, SHA-256 `db42620b1a79ca2c581ffc5df771400e3f5b2e7fb88eb7f2b3b9718e03121629`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,217,216 bytes, SHA-256 `b492f920d0eb2202fa4397fa3bbe1f3758285474724f9a92251f56530e973762`). The SD pack is unchanged (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Notes are in [releases/CHANGELOG.md](releases/CHANGELOG.md). Chris approved this image. Static RAM is 136004/327680. Host tests passed.
 
 ## 1.2.1 (2026-10-09)
 

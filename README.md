@@ -8,10 +8,10 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.2.1
-- SHA-256: `d01b62bd90a58c1345aa8c451771770db7e4ff6504a4d3669b88363176e7bafe`
-- Size: 1,152,112 bytes (app image, magic `E9`)
-- Play opens on a piano roll. Patterns are 1–8 bars. BLE is off until Settings turns it on, the air name is `Mothdeck`, and instrument folders can be patches (scale, held arp, glide). Turning BLE on with loops in the song asks `MIDI mode: loops off. Save song? Y/N`. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md). Chris confirmed the piano roll on a Cardputer. BLE in this image has not been tried on hardware.
+- Version 1.2.2
+- SHA-256: `db42620b1a79ca2c581ffc5df771400e3f5b2e7fb88eb7f2b3b9718e03121629`
+- Size: 1,151,680 bytes (app image, magic `E9`)
+- BLE memory is reserved at boot, so turning it on always starts advertising. Unload BLE frees that memory for large loops on the next boot. Incoming MIDI notes only play while Rec is off; they record when Rec is on. The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md). Chris approved this image.
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
@@ -46,7 +46,7 @@ Unzip `releases/mothdeck-sd-pack.zip` onto the card root when you want the extra
 
 ## Boot
 
-Power-on turns the backlight on, draws an amber moth on a grey panel for about one second, then draws the Play page. The splash does not wait for a key. Audio starts before the screen sprite. BLE stays off: NimBLE is not started and the radio is not advertising. Rec is stopped. The card scan is last, and the loop windows are reserved then. Space starts Rec. Turning BLE on in Settings frees those windows and starts the stack. The codec is not started inside `M5.begin`, and GPIO42 is the codec data line, not an amplifier pin to drive high. Sound comes out of the 3.5 mm jack. The internal speaker stays quiet.
+Power-on turns the backlight on, draws an amber moth on a grey panel for about one second, then draws the Play page. The splash does not wait for a key. Audio starts before the screen sprite. NimBLE is reserved then, before the loop windows, and the radio is not advertising. Rec is stopped. The card scan is last, and the loop windows use whatever is left. Space starts Rec. Turning BLE on only starts advertising. The codec is not started inside `M5.begin`, and GPIO42 is the codec data line, not an amplifier pin to drive high. Sound comes out of the 3.5 mm jack. The internal speaker stays quiet.
 
 The moth is amber (`0xFD20`) on grey (`0x1082`). The splash marks that buffer as logical RGB565 before `pushImage`, so the moth stays amber instead of blue. The UI sprite is rgb332 (32,400 bytes) and is copied to the panel eight rows at a time. A full-frame 8-bit push grew a second DMA buffer and reset the ADV once the speaker was running. Loop windows are allocated only when a loop opens.
 
@@ -301,7 +301,7 @@ Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, radio, card, bars
 
 ![MIDI mode notice](docs/screenshots/screen-ble-loops-warning-2x.png)
 
-The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.1 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.1`.
+The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.2 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.2`.
 
 ![Settings, BLE row](docs/screenshots/screen-settings-ble-2x.png)
 
@@ -319,9 +319,9 @@ The Exit page is a confirm, and it is in the page list only when a Launcher imag
 
 On an MPC Live II, open Menu, then Preferences, then Bluetooth. Turn BLE on in Settings first. Pair Mothdeck, then Connect. Then open MIDI / Sync and enable Mothdeck on the MIDI input ports. Turn Sync receive on when the MPC should drive the pattern clock. If the MPC still has a bond for the old name `MothDeck`, forget that device and pair `Mothdeck`.
 
-Advertised as a BLE MIDI peripheral on legacy connectable advertising. The name `Mothdeck` and the MIDI service UUID are both in the primary advertising packet, which is what an MPC lists. A name longer than 8 characters is shortened there; the full name is in the scan response and on the MIDI page. The stack is NimBLE, and its controller memory is internal RAM. The Stamp-S3A has no PSRAM. Audio starts before the screen sprite. BLE stays off until Settings turns it on, and that turn-on frees the loop windows first so the controller and the host pools both fit. The sprite is rgb332 (32,400 bytes) and is expanded to the panel eight rows at a time, so the blit does not allocate a second full frame. Pairing is Just Works with bonding and no passkey, the same security 1.1.0 used. The host starts pairing. MIDI bytes are not gated on encryption, so a host that never finishes pairing can still connect.
+Advertised as a BLE MIDI peripheral on legacy connectable advertising. The name `Mothdeck` and the MIDI service UUID are both in the primary advertising packet, which is what an MPC lists. A name longer than 8 characters is shortened there; the full name is in the scan response and on the MIDI page. The stack is NimBLE, and its controller memory is internal RAM, reserved at boot before the loop windows. The Stamp-S3A has no PSRAM. Audio starts before the screen sprite. Advertising stays off until Settings turns it on, and that switch does not allocate. Unload BLE frees the stack's block on the next boot so a large loop library can use it. The sprite is rgb332 (32,400 bytes) and is expanded to the panel eight rows at a time, so the blit does not allocate a second full frame. Pairing is Just Works with bonding and no passkey, the same security 1.1.0 used. The host starts pairing. MIDI bytes are not gated on encryption, so a host that never finishes pairing can still connect.
 
-Incoming BLE MIDI is parsed a whole packet at a time. One packet may hold several notes and interleaved `0xF8` clocks; Note On with velocity 0 is Note Off. Channels 1–4 play the four tracks, and any other channel plays the track that is already selected. MIDI Start, Continue, Stop, and Song Position move the transport. Clock is 24 per quarter note, and a pattern step is a 16th, so six clocks advance one step. Start puts the current pattern on bar 1 step 1 and plays that step. Continue resumes without moving. Song Position is a sixteenth-note index taken modulo the pattern length, and it does not switch patterns. The tempo shown on screen is averaged over one beat of those clocks. Space still starts and stops the internal clock.
+Incoming BLE MIDI is parsed a whole packet at a time. One packet may hold several notes and interleaved `0xF8` clocks; Note On with velocity 0 is Note Off. Channels 1–4 play the four tracks, and any other channel plays the track that is already selected. While Rec is off those notes only play, and they are not written into the pattern. Space arms Rec, and then they record at the playhead. MIDI Start, Continue, Stop, and Song Position move the transport and do not arm Rec. Clock is 24 per quarter note, and a pattern step is a 16th, so six clocks advance one step. Start puts the current pattern on bar 1 step 1 and plays that step. Continue resumes without moving. Song Position is a sixteenth-note index taken modulo the pattern length, and it does not switch patterns. The tempo shown on screen is averaged over one beat of those clocks. Space still starts and stops the internal clock.
 
 MIDI has no message for the other machine's sequence length. Auto-length watches for Start, or a Song Position of 0, after a whole number of bars of clocks (one bar is 96 clocks, and the count has to land within half a beat of that). It rounds to 1–8 bars and adopts that length. The MPC Live II manual documents MIDI Clock, Start, Stop, and Continue. It does not document a message at the sequence loop point, and in practice the Live II keeps the clock running through the loop and does not send Start or Song Position there. When nothing comes back to zero, auto-length leaves the length set on the device. Phase still follows the clock from the last Start: a 1-bar pattern stays locked to a longer MPC sequence, and a length that does not divide the MPC sequence drifts until the next Start or Song Position. Stop, Space, and a Song Position that is not zero throw away the measurement so the next Start does not resize from a partial pass.
 
@@ -329,14 +329,14 @@ After a connection has been up for 250 ms the link asks for a 7.5–15 ms interv
 
 | Message | Map |
 | --- | --- |
-| Note on/off, channel 1–4 | Tracks 1–4. Notes 36–83 are C2–B5 |
+| Note on/off, channel 1–4 | Tracks 1–4. Notes 36–83 are C2–B5. Stored only while Rec is on |
 | CC 0 / CC 32 bank | Instrument. MSB 0–11 built-in, 12–62 plugin id, 63 Loops. A non-zero LSB still spreads the 14-bit value across the 12 built-ins, as MothOS does |
 | CC 1 mod | Low pass |
 | CC 7 / CC 39 volume | 14-bit, mapped to voice volume 0–8 |
 | Pitch bend | Per channel, ± the voice pitch ratio |
 | Clock `0xF8` | 24 per quarter. Six clocks advance one 16th. Tempo is one beat of clock spacing |
-| Start `0xFA` | External sync, current pattern, bar 1 step 1. Learns a loop length only after a full run of clocks |
-| Continue `0xFB` | Resume external sync, no jump |
+| Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec. Learns a loop length only after a full run of clocks |
+| Continue `0xFB` | Resume external sync, no jump. Does not arm Rec |
 | Stop `0xFC` | Stop, leave external sync, cancel auto-length |
 | Song position `0xF2` | Sixteenth index modulo the pattern length. Zero can learn the loop; any other value cancels the measurement |
 

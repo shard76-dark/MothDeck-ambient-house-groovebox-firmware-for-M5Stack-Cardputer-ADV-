@@ -1,3 +1,13 @@
+## 1.2.2 (2026-10-10)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,151,680 bytes, magic `E9`, chip `0x0009`, SHA-256 `db42620b1a79ca2c581ffc5df771400e3f5b2e7fb88eb7f2b3b9718e03121629`). Version on the Settings screen is 1.2.2. Host tests passed. Use earphones. Chris approved this image.
+
+NimBLE is reserved at boot, before the loop windows, whether or not it is advertising. Turning BLE on starts advertising and does not allocate, so it does not fail for lack of a free block. Unload BLE waits for the next boot and frees that block for large loops. The toast says `BLE unloads after restart`. Incoming MIDI notes play and are not stored while Rec is off. Start and Continue do not arm Rec. Space arms Rec, and then those notes are written at the playhead.
+
+The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,217,216 bytes, SHA-256 `b492f920d0eb2202fa4397fa3bbe1f3758285474724f9a92251f56530e973762`). It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
+
+The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
+
 ## 1.2.1 (2026-10-09)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (1,152,112 bytes, magic `E9`, chip `0x0009`, SHA-256 `d01b62bd90a58c1345aa8c451771770db7e4ff6504a4d3669b88363176e7bafe`). Version on the Settings screen is 1.2.1. Host tests passed. Use earphones. This image has not been tried on a Cardputer. The piano roll Chris liked is unchanged. BLE is still untested on hardware.

@@ -1,10 +1,10 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.1. The behavior below is the 1.2.2 test: NimBLE is resident from boot, and On and Off only start or stop advertising. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.2. NimBLE is reserved at boot, and On and Off only start or stop advertising. Unload BLE frees that memory for large loops on the next boot. Incoming MIDI notes play and are not stored while Rec is off. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
-The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording. On a 1.2.1 board the Settings version line says `v1.2.1`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`).
+The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.2 still uses. On a 1.2.2 board the Settings version line says `v1.2.2`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`).
 
 ## Moving around
 
@@ -12,7 +12,9 @@ Tab steps through Play, Instrument, FX, Mixer, Song, Loops, MIDI, Settings, and 
 
 `` ` `` (the grave key, marked Esc on the drawings) returns to Play from any other page. On Play, a tap of `` ` `` opens the page list. Fn+`;` and Fn+`.` move the highlight, Enter opens that page, and `` ` `` or Backspace closes the list.
 
-Space starts and stops the internal clock, except while a menu is open. Hold `` ` `` or the front button for about 0.7 seconds to leave for Launcher.
+Space starts and stops the internal clock, and that is Rec. Rec is off at boot. Hold `` ` `` or the front button for about 0.7 seconds to leave for Launcher.
+
+Incoming BLE notes while Rec is off only play. They are not written into the pattern. An MPC Start plays the pattern and does not turn Rec on. With Rec on, those notes record at the playhead.
 
 There are four tracks. Keys 1–4 select a track. Keys 5–8 select a pattern, and they stop at the last pattern that fits the current length. A pattern is 1 to 8 bars. A bar is 16 sixteenth-notes, so the length is 16 to 128 steps. A new song is 1 bar. The grid is 256 steps: four patterns fit through 4 bars, three fit at 5 bars, and two fit at 6, 7, or 8 bars.
 
@@ -205,12 +207,13 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | CC 7 / CC 39 | Volume, mapped to 0–8 |
 | Pitch bend | Per channel |
 | Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Tempo is averaged over one beat of those clocks |
-| Start `0xFA` | External sync, current pattern, bar 1 step 1 |
-| Continue `0xFB` | Resume, no jump |
+| Note on | Plays the track. Stored in the pattern only while Rec is on |
+| Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec |
+| Continue `0xFB` | Resume, no jump. Does not arm Rec |
 | Stop `0xFC` | Stop and leave external sync. Space returns to the internal clock |
 | Song position `0xF2` | Sixteenth-note index, modulo the pattern length |
 
-The link asks for 7.5–15 ms a quarter of a second after connect. If the MPC accepts 15 ms, expect about 25 ms end to end. If it stays at 30 ms, expect about 40 ms. The page shows the number that was negotiated. These are estimates from the buffer sizes. BLE in 1.2.1 has not been tried on a Cardputer.
+The link asks for 7.5–15 ms a quarter of a second after connect. If the MPC accepts 15 ms, expect about 25 ms end to end. If it stays at 30 ms, expect about 40 ms. The page shows the number that was negotiated. These are estimates from the buffer sizes. Chris approved the 1.2.2 image.
 
 Auto-length watches for Start, or a Song Position of 0, after a whole number of bars of clocks, and rounds to 1–8 bars. The MPC Live II keeps the clock running through a sequence loop and does not send Start there. When nothing comes back to zero, the length stays as set on the device.
 
@@ -220,7 +223,7 @@ Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change the selected row.
 
 ![Settings, BLE row](screenshots/screen-settings-ble-2x.png)
 
-Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.1 does not. That row says `off`, `adv`, or `conn`. The dev build still uses the row for a heap readout.
+Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 does not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.2`. The dev build still uses the row for a heap readout.
 
 | Row | Keys |
 | --- | --- |
@@ -232,7 +235,7 @@ Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE
 
 ![Settings, Bars row](screenshots/screen-settings-bars-2x.png)
 
-BLE is off at boot, and Rec is off at boot. The stack is still initialised, before the loop windows, so turning it on does not allocate. Off stops advertising, disconnects a host, ignores incoming MIDI, and loads the loop windows that fit beside the stack. On turns Rec off and starts advertising. The choice is stored. A 1.1.1 setting of on is not read, so the radio stays off until you turn it on.
+BLE is off at boot, and Rec is off at boot. The stack's memory is reserved at boot, before the loop windows, so turning it on does not allocate and does not fail. Off stops advertising, disconnects a host, ignores incoming MIDI, and loads the loop windows that fit beside the stack. On turns Rec off and starts advertising. The choice is stored. A 1.1.1 setting of on is not read, so the radio stays off until you turn it on.
 
 ### MIDI mode and loops
 
@@ -242,7 +245,7 @@ If the open project has a loop on a track, or a track on the Loops instrument, t
 
 The box says `MIDI mode: loops off.` and `Save song? Y / N`. `` ` `` cancels and leaves BLE off. The toast then says `BLE stays off`. Y saves, N skips, and either one then loads an empty project and turns BLE on. A patch that only uses a built-in, a cycle, or a short sample does not raise this question.
 
-Unload BLE stores the choice and skips the stack on the next boot, so the loop windows can use that block. This session does not tear the stack down. The row says `next boot` and the toast says `BLE unloads after restart`. Fn+`,` before the reboot cancels the unload. After that boot the BLE row says `unloaded`. Enter on Load BLE stores the choice and the toast says `BLE loads after restart`. The next boot initialises the stack before the loop windows.
+Unload BLE stores the choice and skips the stack on the next boot, which frees that memory for a large loop library. This session does not tear the stack down. The row says `next boot` and the toast says `BLE unloads after restart`. Fn+`,` before the reboot cancels the unload. After that boot the BLE row says `unloaded`. Enter on Load BLE stores the choice and the toast says `BLE loads after restart`. The next boot reserves the stack again, before the loop windows.
 
 ## Exit
 
@@ -250,7 +253,7 @@ Exit has no screenshot in this set. It is a confirm, and it is in the page list 
 
 ## Notices
 
-1.2.1 keeps diagnostic kilobyte numbers on the MIDI page and in the dev build's serial log. Nothing else on the release screen names memory or RAM.
+1.2.2 keeps diagnostic kilobyte numbers on the MIDI page and in the dev build's serial log. Nothing else on the release screen names memory or RAM.
 
 | Situation | What the screen says |
 | --- | --- |
