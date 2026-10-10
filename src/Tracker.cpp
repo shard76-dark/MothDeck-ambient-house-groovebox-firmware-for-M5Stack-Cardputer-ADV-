@@ -8,6 +8,11 @@
 #include "LoopInstrument.h"
 #include <string.h>
 #include <stdio.h>
+#if MOTHDECK_PSRAM_PATTERNS
+#include <esp_heap_caps.h>
+static uint16_t stepsFallback[4][Tracker::kMaxSteps];
+static uint16_t copyFallback[4][Tracker::kMaxPatternSteps];
+#endif
 
 static PatchAssign stagedPatch;
 
@@ -28,6 +33,17 @@ __attribute__((weak)) bool loopInstrumentHit(int note, LoopHit *out) {
 }
 
 Tracker::Tracker() {
+#if MOTHDECK_PSRAM_PATTERNS
+  steps = (uint16_t (*)[kMaxSteps])heap_caps_malloc(sizeof(uint16_t) * 4 * kMaxSteps, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  patternCopy = (uint16_t (*)[kMaxPatternSteps])heap_caps_malloc(
+      sizeof(uint16_t) * 4 * kMaxPatternSteps, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!steps) {
+    steps = stepsFallback;
+  }
+  if (!patternCopy) {
+    patternCopy = copyFallback;
+  }
+#endif
   memset(ccMsb, 0, sizeof(ccMsb));
   memset(ccLsb, 0, sizeof(ccLsb));
   midiOutCount = 0;

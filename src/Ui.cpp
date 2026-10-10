@@ -11,8 +11,13 @@
 #include "BleAdvert.h"
 #include "BleMidi.h"
 #include "BoardConfig.h"
+#include "BoardIo.h"
 #include "DevLog.h"
+#if MOTHDECK_BOARD_TTGO
+#include <M5GFX.h>
+#else
 #include <M5Cardputer.h>
+#endif
 #include <Preferences.h>
 #include <ctype.h>
 #include <esp_heap_caps.h>
@@ -251,13 +256,11 @@ static uint16_t rgb332to565(uint8_t c) {
 }
 
 static void pushCanvas() {
-  if (!canvas || !canvas->getBuffer()) {
+  if (!canvas || !canvas->getBuffer() || !boardHasDisplay()) {
     return;
   }
   const uint8_t *src = static_cast<const uint8_t *>(canvas->getBuffer());
-  bool prev = M5Cardputer.Display.getSwapBytes();
-  M5Cardputer.Display.setSwapBytes(true);
-  M5Cardputer.Display.startWrite();
+  boardPushBegin();
   for (int y = 0; y < kSpriteH; y += kBlitRows) {
     int rows = kSpriteH - y;
     if (rows > kBlitRows) {
@@ -270,10 +273,9 @@ static void pushCanvas() {
         out[x] = rgb332to565(in[x]);
       }
     }
-    M5Cardputer.Display.pushImage(0, y, kSpriteW, rows, blitBuf);
+    boardPushImage(0, y, kSpriteW, rows, blitBuf);
   }
-  M5Cardputer.Display.endWrite();
-  M5Cardputer.Display.setSwapBytes(prev);
+  boardPushEnd();
 }
 
 static void logUiHeap(const char *tag) {
@@ -285,7 +287,14 @@ static void logUiHeap(const char *tag) {
 void uiBegin() {
   uiLoadPrefs();
   logUiHeap("before sprite");
+#if MOTHDECK_BOARD_TTGO
+  // Offscreen rgb332. With a panel it is pushed in strips. Headless, the
+  // push is a no-op and the sprite sits in PSRAM.
+  canvas = new M5Canvas();
+  canvas->setPsram(true);
+#else
   canvas = new M5Canvas(&M5Cardputer.Display);
+#endif
   // rgb332, 240*135 = 32400 bytes, half of the RGB565 canvas. The strip
   // blit above is what makes that safe next to I2S: pushSprite would
   // allocate another ~32KB DMA buffer to expand the frame.
@@ -299,7 +308,7 @@ void uiBegin() {
   logUiHeap("after sprite");
   canvas->setTextSize(1);
   canvas->setTextColor(COL_TEXT);
-  M5Cardputer.Display.setBrightness(bright);
+  boardSetBrightness(bright);
   audioSetSpeakerVolume(outVol);
   launcherOk = launcherInstalled();
 }
@@ -332,7 +341,7 @@ static void statusBar(BleMidi &ble) {
   canvas->print(snap.playing ? " PLAY" : " STOP");
   canvas->setTextColor(ble.Connected() ? COL_PLAY : COL_DIM);
   canvas->print(ble.Connected() ? " MIDI" : " midi");
-  int pct = M5.Power.getBatteryLevel();
+  int pct = boardBatteryPct();
   canvas->setTextColor(COL_TEXT);
   if (pct >= 0) {
     canvas->setCursor(196, 2);
@@ -1119,8 +1128,8 @@ static void drawSettings(BleMidi &ble) {
         canvas->print("next boot");
       }
     } else if (idx == 5) {
-      int mv = M5.Power.getBatteryVoltage();
-      int pct = M5.Power.getBatteryLevel();
+      int mv = boardBatteryMv();
+      int pct = boardBatteryPct();
       if (pct < 0) {
         canvas->print("n/a");
       } else {
@@ -1235,8 +1244,11 @@ void uiDraw(BleMidi &ble) {
   if (!canvas) {
     return;
   }
-  loopsBlocked = ble.UserEnabled();
+  loopsBlocked = ble.UserEnabled() && !MOTHDECK_LOOPS_WITH_BLE;
   audioReadSnap(&snap);
+  if (!boardHasDisplay()) {
+    return;
+  }
   canvas->fillSprite(COL_BG);
   statusBar(ble);
   switch (page) {
@@ -1472,7 +1484,9 @@ static void finishBleOn(BleMidi &ble) {
     return;
   }
   stopRec();
+#if !MOTHDECK_LOOPS_WITH_BLE
   silenceLoops();
+#endif
   bleLoad = 1;
   bleUnloadPending = false;
   ble.SetUserEnabled(true);
@@ -1488,7 +1502,9 @@ static void finishBleOff(BleMidi &ble) {
   }
   bleOn = 0;
   savePrefs();
+#if !MOTHDECK_LOOPS_WITH_BLE
   restoreLoops();
+#endif
   toastSet("BLE off");
 }
 
@@ -1496,11 +1512,15 @@ static void requestBleOn(BleMidi &ble) {
   if (ble.UserEnabled()) {
     return;
   }
+#if MOTHDECK_LOOPS_WITH_BLE
+  finishBleOn(ble);
+#else
   if (projectHasLoops()) {
     bleAsk = true;
     return;
   }
   finishBleOn(ble);
+#endif
 }
 
 static void answerBleAsk(char c, bool cancel, BleMidi &ble) {
@@ -1622,7 +1642,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         savePrefs();
       } else if (page == kSettingsPage && cursor == 1) {
         bright = (uint8_t)clampi((int)bright - 8, 10, 255);
-        M5Cardputer.Display.setBrightness(bright);
+        boardSetBrightness(bright);
         savePrefs();
       } else if (page == kSettingsPage && cursor == 3) {
         bleAsk = false;
@@ -1657,7 +1677,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         savePrefs();
       } else if (page == kSettingsPage && cursor == 1) {
         bright = (uint8_t)clampi((int)bright + 8, 10, 255);
-        M5Cardputer.Display.setBrightness(bright);
+        boardSetBrightness(bright);
         savePrefs();
       } else if (page == kSettingsPage && cursor == 3) {
         requestBleOn(ble);
@@ -1859,7 +1879,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
   }
 }
 
-static KeyEvent eventFrom(const Keyboard_Class::KeysState &st) {
+static KeyEvent eventFrom(const DeckKeys &st) {
   KeyEvent ev;
   memset(&ev, 0, sizeof(ev));
   ev.tab = st.tab;
@@ -1871,7 +1891,8 @@ static KeyEvent eventFrom(const Keyboard_Class::KeysState &st) {
   ev.ctrl = st.ctrl;
   ev.alt = st.alt;
   ev.opt = st.opt;
-  for (char raw : st.word) {
+  for (int i = 0; i < st.wordLen; i++) {
+    char raw = st.word[i];
     if (raw == ' ') {
       continue;
     }
@@ -1920,7 +1941,7 @@ static void applyModal(const ModalAction &action, char typed, BleMidi &ble) {
   }
 }
 
-static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
+static void handleState(const DeckKeys &st, BleMidi &ble) {
   if (activeModal(overlay, naming, page == kExitPage) != MODAL_NONE) {
     return;
   }
@@ -1975,7 +1996,8 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
     audioCommand('P', 0);
     return;
   }
-  for (char raw : st.word) {
+  for (int i = 0; i < st.wordLen; i++) {
+    char raw = st.word[i];
     if (raw == ' ') {
       continue;
     }
@@ -1985,10 +2007,9 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
 }
 
 void uiPoll(BleMidi &ble) {
-  loopsBlocked = ble.UserEnabled();
-  auto &kb = M5Cardputer.Keyboard;
-  bool esc = kb.isKeyPressed('`');
-  bool btn = M5Cardputer.BtnA.isPressed();
+  loopsBlocked = ble.UserEnabled() && !MOTHDECK_LOOPS_WITH_BLE;
+  bool esc = boardEscHeld();
+  bool btn = boardBtnHeld();
   if (esc || btn) {
     if (!escDown) {
       escSince = millis();
@@ -2011,8 +2032,8 @@ void uiPoll(BleMidi &ble) {
     escDown = false;
     escFired = false;
   }
-  if (kb.isChange() && kb.isPressed()) {
-    Keyboard_Class::KeysState st = kb.keysState();
+  DeckKeys st;
+  if (boardPollKeys(&st)) {
     KeyEvent ev = eventFrom(st);
     if (bleAsk) {
       if (st.del || ev.ch == '`') {

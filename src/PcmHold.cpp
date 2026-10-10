@@ -95,11 +95,17 @@ static bool reserveSlots(int slots, int frames) {
     return false;
   }
   size_t bytes = (size_t)slots * (size_t)frames * 2 * sizeof(int16_t);
-  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  if (largest < bytes + 256) {
-    return false;
+  void *block = nullptr;
+  if (psramFound()) {
+    block = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   }
-  void *block = heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (!block) {
+    uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (largest < bytes + 256) {
+      return false;
+    }
+    block = heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  }
   if (!block) {
     return false;
   }

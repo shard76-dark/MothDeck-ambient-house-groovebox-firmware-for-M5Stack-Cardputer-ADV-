@@ -4,13 +4,20 @@
 #include "DevLog.h"
 #include "WavPcm.h"
 #include <Arduino.h>
+#if MOTHDECK_BOARD_TTGO
+#include <SD_MMC.h>
+// PSRAM's cache workaround owns HSPI on a classic ESP32. The T8 socket is
+// the SDMMC 1-bit pins, so the card does not use an SPI host.
+#define CARD_FS SD_MMC
+#else
 #include <SD.h>
 #include <SPI.h>
+#define CARD_FS SD
+static SPIClass sdSpi(HSPI);
+#endif
 #include <string.h>
 
 SdCard sdCard;
-
-static SPIClass sdSpi(HSPI);
 
 void *deckAlloc(size_t bytes) {
   if (bytes == 0) {
@@ -42,17 +49,30 @@ void deckFree(void *p) {
 }
 
 bool SdCard::Mount() {
-  pinMode(PIN_SD_AUX, OUTPUT);
-  digitalWrite(PIN_SD_AUX, HIGH);
+#if MOTHDECK_BOARD_TTGO
+  // D3 held high keeps the card in SD mode. CLK/CMD/D0 are the slot pins.
+  pinMode(PIN_SD_CS, INPUT_PULLUP);
   pinMode(PIN_SD_MISO, INPUT_PULLUP);
-  sdSpi.begin((int8_t)PIN_SD_SCK, (int8_t)PIN_SD_MISO, (int8_t)PIN_SD_MOSI, (int8_t)PIN_SD_CS);
-  if (!SD.begin(PIN_SD_CS, sdSpi, 20000000)) {
+  if (!SD_MMC.setPins(PIN_SD_SCK, PIN_SD_MOSI, PIN_SD_MISO) || !SD_MMC.begin("/sdcard", true)) {
     mounted = false;
     DEV_LOG("SD: no card");
     return false;
   }
-  if (!SD.exists("/moth")) {
-    SD.mkdir("/moth");
+#else
+#if PIN_SD_AUX >= 0
+  pinMode(PIN_SD_AUX, OUTPUT);
+  digitalWrite(PIN_SD_AUX, HIGH);
+#endif
+  pinMode(PIN_SD_MISO, INPUT_PULLUP);
+  sdSpi.begin((int8_t)PIN_SD_SCK, (int8_t)PIN_SD_MISO, (int8_t)PIN_SD_MOSI, (int8_t)PIN_SD_CS);
+  if (!CARD_FS.begin(PIN_SD_CS, sdSpi, 20000000)) {
+    mounted = false;
+    DEV_LOG("SD: no card");
+    return false;
+  }
+#endif
+  if (!CARD_FS.exists("/moth")) {
+    CARD_FS.mkdir("/moth");
   }
   mounted = true;
   DEV_LOG("SD: mounted");
@@ -75,24 +95,24 @@ bool SdCard::Exists(const char *path) {
   if (!Ensure() || !path) {
     return false;
   }
-  return SD.exists(path);
+  return CARD_FS.exists(path);
 }
 
 bool SdCard::Mkdir(const char *path) {
   if (!Ensure() || !path) {
     return false;
   }
-  if (SD.exists(path)) {
+  if (CARD_FS.exists(path)) {
     return true;
   }
-  return SD.mkdir(path);
+  return CARD_FS.mkdir(path);
 }
 
 bool SdCard::Remove(const char *path) {
   if (!Ensure() || !path) {
     return false;
   }
-  return SD.remove(path);
+  return CARD_FS.remove(path);
 }
 
 bool SdCard::ReadAll(const char *path, uint8_t *dst, int maxBytes, int *outLen) {
@@ -102,7 +122,7 @@ bool SdCard::ReadAll(const char *path, uint8_t *dst, int maxBytes, int *outLen) 
   if (!dst || maxBytes <= 0 || !path || !Ensure()) {
     return false;
   }
-  File file = SD.open(path, FILE_READ);
+  File file = CARD_FS.open(path, FILE_READ);
   if (!file) {
     return false;
   }
@@ -129,7 +149,7 @@ bool SdCard::ReadPrefix(const char *path, uint8_t *dst, int maxBytes, int *outLe
   if (!dst || maxBytes <= 0 || !path || !Ensure()) {
     return false;
   }
-  File file = SD.open(path, FILE_READ);
+  File file = CARD_FS.open(path, FILE_READ);
   if (!file) {
     return false;
   }
@@ -162,8 +182,8 @@ bool SdCard::WriteAll(const char *path, const uint8_t *src, int len) {
   if (!path || !src || len < 0 || !Ensure()) {
     return false;
   }
-  SD.remove(path);
-  File file = SD.open(path, FILE_WRITE);
+  CARD_FS.remove(path);
+  File file = CARD_FS.open(path, FILE_WRITE);
   if (!file) {
     return false;
   }
@@ -210,7 +230,7 @@ bool SdCard::LoadWavMono(const char *path, int16_t *dst, int dstFrames, int *got
     sdErr(err, errLen, "No sample buffer");
     return false;
   }
-  File file = SD.open(path, FILE_READ);
+  File file = CARD_FS.open(path, FILE_READ);
   if (!file) {
     sdErr(err, errLen, "Sample missing");
     return false;
@@ -273,7 +293,7 @@ int SdCard::List(const char *path, char names[][24], int maxNames, bool director
   if (!names || maxNames <= 0 || !path || !Ensure()) {
     return 0;
   }
-  File dir = SD.open(path);
+  File dir = CARD_FS.open(path);
   if (!dir || !dir.isDirectory()) {
     if (dir) {
       dir.close();

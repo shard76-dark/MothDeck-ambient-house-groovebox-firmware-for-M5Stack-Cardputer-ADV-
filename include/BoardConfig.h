@@ -1,22 +1,140 @@
 #ifndef BoardConfig_h
 #define BoardConfig_h
 
+// Two boards. The Cardputer ADV build leaves MOTHDECK_BOARD_TTGO at 0.
+// The ttgo-t8 env sets it. Sample caches use PSRAM only when psramFound().
+
+#ifndef MOTHDECK_BOARD_TTGO
+#define MOTHDECK_BOARD_TTGO 0
+#endif
+
+#define MOTHDECK_VERSION "1.2.2"
+#define MOTHDECK_BLE_NAME_DEFAULT "Mothdeck"
+
+#if MOTHDECK_BOARD_TTGO
+// LilyGO TTGO T8 V1.8: classic ESP32-WROVER, 4MB flash, 4MB PSRAM, microSD,
+// no panel and no keyboard. Wiring is in docs/TTGO-T8.md. Pins below are
+// the defaults; pass -DPIN_...= to move a wire.
+
+#define BOARD_NAME "TTGO T8"
+
+#ifndef MOTHDECK_LOOPS_WITH_BLE
+#define MOTHDECK_LOOPS_WITH_BLE 1
+#endif
+#ifndef MOTHDECK_PSRAM_PATTERNS
+#define MOTHDECK_PSRAM_PATTERNS 1
+#endif
+#ifndef MOTHDECK_INTERNAL_DAC
+#define MOTHDECK_INTERNAL_DAC 0
+#endif
+#ifndef MOTHDECK_HAS_TFT
+#define MOTHDECK_HAS_TFT 0
+#endif
+
+// Onboard microSD, 1-bit SPI. Silkscreen: CLK 14, CMD 15, D0 2, D3 13.
+#ifndef PIN_SD_SCK
+#define PIN_SD_SCK 14
+#endif
+#ifndef PIN_SD_MISO
+#define PIN_SD_MISO 2
+#endif
+#ifndef PIN_SD_MOSI
+#define PIN_SD_MOSI 15
+#endif
+#ifndef PIN_SD_CS
+#define PIN_SD_CS 13
+#endif
+#ifndef PIN_SD_AUX
+#define PIN_SD_AUX -1
+#endif
+
+// PCM5102A I2S. SCK on the module goes to GND. GPIO25 stays free for the
+// internal DAC fallback.
+#ifndef PIN_I2S_BCLK
+#define PIN_I2S_BCLK 26
+#endif
+#ifndef PIN_I2S_WS
+#define PIN_I2S_WS 27
+#endif
+#ifndef PIN_I2S_DOUT
+#define PIN_I2S_DOUT 22
+#endif
+#ifndef PIN_I2S_DIN
+#define PIN_I2S_DIN -1
+#endif
+#ifndef PIN_DAC
+#define PIN_DAC 25
+#endif
+
+// Optional ST7789 240x135 on the other SPI bus. Off unless the env sets it.
+#ifndef PIN_TFT_SCK
+#define PIN_TFT_SCK 18
+#endif
+#ifndef PIN_TFT_MOSI
+#define PIN_TFT_MOSI 23
+#endif
+#ifndef PIN_TFT_CS
+#define PIN_TFT_CS 5
+#endif
+#ifndef PIN_TFT_DC
+#define PIN_TFT_DC 21
+#endif
+#ifndef PIN_TFT_RST
+#define PIN_TFT_RST 19
+#endif
+#ifndef PIN_TFT_BL
+#define PIN_TFT_BL 32
+#endif
+#ifndef MOTHDECK_TFT_OFFSET_X
+#define MOTHDECK_TFT_OFFSET_X 40
+#endif
+#ifndef MOTHDECK_TFT_OFFSET_Y
+#define MOTHDECK_TFT_OFFSET_Y 53
+#endif
+#ifndef MOTHDECK_TFT_ROTATION
+#define MOTHDECK_TFT_ROTATION 1
+#endif
+
+#ifndef PIN_BTN_A
+#define PIN_BTN_A -1
+#endif
+#ifndef PIN_BATT_ADC
+#define PIN_BATT_ADC 35
+#endif
+
+// Optional 2x4 button matrix. All -1 means no matrix.
+#ifndef PIN_MX_R0
+#define PIN_MX_R0 -1
+#endif
+#ifndef PIN_MX_R1
+#define PIN_MX_R1 -1
+#endif
+#ifndef PIN_MX_C0
+#define PIN_MX_C0 -1
+#endif
+#ifndef PIN_MX_C1
+#define PIN_MX_C1 -1
+#endif
+#ifndef PIN_MX_C2
+#define PIN_MX_C2 -1
+#endif
+#ifndef PIN_MX_C3
+#define PIN_MX_C3 -1
+#endif
+
+#else
+
 // M5Stack Cardputer ADV (Stamp-S3A / ESP32-S3FN8, 8MB flash, no PSRAM,
-// ST7789 240x135). Sample caches use PSRAM only when psramFound() is true.
-// Everything used here is on the board: no external wiring.
+// ST7789 240x135). Everything used here is on the board: no external wiring.
 // Display, keyboard (TCA8418), and the ES8311 codec are brought up by
 // M5Unified / M5Cardputer. These pins are the ones the firmware touches
 // directly (the SD bus and the I2S lines into the ES8311).
 
 #define BOARD_NAME "Cardputer ADV"
-#define MOTHDECK_VERSION "1.2.2"
-#define MOTHDECK_BLE_NAME_DEFAULT "Mothdeck"
-
-// 1 compiles serial-monitor logs for the SD card and the speaker.
-// 0 omits those Serial statements. Override with -DMOTHOS_DEV_LOG=1.
-#ifndef MOTHOS_DEV_LOG
-#define MOTHOS_DEV_LOG 0
-#endif
+#define MOTHDECK_LOOPS_WITH_BLE 0
+#define MOTHDECK_PSRAM_PATTERNS 0
+#define MOTHDECK_INTERNAL_DAC 0
+#define MOTHDECK_HAS_TFT 0
 
 // microSD on its own SPI bus. GPIO5 is held high before mount; Launcher
 // does the same on the ADV because that pin otherwise fights the card.
@@ -50,6 +168,14 @@
 // Grove HY2.0-4P. Not used by the firmware; listed so the port stays free.
 #define PIN_GROVE_SDA 2
 #define PIN_GROVE_SCL 1
+
+#endif
+
+// 1 compiles serial-monitor logs for the SD card and the speaker.
+// 0 omits those Serial statements. Override with -DMOTHOS_DEV_LOG=1.
+#ifndef MOTHOS_DEV_LOG
+#define MOTHOS_DEV_LOG 0
+#endif
 
 // Audio rate. Step timing uses rate/4, matching MothOS (16th-note steps).
 static const int kSampleRate = 44100;

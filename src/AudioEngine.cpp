@@ -5,14 +5,40 @@
 #include "DevLog.h"
 #include "LoopFormat.h"
 #include "BleMidi.h"
+#include "SpeakerOut.h"
 #include <Arduino.h>
-#include <M5Unified.h>
 #include <atomic>
 #include <esp_heap_caps.h>
+#include <new>
 #include <stdio.h>
 #include <string.h>
 
+#if MOTHDECK_BOARD_TTGO
+// The classic ESP32 DRAM map is smaller once Bluedroid is linked. The
+// tracker object is about 68KB, so it lives in PSRAM. PSRAM is not up
+// during global constructors, so this runs from audioStart.
+static Tracker *trackerStore = nullptr;
+static bool bootTracker() {
+  if (trackerStore) {
+    return true;
+  }
+  void *mem = heap_caps_malloc(sizeof(Tracker), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!mem) {
+    mem = heap_caps_malloc(sizeof(Tracker), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  }
+  if (!mem) {
+    return false;
+  }
+  trackerStore = new (mem) Tracker();
+  return true;
+}
+#define tracker (*trackerStore)
+#else
 static Tracker tracker;
+static bool bootTracker() {
+  return true;
+}
+#endif
 static BleMidi *midiIn = nullptr;
 static QueueHandle_t cmdQ = nullptr;
 static QueueHandle_t midiOutQ = nullptr;
@@ -149,28 +175,6 @@ static void renderBlock(int16_t *dst, int count) {
   publishSnap(peak);
 }
 
-// Same sequence M5Unified uses for board_M5CardputerADV. Without it the
-// codec stays in reset and the speaker task has nothing to clock.
-static void es8311PowerUp() {
-  static const uint8_t seq[][2] = {
-      {0x00, 0x80},  // CSM power on
-      {0x01, 0xB5},  // MCLK from BCLK
-      {0x02, 0x18},  // MULT_PRE = 3
-      {0x0D, 0x01},  // analog circuitry
-      {0x12, 0x00},  // DAC power
-      {0x13, 0x10},  // headphone driver, which feeds the NS4150B
-      {0x32, 0xBF},  // DAC volume, 0 dB
-      {0x37, 0x08},  // bypass the DAC equalizer
-  };
-  for (size_t i = 0; i < sizeof(seq) / sizeof(seq[0]); i++) {
-    for (int attempt = 0; attempt < 3; attempt++) {
-      if (M5.In_I2C.writeRegister8(0x18, seq[i][0], seq[i][1], 100000)) {
-        break;
-      }
-    }
-  }
-}
-
 static void audioTask(void *arg) {
   (void)arg;
   int fill = 0;
@@ -179,14 +183,14 @@ static void audioTask(void *arg) {
     // skipped this until two blocks had finished, so a note sat for the
     // whole queue.
     drainMidi();
-    int queued = (int)M5.Speaker.isPlaying(0);
+    int queued = speakerQueued();
     if (queued >= queueLimit()) {
       vTaskDelay(1);
       continue;
     }
     int count = renderCount();
     renderBlock(blocks[fill], count);
-    if (!M5.Speaker.playRaw(blocks[fill], count, (uint32_t)kSampleRate, false, 1, 0, false)) {
+    if (!speakerWrite(blocks[fill], count)) {
       vTaskDelay(1);
       continue;
     }
@@ -208,6 +212,11 @@ void audioStart() {
   if (audioTaskHandle) {
     return;
   }
+  if (!bootTracker()) {
+    snprintf(audioFault, sizeof(audioFault), "audio off: no tracker");
+    Serial.println("AUDIO: tracker alloc failed");
+    return;
+  }
   logAudioHeap("before audio");
   memset(snapSlots, 0, sizeof(snapSlots));
   cmdQ = xQueueCreate(24, sizeof(Cmd));
@@ -218,35 +227,12 @@ void audioStart() {
     logAudioHeap("after audio");
     return;
   }
-  M5.Speaker.end();
-  auto cfg = M5.Speaker.config();
-  // Pins and port are what _begin_audio installs for the ADV. Setting them
-  // again here keeps playback alive if that profile was skipped. GPIO42 is
-  // the codec data input, so it stays an I2S pin rather than a GPIO high.
-  cfg.pin_bck = PIN_I2S_BCLK;
-  cfg.pin_ws = PIN_I2S_WS;
-  cfg.pin_data_out = PIN_I2S_DOUT;
-  cfg.pin_mck = I2S_PIN_NO_CHANGE;
-  cfg.i2s_port = I2S_NUM_1;
-  cfg.buzzer = false;
-  cfg.use_dac = false;
-  cfg.sample_rate = kSampleRate;
-  cfg.task_priority = 4;
-  cfg.task_pinned_core = 1;
-  cfg.dma_buf_len = 256;
-  cfg.dma_buf_count = 8;
-  cfg.magnification = 2;
-  cfg.stereo = false;
-  M5.Speaker.config(cfg);
-  es8311PowerUp();
-  speakerOk = M5.Speaker.begin();
+  speakerOk = speakerStart(160);
   if (!speakerOk) {
     Serial.println("AUDIO: speaker begin failed");
   } else {
-    DEV_LOG("AUDIO: speaker ok");
     DEV_LOG("Speaker: 44100 Hz");
   }
-  M5.Speaker.setVolume(160);
   BaseType_t created = xTaskCreatePinnedToCore(audioTask, "mothdeck-audio", 8192, nullptr, 5, &audioTaskHandle, 1);
   if (created != pdPASS || !audioTaskHandle) {
     audioTaskHandle = nullptr;
@@ -403,5 +389,5 @@ void audioReadSnap(Snap *out) {
 }
 
 void audioSetSpeakerVolume(uint8_t volume) {
-  M5.Speaker.setVolume(volume);
+  speakerSetVolume(volume);
 }

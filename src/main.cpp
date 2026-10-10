@@ -1,9 +1,12 @@
 #include <Arduino.h>
+#include "BoardConfig.h"
+#if !MOTHDECK_BOARD_TTGO
 #include <M5Cardputer.h>
+#endif
 #include <esp_heap_caps.h>
 #include "AudioEngine.h"
 #include "BleMidi.h"
-#include "BoardConfig.h"
+#include "BoardIo.h"
 #include "DevLog.h"
 #include "LauncherExit.h"
 #include "PcmHold.h"
@@ -15,6 +18,8 @@
 SET_LOOP_TASK_STACK_SIZE(16384);
 
 static BleMidi ble;
+
+#if !MOTHDECK_BOARD_TTGO
 
 static bool exitChordHeld() {
   if (M5Cardputer.BtnA.isPressed()) {
@@ -132,6 +137,8 @@ static void showSplash() {
   }
 }
 
+#endif
+
 static void logHeap(const char *tag) {
   uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -139,11 +146,38 @@ static void logHeap(const char *tag) {
 }
 
 void setup() {
+  Serial.begin(115200);
+#if MOTHDECK_BOARD_TTGO
+  // Classic ESP32 internal RAM is the tight part. NimBLE comes up before
+  // the panel, the speaker DMA, and the sprite. Loop windows go in PSRAM
+  // and stay reserved while the radio is advertising. A headless board
+  // still plays: notes and clock are handled on the audio task.
+  Serial.printf("MothDeck %s %s\n", MOTHDECK_VERSION, BOARD_NAME);
+  uiLoadPrefs();
+  logHeap("before ble");
+  if (uiBleWantLoad()) {
+    ble.Begin(uiBleName(), uiBleEnabled());
+  } else {
+    ble.MarkSkipped();
+  }
+  logHeap("after ble");
+  boardBringUpTtgo();
+  audioBindMidi(&ble);
+  audioStart();
+  pcmHoldReservePreferred();
+  if (!pcmHoldReserved()) {
+    pcmHoldReserveFit();
+  }
+  logHeap("after loops");
+  uiMountStorage(true);
+  logHeap("after storage");
+  uiBegin();
+  uiDraw(ble);
+#else
   // USB CDC is on from boot. Playback is first: the speaker DMA and the
   // audio task take their internal RAM before the sprite. NimBLE is next,
   // before the loop pool and before the card scan, which is the 1.1.0
   // order that paired. The stack stays resident. Off does not advertise.
-  Serial.begin(115200);
   Serial.printf("MothDeck %s\n", MOTHDECK_VERSION);
   uiLoadPrefs();
   bringUpDisplay();
@@ -173,10 +207,11 @@ void setup() {
   logHeap("after loops");
   uiMountStorage(!ble.UserEnabled());
   logHeap("after storage");
+#endif
 }
 
 void loop() {
-  M5Cardputer.update();
+  boardUpdate();
   ble.Maintain();
   uiPoll(ble);
 

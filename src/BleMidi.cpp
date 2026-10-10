@@ -7,7 +7,9 @@
 #include <BLESecurity.h>
 #include <esp_bt.h>
 #include <esp_heap_caps.h>
+#if defined(CONFIG_NIMBLE_ENABLED)
 #include <services/gap/ble_svc_gap.h>
+#endif
 #include "esp32-hal-bt.h"
 #include "BleAdvert.h"
 #include "BleMidi.h"
@@ -52,6 +54,10 @@ static uint32_t statOverflow = 0;
 static volatile bool connected = false;
 static volatile int connectEdge = 0;
 static uint16_t connHandle = 0xFFFF;
+#if defined(CONFIG_BLUEDROID_ENABLED)
+static esp_bd_addr_t peerAddr;
+static bool havePeerAddr = false;
+#endif
 static bool connParamsPending = false;
 static uint32_t connParamDue = 0;
 static uint8_t connParamTries = 0;
@@ -127,7 +133,16 @@ static void requestShortInterval(BLEServer *server, uint16_t handle) {
   }
   // Interval units are 1.25 ms. 6..12 is 7.5..15 ms. Timeout is in 10 ms
   // units, and it has to be longer than the interval.
+#if defined(CONFIG_NIMBLE_ENABLED)
   bool ok = server->requestConnParams(handle, 6, 12, 0, 500);
+#elif defined(CONFIG_BLUEDROID_ENABLED)
+  if (!havePeerAddr) {
+    return;
+  }
+  bool ok = server->requestConnParams(peerAddr, 6, 12, 0, 500);
+#else
+  bool ok = false;
+#endif
   Serial.printf("BLE: conn interval request 7.5-15ms handle=%u ok=%d try=%u\n", handle, ok ? 1 : 0, connParamTries);
   if (ok) {
     connParamsPending = false;
@@ -152,6 +167,7 @@ class MidiServerCallbacks : public BLEServerCallbacks {
     connectEdge = 1;
   }
 
+#if defined(CONFIG_NIMBLE_ENABLED)
   void onConnect(BLEServer *server, ble_gap_conn_desc *desc) override {
     if (!userEnabled) {
       if (desc && server) {
@@ -173,6 +189,26 @@ class MidiServerCallbacks : public BLEServerCallbacks {
       connParamDue = millis() + 250;
     }
   }
+#elif defined(CONFIG_BLUEDROID_ENABLED)
+  void onConnect(BLEServer *server, esp_ble_gatts_cb_param_t *param) override {
+    if (!param || !server) {
+      return;
+    }
+    if (!userEnabled) {
+      server->disconnect(param->connect.conn_id);
+      return;
+    }
+    connected = true;
+    connectEdge = 1;
+    connHandle = param->connect.conn_id;
+    memcpy(peerAddr, param->connect.remote_bda, sizeof(peerAddr));
+    havePeerAddr = true;
+    linkInterval = 0;
+    connParamTries = 0;
+    connParamsPending = true;
+    connParamDue = millis() + 250;
+  }
+#endif
 
   void onDisconnect(BLEServer *server) override {
     (void)server;
@@ -181,6 +217,9 @@ class MidiServerCallbacks : public BLEServerCallbacks {
     connParamsPending = false;
     connParamDue = 0;
     connHandle = 0xFFFF;
+#if defined(CONFIG_BLUEDROID_ENABLED)
+    havePeerAddr = false;
+#endif
     linkInterval = 0;
     running.sysex = 0;
     BLESecurity::resetSecurity();
@@ -193,6 +232,7 @@ class MidiServerCallbacks : public BLEServerCallbacks {
     }
   }
 
+#if defined(CONFIG_NIMBLE_ENABLED)
   void onConnParamsUpdate(uint16_t conn_handle, uint16_t interval, uint16_t latency, uint16_t timeout, uint8_t status) override {
     linkInterval = interval;
     Serial.printf(
@@ -212,6 +252,27 @@ class MidiServerCallbacks : public BLEServerCallbacks {
     }
     (void)conn_handle;
   }
+#elif defined(CONFIG_BLUEDROID_ENABLED)
+  void onConnParamsUpdate(esp_bd_addr_t remote_bda, uint16_t interval, uint16_t latency, uint16_t timeout, esp_bt_status_t status) override {
+    linkInterval = interval;
+    Serial.printf(
+      "BLE: conn interval %u (%.1f ms) latency=%u timeout=%u status=%u\n",
+      interval,
+      (double)interval * 1.25,
+      latency,
+      timeout,
+      (unsigned)status);
+    if (status == ESP_BT_STATUS_SUCCESS) {
+      connParamsPending = false;
+      return;
+    }
+    if (connParamTries < 4) {
+      connParamsPending = true;
+      connParamDue = millis() + 250;
+    }
+    (void)remote_bda;
+  }
+#endif
 };
 
 static void logBytes(const char *label, const uint8_t *data, int len) {
@@ -269,9 +330,16 @@ static bool radioStart(bool logPackets) {
     Serial.println("BLE: no advertising object");
     return false;
   }
+#if defined(CONFIG_NIMBLE_ENABLED)
   if (advertising->isAdvertising()) {
     advertising->stop();
   }
+#else
+  if (lastAdvActive) {
+    advertising->stop();
+    lastAdvActive = false;
+  }
+#endif
   advertising->setMinInterval(kAdvIntervalMin);
   advertising->setMaxInterval(kAdvIntervalMax);
   // Used only if the custom payload is rejected and the library builder
@@ -297,7 +365,11 @@ static bool radioStart(bool logPackets) {
       Serial.println("BLE: advertising failed to start");
       return false;
     }
+#if defined(CONFIG_NIMBLE_ENABLED)
     bool active = advertising->isAdvertising();
+#else
+    bool active = true;
+#endif
     lastAdvActive = active;
     lastAdvQueryMs = millis();
     Serial.printf("BLE: advertising active=%d\n", active ? 1 : 0);
@@ -320,7 +392,11 @@ static bool radioStart(bool logPackets) {
     Serial.println("BLE: advertising failed to start");
     return false;
   }
+#if defined(CONFIG_NIMBLE_ENABLED)
   bool active = advertising->isAdvertising();
+#else
+  bool active = true;
+#endif
   lastAdvActive = active;
   lastAdvQueryMs = millis();
   Serial.printf("BLE: advertising active=%d\n", active ? 1 : 0);
@@ -611,7 +687,13 @@ bool BleMidi::Restart(const char *name) {
     return true;
   }
   buildBleMidiAdvert(name, MOTHDECK_BLE_NAME_DEFAULT, &pkts);
+#if defined(CONFIG_NIMBLE_ENABLED)
   int rc = ble_svc_gap_device_name_set(pkts.gapName);
+#elif defined(CONFIG_BLUEDROID_ENABLED)
+  int rc = (int)esp_ble_gap_set_device_name(pkts.gapName);
+#else
+  int rc = -1;
+#endif
   DEV_LOGF("BLE: rename rc=%d name=%s air=%s\n", rc, pkts.gapName, pkts.advName);
   if (!userEnabled) {
     return true;
@@ -709,7 +791,11 @@ bool BleMidi::Advertising() {
     return lastAdvActive;
   }
   BLEAdvertising *advertising = BLEDevice::getAdvertising();
+#if defined(CONFIG_NIMBLE_ENABLED)
   lastAdvActive = advertising && advertising->isAdvertising();
+#else
+  (void)advertising;
+#endif
   lastAdvQueryMs = now;
   return lastAdvActive;
 }

@@ -1,0 +1,6 @@
+# LilyGO TTGO T8 V1.8, 4MB flash. One factory app, USB flash, no Launcher.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+app0,     app,  factory, 0x10000, 0x1F0000,
+coredump, data, coredump,0x200000,0x10000,

@@ -351,7 +351,7 @@ pip install platformio
 ./build.sh
 ```
 
-`pio run -e cardputer-adv-dev` builds the same firmware with SD, speaker, heap, and MIDI-counter logs, plus Arduino error logs, on the USB serial port. The release image prints the version at boot, a line when advertising starts, and a line when audio or BLE init fails. Packet, clock, and note counts stay on the MIDI page in both builds.
+`pio run -e cardputer-adv-dev` builds the same firmware with SD, speaker, heap, and MIDI-counter logs, plus Arduino error logs, on the USB serial port. `pio run -e ttgo-t8` builds the TTGO T8 image (PCM5102A). `pio run -e ttgo-t8-dac` builds it with the internal DAC. See [docs/TTGO-T8.md](docs/TTGO-T8.md). The release image prints the version at boot, a line when advertising starts, and a line when audio or BLE init fails. Packet, clock, and note counts stay on the MIDI page in both builds.
 
 `build.sh` regenerates the built-in waveforms, the example card tree, runs the host tests, and writes:
 
@@ -376,6 +376,10 @@ Cardputer ADV: Stamp-S3A (ESP32-S3FN8, 8MB flash, no onboard PSRAM), ST7789 240Ã
 Octal PSRAM uses GPIO33â€“37. Those pins are the display, so a PSRAM module cannot be added to this Stamp-S3A, and the firmware stays on `qio_qspi`. Both hardware SPI controllers are already in use, one for the display and one for the microSD. A Grove SPI RAM board is not a supported upgrade. Extra sample room is the microSD: kits and short plugin samples stay in a small RAM cache, and loops are read from the card while they play.
 
 The splash art is `docs/splash-moth.png`. Regenerate the embedded mask with `python3 tools/make_splash.py`.
+
+## LilyGO TTGO T8
+
+`ttgo-t8` is a second PlatformIO target for a LilyGO TTGO T8 V1.8 (classic ESP32-WROVER, 4MB flash, 4MB PSRAM, microSD, no screen and no keyboard). It is not the Cardputer image and it is not a release. Wiring, the PCM5102A default, the GPIO25 DAC fallback, the optional ST7789, and the serial keys are in [docs/TTGO-T8.md](docs/TTGO-T8.md). Loop windows, sample buffers, and the pattern grid use PSRAM, so BLE and loops stay loaded together. With no display fitted, the board still plays, syncs, and takes notes over BLE MIDI.
 
 ## Site
 

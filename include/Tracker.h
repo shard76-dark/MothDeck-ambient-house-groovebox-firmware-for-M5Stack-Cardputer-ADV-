@@ -5,6 +5,7 @@
 #include "SongFile.h"
 #include "Snap.h"
 #include "PluginFormat.h"
+#include "BoardConfig.h"
 
 class Tracker {
 public:
@@ -114,9 +115,15 @@ private:
   // bits 4-7 (-8..7), instrument in bits 8-13 (0-63), hold length in bits
   // 14-15 (0 = one step, then two, three, four). A one-step note leaves
   // those bits clear, so its song byte stays 1-12. 4*256*2 bytes replaces
-  // the old 4*256*3 note/octave/instrument grids.
+  // the old 4*256*3 note/octave/instrument grids. The TTGO build keeps this
+  // grid in PSRAM. The Cardputer build keeps it in BSS.
+#if MOTHDECK_PSRAM_PATTERNS
+  uint16_t (*steps)[kMaxSteps];
+  uint16_t (*patternCopy)[kMaxPatternSteps];
+#else
   uint16_t steps[4][kMaxSteps];
   uint16_t patternCopy[4][kMaxPatternSteps];
+#endif
   int patternCopyLen;
 
   void SoloTrack(bool repeat);

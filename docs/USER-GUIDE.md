@@ -1,6 +1,6 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.1. The behavior below is the 1.2.2 test: NimBLE is resident from boot, and On and Off only start or stop advertising. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. A LilyGO TTGO T8 port, which is not this image, is described in [TTGO-T8.md](TTGO-T8.md). The published image is 1.2.1. The behavior below is the 1.2.2 test: NimBLE is resident from boot, and On and Off only start or stop advertising. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
