@@ -12,10 +12,6 @@
 #include <esp_heap_caps.h>
 static uint16_t stepsFallback[4][Tracker::kMaxSteps];
 static uint16_t copyFallback[4][Tracker::kMaxPatternSteps];
-#if MOTHDECK_CHORDS
-static uint16_t chordFallback[4][Tracker::kMaxSteps][3];
-static uint16_t chordCopyFallback[4][Tracker::kMaxPatternSteps][3];
-#endif
 #endif
 
 static PatchAssign stagedPatch;
@@ -53,10 +49,10 @@ Tracker::Tracker() {
   chordCopy = (uint16_t (*)[kMaxPatternSteps][3])heap_caps_malloc(
       sizeof(uint16_t) * 4 * kMaxPatternSteps * 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!chord) {
-    chord = chordFallback;
+    chord = nullptr;
   }
   if (!chordCopy) {
-    chordCopy = chordCopyFallback;
+    chordCopy = nullptr;
   }
 #endif
 #endif
@@ -155,6 +151,11 @@ static uint16_t packChord(uint8_t note, int8_t oct, uint8_t lenCode) {
 }
 
 uint16_t Tracker::ChordAt(int track, int step, int slot) const {
+#if MOTHDECK_PSRAM_PATTERNS
+  if (!chord) {
+    return 0;
+  }
+#endif
   if (track < 0 || track > 3 || step < 0 || step >= kMaxSteps || slot < 0 || slot > 2) {
     return 0;
   }
@@ -162,6 +163,11 @@ uint16_t Tracker::ChordAt(int track, int step, int slot) const {
 }
 
 void Tracker::ChordPut(int track, int step, int slot, uint8_t note, int8_t oct, uint8_t lenCode) {
+#if MOTHDECK_PSRAM_PATTERNS
+  if (!chord) {
+    return;
+  }
+#endif
   if (track < 0 || track > 3 || step < 0 || step >= kMaxSteps || slot < 0 || slot > 2) {
     return;
   }
@@ -179,11 +185,17 @@ void Tracker::ChordWipe() {
     for (int s = 0; s < kMaxSteps; s++) {
       ChordClearStep(t, s);
     }
-    for (int s = 0; s < kMaxPatternSteps; s++) {
-      for (int slot = 0; slot < 3; slot++) {
-        chordCopy[t][s][slot] = 0;
+#if MOTHDECK_PSRAM_PATTERNS
+    if (chordCopy) {
+#endif
+      for (int s = 0; s < kMaxPatternSteps; s++) {
+        for (int slot = 0; slot < 3; slot++) {
+          chordCopy[t][s][slot] = 0;
+        }
       }
+#if MOTHDECK_PSRAM_PATTERNS
     }
+#endif
     SilenceChord(t);
   }
 }
@@ -1364,16 +1376,28 @@ void Tracker::CopyPattern() {
       if (i < n && start + i < kMaxSteps) {
         patternCopy[j][i] = steps[j][start + i];
 #if MOTHDECK_CHORDS
+#if MOTHDECK_PSRAM_PATTERNS
+        if (chord && chordCopy) {
+#endif
         for (int slot = 0; slot < 3; slot++) {
           chordCopy[j][i][slot] = chord[j][start + i][slot];
         }
+#if MOTHDECK_PSRAM_PATTERNS
+        }
+#endif
 #endif
       } else {
         patternCopy[j][i] = empty;
 #if MOTHDECK_CHORDS
+#if MOTHDECK_PSRAM_PATTERNS
+        if (chordCopy) {
+#endif
         for (int slot = 0; slot < 3; slot++) {
           chordCopy[j][i][slot] = 0;
         }
+#if MOTHDECK_PSRAM_PATTERNS
+        }
+#endif
 #endif
       }
     }
@@ -1399,9 +1423,15 @@ void Tracker::PastePattern() {
       }
       steps[j][idx] = patternCopyLen > 0 ? patternCopy[j][i] : empty;
 #if MOTHDECK_CHORDS
+#if MOTHDECK_PSRAM_PATTERNS
+      if (chord && (patternCopyLen == 0 || chordCopy)) {
+#endif
       for (int slot = 0; slot < 3; slot++) {
         chord[j][idx][slot] = patternCopyLen > 0 ? chordCopy[j][i][slot] : 0;
       }
+#if MOTHDECK_PSRAM_PATTERNS
+      }
+#endif
 #endif
     }
   }
@@ -1426,9 +1456,15 @@ void Tracker::PastePatternAll() {
         }
         steps[j][idx] = patternCopyLen > 0 ? patternCopy[j][i] : empty;
 #if MOTHDECK_CHORDS
+#if MOTHDECK_PSRAM_PATTERNS
+        if (chord && (patternCopyLen == 0 || chordCopy)) {
+#endif
         for (int slot = 0; slot < 3; slot++) {
           chord[j][idx][slot] = patternCopyLen > 0 ? chordCopy[j][i][slot] : 0;
         }
+#if MOTHDECK_PSRAM_PATTERNS
+        }
+#endif
 #endif
       }
     }
