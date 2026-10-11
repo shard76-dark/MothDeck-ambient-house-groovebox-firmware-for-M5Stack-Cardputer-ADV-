@@ -18,6 +18,12 @@ public:
   bool ReadPrefix(const char *path, uint8_t *dst, int maxBytes, int *outLen);
   bool ReadText(const char *path, char *dst, int maxBytes);
   bool WriteAll(const char *path, const uint8_t *src, int len);
+  // Short reads and writes. The bus lock is held only for this call, so a
+  // long transfer can let a loop refill between chunks.
+  bool SizeOf(const char *path, int *out);
+  bool ReadAt(const char *path, uint32_t offset, uint8_t *dst, int maxBytes, int *outLen);
+  bool WriteAt(const char *path, uint32_t offset, const uint8_t *src, int len);
+  bool Rename(const char *from, const char *to);
   int List(const char *path, char names[][24], int maxNames, bool directories);
   // Reads a PCM WAV straight into dst. No second copy of the file.
   // Truncates to dstFrames. *got is frames written.

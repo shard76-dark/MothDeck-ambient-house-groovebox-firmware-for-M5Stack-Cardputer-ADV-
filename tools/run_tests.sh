@@ -91,6 +91,13 @@ echo "Voices"
   -o /tmp/mothdeck_test_voices
 /tmp/mothdeck_test_voices
 
+echo "Wi-Fi file paths"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_wifi.cpp" \
+  "$ROOT/src/WifiFiles.cpp" \
+  -o /tmp/mothdeck_test_wifi
+/tmp/mothdeck_test_wifi
+
 echo "Sampler take"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_sampler.cpp" \
