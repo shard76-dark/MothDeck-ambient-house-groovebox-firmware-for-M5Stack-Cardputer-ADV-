@@ -2,6 +2,12 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.5.0 (2026-10-11)
+
+The Song page can sample the master mix. `U` records the next 8192 frames (about 0.19 seconds) into a fixed buffer. `O` plays that take back on top of the tracks. `Y` plays it an octave higher. The buffer is reserved with the firmware and is never allocated from the loop windows, the kit cache, or the BLE heap. Recording hears the tracks and not the take itself. Drums, loops, BLE, plugins, and the chain keep working whether or not a take is stored.
+
+Image: `releases/mothdeck-cardputer-adv.bin` (1,748,672 bytes, magic `E9`, SHA-256 `beacfd7f7420f3c833ae09fe55e99d4244289de0526eaa3505516fd15df33e11`, static RAM 156076/327680). `releases/mothdeck-cardputer-adv-full.bin` is 1,814,208 bytes, SHA-256 `6118ad07d9d8f8cf146b926d09894c945de31259c7338373e203b3e4236ea073`. Flash used is 1,717,831 of 3,932,160 bytes in one OTA slot. DIRAM used is 240,035 of 341,760. Host tests passed. Nothing here was flashed or listened to. The SD pack is unchanged from 1.3.0. The TTGO image is a separate branch.
+
 ## 1.4.0 (2026-10-11)
 
 The Song page stores up to eight scenes. `J` saves the current pattern and the four track mutes as the next scene. `P` clears the chain. While a chain is stored, playback walks it at the end of each pattern and applies that scene's pattern and mutes. Song mode is left as it was when the chain is empty. Loops, BLE, drums, and plugins are not unloaded.

@@ -1,4 +1,5 @@
 #include "AudioEngine.h"
+#include "MixCapture.h"
 #include "DspHot.h"
 #include "Tracker.h"
 #include "BoardConfig.h"
@@ -140,8 +141,13 @@ static void renderBlock(int16_t *dst, int count) {
     if ((i & 31) == 0) {
       drainMidi();
     }
-    // The mix is a 32-bit sum. Dither is the last step down to the 16-bit DAC.
-    dst[i] = (int16_t)dspDither16(tracker.UpdateTracker(), &ditherState);
+    // Record the tracks before the sampler is added, so a take does not
+    // feed back into itself. The sampler buffer is fixed and does not
+    // allocate.
+    int mixed = tracker.UpdateTracker();
+    mixCaptureFeed(mixed);
+    mixed += mixCaptureMix();
+    dst[i] = (int16_t)dspDither16(mixed, &ditherState);
     for (int t = 0; t < 4; t++) {
       int a = dspAbs(tracker.lastSamples[t]);
       if (a > peak[t]) {

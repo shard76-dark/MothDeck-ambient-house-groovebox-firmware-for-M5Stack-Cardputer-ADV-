@@ -91,6 +91,13 @@ echo "Voices"
   -o /tmp/mothdeck_test_voices
 /tmp/mothdeck_test_voices
 
+echo "Sampler take"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_sampler.cpp" \
+  "$ROOT/src/MixCapture.cpp" \
+  -o /tmp/mothdeck_test_sampler
+/tmp/mothdeck_test_sampler
+
 echo "Scenes and chain"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_chain.cpp" \
