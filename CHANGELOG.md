@@ -2,6 +2,12 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.7.0 (2026-10-11)
+
+The manual is [docs/MANUAL.md](docs/MANUAL.md). The browser installer is [docs/flash.html](docs/flash.html), with one button for the PCM5102A image and one for the GPIO25 DAC image. Each writes a full factory image. Playback matches 1.5.0. There is no 1.6.0 image on this board: the Wi-Fi file page overflowed internal instruction RAM by 892 bytes with BLE and the PSRAM cache workaround still linked, and the drum tables are in flash so removing them would not free that RAM.
+
+Images: `mothdeck-ttgo-t8-1.7.0-test.bin` (1,896,768 bytes, magic `E9`, SHA-256 `987c6b48c24b49de28447b1de068af2c95bb4416a7c36c3de833a7281370b5dd`, static RAM 100648/327680) and `mothdeck-ttgo-t8-dac-1.7.0-test.bin` (1,890,848 bytes, magic `E9`, SHA-256 `7ce885939f8fcbbe8d7940c285ea08f611687bffdbf7c44c8187ac6788f6a109`, static RAM 99784/327680). Factory images for the browser installer are `docs/flash/mothdeck-ttgo-t8-full.bin` (1,962,304 bytes, SHA-256 `586e660664e7137f9610045e322e2b5994a68c25ed0c4f94f62f0991dc76e405`) and `docs/flash/mothdeck-ttgo-t8-dac-full.bin` (1,956,384 bytes, SHA-256 `2d4b5a3d2709fb2388bf911ca738903b52cc2649a76ed11fa341de6561d6c923`). Host tests passed. Nothing here was flashed or listened to.
+
 ## 1.5.0 (2026-10-11)
 
 The Song page can sample the master mix. `U` records the next 8192 frames (about 0.19 seconds) into a fixed buffer. `O` plays that take. `Y` plays it an octave higher. On the 4×4 pad, Hold F4, then F2, then F2 again opens Take: G# records, A plays, A# plays an octave higher. B stores a scene and E clears the chain, which the File page does not give up a key for. The buffer is reserved with the firmware and is never allocated from the loop windows, a kit, or BLE. Recording hears the tracks and not the take. Drums, loops, BLE, chords, plugins, and the chain stay loaded.
