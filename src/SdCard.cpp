@@ -198,6 +198,86 @@ bool SdCard::WriteAll(const char *path, const uint8_t *src, int len) {
   return (int)wrote == len;
 }
 
+bool SdCard::SizeOf(const char *path, int *out) {
+  SdBusGuard guard;
+  if (out) {
+    *out = -1;
+  }
+  if (!path || !out || !Ensure()) {
+    return false;
+  }
+  File file = SD.open(path, FILE_READ);
+  if (!file || file.isDirectory()) {
+    if (file) {
+      file.close();
+    }
+    return false;
+  }
+  *out = (int)file.size();
+  file.close();
+  return true;
+}
+
+bool SdCard::ReadAt(const char *path, uint32_t offset, uint8_t *dst, int maxBytes, int *outLen) {
+  SdBusGuard guard;
+  if (outLen) {
+    *outLen = 0;
+  }
+  if (!path || !dst || maxBytes <= 0 || !Ensure()) {
+    return false;
+  }
+  File file = SD.open(path, FILE_READ);
+  if (!file || !file.seek(offset)) {
+    if (file) {
+      file.close();
+    }
+    return false;
+  }
+  int n = file.read(dst, (size_t)maxBytes);
+  file.close();
+  if (n < 0) {
+    return false;
+  }
+  if (outLen) {
+    *outLen = n;
+  }
+  return true;
+}
+
+bool SdCard::WriteAt(const char *path, uint32_t offset, const uint8_t *src, int len) {
+  SdBusGuard guard;
+  if (!path || !src || len < 0 || !Ensure()) {
+    return false;
+  }
+  const char *mode = FILE_WRITE;
+  if (offset > 0) {
+    File cur = SD.open(path, FILE_READ);
+    int sz = (cur && !cur.isDirectory()) ? (int)cur.size() : -1;
+    if (cur) {
+      cur.close();
+    }
+    if (sz != (int)offset) {
+      return false;
+    }
+    mode = FILE_APPEND;
+  }
+  File file = SD.open(path, mode);
+  if (!file) {
+    return false;
+  }
+  size_t wrote = len == 0 ? 0 : file.write(src, (size_t)len);
+  file.close();
+  return (int)wrote == len;
+}
+
+bool SdCard::Rename(const char *from, const char *to) {
+  SdBusGuard guard;
+  if (!from || !to || !Ensure()) {
+    return false;
+  }
+  return SD.rename(from, to);
+}
+
 static void sdErr(char *err, int errLen, const char *msg) {
   if (err && errLen > 0) {
     snprintf(err, errLen, "%s", msg ? msg : "");

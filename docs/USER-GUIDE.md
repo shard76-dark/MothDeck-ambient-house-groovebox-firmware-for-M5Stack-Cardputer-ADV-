@@ -1,6 +1,6 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.5.0 (1,748,672 bytes, magic `E9`, SHA-256 `beacfd7f7420f3c833ae09fe55e99d4244289de0526eaa3505516fd15df33e11`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.6.0 (2,281,600 bytes, magic `E9`, SHA-256 `affa6a910a3223c712083131aa92b0e425cce5b3dc51ae42369f13f094498325`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
 
 1.3.0 includes the releases before it. Built-in drums and sound effects are signed 16-bit at 44100 Hz, rendered from the original synthesizers and stored in flash. The SD pack matches. A card kit that is larger than the 16 KB cache streams through that cache. Loops stream. Plugin samples stay within 4096 frames so they still load while BLE is on. The speaker mix is dithered by one 16-bit LSB.
 
@@ -13,6 +13,8 @@ Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv
 The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.3.0 still uses. On a 1.3.0 board the Settings version line says `v1.3.0`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`).
 
 On the Song page, `J` stores the current pattern and the four track mutes as the next scene, up to eight. `P` clears that chain. While a chain is stored, playback walks it at the end of each pattern. An empty chain leaves song mode, loops, and BLE as they were. A song that has a chain is version 5. An older song still loads.
+
+Settings has a WiFi row. Enter starts an access point named `Mothdeck`, password `mothdeck`. Open `http://192.168.4.1/` for the files under `/moth`. Upload and delete stay inside that folder. Turning the page on does not turn BLE off and does not unload loops. If there is not enough free internal memory, the toast says `WiFi unchanged` and the radio stays as it was.
 
 `U` records the next 8192 frames of the master mix, about 0.19 seconds, into a fixed buffer. `O` plays that take on top of the tracks. `Y` plays it an octave higher. The buffer is part of the firmware. It is not taken from the loop windows, the kit cache, or BLE. Recording hears the tracks and not the take, so the sampler does not feed back into itself. Drums, loops, BLE, plugins, and the chain keep working whether or not a take is stored.
 

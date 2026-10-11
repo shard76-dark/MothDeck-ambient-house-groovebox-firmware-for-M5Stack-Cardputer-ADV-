@@ -1,6 +1,7 @@
 #include "Ui.h"
 #include "ModalInput.h"
 #include "AudioEngine.h"
+#include "WifiPortal.h"
 #include "InstrumentBank.h"
 #include "LoopLibrary.h"
 #include "PcmHold.h"
@@ -1079,11 +1080,12 @@ static void drawSettings(BleMidi &ble) {
   canvas->setTextColor(COL_AMBER);
   canvas->setCursor(2, 16);
   canvas->print("Settings");
-  const char *rows[] = {"Speaker", "Brightness", "BLE name", "BLE", "Unload", "Battery", "Radio", "Card", "Bars"};
+  const char *rows[] = {"Speaker", "Brightness", "BLE name", "BLE", "Unload", "Battery", "Radio", "Card", "Bars",
+                        "WiFi"};
   int top = cursor > 3 ? cursor - 3 : 0;
   for (int i = 0; i < 5; i++) {
     int idx = top + i;
-    if (idx > 8) {
+    if (idx > 9) {
       break;
     }
     int y = 30 + i * 12;
@@ -1137,6 +1139,10 @@ static void drawSettings(BleMidi &ble) {
 #endif
     } else if (idx == 7) {
       canvas->print(sdCard.Mounted() ? "mounted" : "none");
+    } else if (idx == 8) {
+      canvas->printf("%u", snap.barCount ? snap.barCount : 1);
+    } else if (idx == 9) {
+      canvas->print(wifiPortalStatus());
     } else {
       canvas->printf("%u", snap.barCount ? snap.barCount : 1);
     }
@@ -1153,7 +1159,8 @@ static void drawSettings(BleMidi &ble) {
   } else if (!naming && cursor == 4) {
     legend(ble.Resident() ? (bleUnloadPending ? "Ent unload  Fn , keep" : "Ent unload") : "Ent load");
   } else {
-    legend(naming ? "Ent apply  Bksp  ` cancel" : (cursor == 8 ? "Fn ,/ bars" : "Lf/Rt change  Ent name"));
+    legend(naming ? "Ent apply  Bksp  ` cancel"
+                 : (cursor == 8 ? "Fn ,/ bars" : (cursor == 9 ? "Ent WiFi on/off" : "Lf/Rt change  Ent name")));
   }
 }
 
@@ -1580,7 +1587,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         }
         loopRow = clampi(loopRow - 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor - 1, 0, 8);
+        cursor = clampi(cursor - 1, 0, 9);
       }
       return;
     }
@@ -1602,7 +1609,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         }
         loopRow = clampi(loopRow + 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor + 1, 0, 8);
+        cursor = clampi(cursor + 1, 0, 9);
       }
       return;
     }
@@ -1955,6 +1962,12 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
       } else {
         doLoadBle(ble);
       }
+    } else if (page == kSettingsPage && cursor == 9) {
+      if (wifiPortalToggle()) {
+        toastSet(wifiPortalUp() ? "WiFi 192.168.4.1 pw mothdeck" : "WiFi off");
+      } else {
+        toastSet("WiFi unchanged");
+      }
     }
     return;
   }
@@ -1990,6 +2003,7 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
 }
 
 void uiPoll(BleMidi &ble) {
+  wifiPortalPoll();
   loopsBlocked = ble.UserEnabled();
   auto &kb = M5Cardputer.Keyboard;
   bool esc = kb.isKeyPressed('`');

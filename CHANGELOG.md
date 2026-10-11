@@ -2,6 +2,12 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.6.0 (2026-10-11)
+
+Settings has a WiFi row. Enter starts a soft access point named `Mothdeck`, password `mothdeck`, at `192.168.4.1`. The page lists `/moth` and can download, upload, and delete files under that folder. A path that leaves `/moth` is rejected. An upload is written to `/moth/_upload.tmp` and takes the place of the old file only after the body arrives, so a short upload leaves the previous file. The transfer locks the card one chunk at a time, so a loop can still refill. Starting Wi-Fi does not stop BLE, free the loop windows, or unload a kit. If the largest internal block is under 48 KB, or the access point does not come up, the row stays off and the toast says `WiFi unchanged`.
+
+Image: `releases/mothdeck-cardputer-adv.bin` (2,281,600 bytes, magic `E9`, SHA-256 `affa6a910a3223c712083131aa92b0e425cce5b3dc51ae42369f13f094498325`, static RAM 176292/327680). `releases/mothdeck-cardputer-adv-full.bin` is 2,347,136 bytes, SHA-256 `bf1eea39cb4e156c4f07db05302c8588a61c22daae051b8245915e38a18c4702`. Flash used is 2,246,687 of 3,932,160 bytes in one OTA slot. Host tests passed. Nothing here was flashed or listened to. The SD pack is unchanged from 1.3.0. The TTGO build of this radio does not link. BLE and the PSRAM cache workaround already fill internal instruction RAM, and Wi-Fi overflows that RAM by 892 bytes. The drum tables sit in flash, so removing them would not make the radio fit. BLE stays in the TTGO image. This 1.6.0 image is Cardputer only.
+
 ## 1.5.0 (2026-10-11)
 
 The Song page can sample the master mix. `U` records the next 8192 frames (about 0.19 seconds) into a fixed buffer. `O` plays that take back on top of the tracks. `Y` plays it an octave higher. The buffer is reserved with the firmware and is never allocated from the loop windows, the kit cache, or the BLE heap. Recording hears the tracks and not the take itself. Drums, loops, BLE, plugins, and the chain keep working whether or not a take is stored.

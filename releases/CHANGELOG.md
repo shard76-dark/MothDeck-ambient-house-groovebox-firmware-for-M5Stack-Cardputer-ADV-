@@ -1,3 +1,9 @@
+## 1.6.0 (2026-10-11)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (2,281,600 bytes, magic `E9`, chip `0x0009`, SHA-256 `affa6a910a3223c712083131aa92b0e425cce5b3dc51ae42369f13f094498325`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (2,347,136 bytes, SHA-256 `bf1eea39cb4e156c4f07db05302c8588a61c22daae051b8245915e38a18c4702`). Version on the Settings screen is 1.6.0. Static RAM is 176292/327680. Host tests passed. This image has not been tried on a Cardputer.
+
+Settings, WiFi row, Enter. The access point is `Mothdeck`, password `mothdeck`, page `http://192.168.4.1/`. Files stay under `/moth`. BLE, loops, drums, plugins, the sampler, and the chain stay loaded. If the access point cannot start, the toast says `WiFi unchanged`.
+
 ## 1.5.0 (2026-10-11)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (1,748,672 bytes, magic `E9`, chip `0x0009`, SHA-256 `beacfd7f7420f3c833ae09fe55e99d4244289de0526eaa3505516fd15df33e11`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,814,208 bytes, SHA-256 `6118ad07d9d8f8cf146b926d09894c945de31259c7338373e203b3e4236ea073`). Version on the Settings screen is 1.5.0. Static RAM is 156076/327680. Host tests passed. This image has not been tried on a Cardputer.
