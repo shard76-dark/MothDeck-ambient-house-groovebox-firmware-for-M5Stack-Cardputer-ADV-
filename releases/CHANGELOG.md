@@ -2,7 +2,9 @@
 
 Flash `releases/mothdeck-cardputer-adv.bin` (1,153,504 bytes, magic `E9`, chip `0x0009`, SHA-256 `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`). Version on the Settings screen is 1.2.4. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 137812/327680.
 
-MIDI clock from an MPC follows every tick in the packet, including several `0xF8` bytes that share one timestamp. Six ticks advance one step. The BPM on screen is smoothed over a beat and tracks from 40 to 200. Notes on one channel sound together, up to four voices. A fifth replaces the oldest note. Note-off releases only that note. Velocity 0 is note-off.
+MIDI clock from an MPC follows every tick in the packet, including several `0xF8` bytes that share one timestamp. Six ticks advance one step. The BPM on screen is smoothed over a beat and tracks from 40 to 200. Notes on one channel sound together, up to four voices. A fifth replaces the oldest note. Note-off, including velocity 0, releases only that note and channel. Notes in one packet each get a voice. Extra clocks are dropped when the queue is nearly full so a chord behind them is kept.
+
+This image includes the 1.2.2 and 1.2.3 behavior: BLE is reserved at boot, Unload BLE frees that block on the next boot, and incoming notes only play while Rec is off. The LilyGO TTGO T8 port is a different binary, pre-release [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4) on the `ttgo-t8` branch. It is not in this folder.
 
 The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,219,040 bytes, SHA-256 `0994efa5bfdf23d3fd5b662cb8db5016b2284c8a128c71b6e0efa112f433bd4d`). It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
 

@@ -188,8 +188,26 @@
       <li>Boot Launcher, press Enter on its splash, open the SD browser, and install that file.</li>
       <li>The next boot that follows the boot selection starts MothDeck: backlight, a one-second amber moth, then Play.</li>
     </ol>
-    <p>Version 1.2.4. The application image is 1,153,504 bytes, SHA-256 <code>014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1</code>. External MIDI clock follows every tick in a BLE packet, from 40 to 200 BPM. Notes on one track sound together, up to four, and note-off releases only that note. Incoming notes only play while Rec is off. 1.2.3 is superseded by this image.</p>
     <p>Unzip <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/raw/main/releases/mothdeck-sd-pack.zip">mothdeck-sd-pack.zip</a> onto the card root when you want the extra kits, loops, sample instruments, and patches. Checksums are in <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/SHA256SUMS">SHA256SUMS</a>.</p>
+
+    <h2>1.2.2 through 1.2.4</h2>
+    <p>Version 1.2.4 is the Cardputer image to flash. The application image is 1,153,504 bytes, SHA-256 <code>014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1</code>. It has not been tried on a Cardputer. Use earphones. 1.2.2 and 1.2.3 stay published, and this image supersedes them. The same three changes are in the <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/CHANGELOG.md">changelog</a>, the <a href="USER-GUIDE.md">user guide</a>, and <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md">install notes</a>.</p>
+    <ul class="grid">
+      <li><strong>1.2.2 — BLE stays resident</strong> NimBLE is reserved at boot, before the loop windows. Turning it on starts advertising and does not allocate, so it does not fail for lack of a free block. Unload BLE skips the stack on the next boot and frees that block for a large loop library. The toast says <code>BLE unloads after restart</code>.</li>
+      <li><strong>1.2.3 — Rec off only plays</strong> Incoming MIDI notes sound and are not written into the pattern while Rec is off. Space turns Rec on, and then they record at the playhead. MIDI Start and Continue do not arm Rec.</li>
+      <li><strong>1.2.4 — clock, polyphony, dropped notes</strong> Every clock in a BLE packet counts, including several <code>0xF8</code> bytes that share one timestamp. Six clocks advance one 16th. The BPM is smoothed over a beat and tracks from 40 to 200. A track sounds up to four notes at once. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel. Notes in one packet each get a voice. Extra clocks are dropped when the queue is nearly full, so a chord behind them is kept.</li>
+    </ul>
+
+    <h2>LilyGO TTGO T8</h2>
+    <p>A separate port of MothDeck 1.2.4 runs on a LilyGO TTGO T8 V1.8. It lives on the <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/tree/ttgo-t8"><code>ttgo-t8</code> branch</a> and is not merged into <code>main</code>. The Cardputer files on this page are a different binary. Do not flash a TTGO image onto a Cardputer, or the Cardputer image onto a T8.</p>
+    <p>The pre-release is <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4">ttgo-t8-v1.2.4</a>. Wiring, the menu, and the two images are in <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/ttgo-t8/docs/TTGO-T8.md">docs/TTGO-T8.md</a> on that branch.</p>
+    <ul class="grid">
+      <li><strong>PSRAM</strong> The T8 is an ESP32-WROVER with 4MB of PSRAM. Loop windows, samples, the pattern grid, chord notes, and the tracker sit there, so BLE and loops stay loaded together.</li>
+      <li><strong>Chords</strong> A step holds up to four notes. The first stays in the song file. The other three are stored in PSRAM and drawn as extra blocks in the piano roll.</li>
+      <li><strong>4×4 keypad</strong> A membrane keypad mounted with the connector on top. The top-left key is key 0. The menu is the original MothSynth function-key layout, and every MothDeck page is reachable from those 16 keys.</li>
+      <li><strong>ST7789 and audio</strong> The stock image drives an ST7789 240×135. Sound is a PCM5102A over I2S, with a second image that uses the internal 8-bit DAC on GPIO25.</li>
+    </ul>
+    <p class="note"><strong>Not tried on hardware.</strong> The TTGO 1.2.4 images have not been flashed, and the keys have not been pressed. The Cardputer 1.2.4 image has not been tried on a Cardputer either.</p>
 
     <h2>On the keyboard</h2>
     <p>Tab moves through Play, Instrument, FX, Mixer, Song, Loops, MIDI, Settings, and Exit. On the Instrument page, comma and slash load the previous and next drum kit from <code>/moth/drums</code>. Hold Esc (the grave key) or the front button for about 0.7 seconds to return to Launcher, and only when a real Launcher image is present.</p>

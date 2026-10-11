@@ -1,6 +1,12 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.4 (1,153,504 bytes, magic `E9`, SHA-256 `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`). Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does. An external clock counts every tick in a BLE packet, and the BPM follows from 40 to 200. Notes on one track sound together, up to four. NimBLE has been reserved at boot since 1.2.2, and On and Off only start or stop advertising. Unload BLE frees that memory for large loops on the next boot. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.4 (1,153,504 bytes, magic `E9`, SHA-256 `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
+
+1.2.4 includes the two releases before it:
+
+- **1.2.2.** NimBLE is reserved at boot, before the loop windows. On and Off only start or stop advertising. Unload BLE frees that block for large loops on the next boot. The toast says `BLE unloads after restart`.
+- **1.2.3.** Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does, and then those notes record at the playhead.
+- **1.2.4.** An external clock counts every tick in a BLE packet, including several that share one timestamp. The BPM follows from 40 to 200, smoothed over a beat. Six ticks advance one 16th. A track sounds up to four notes at once. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel. Notes in one packet each get a voice, and extra clocks are dropped when the queue is nearly full so a chord behind them is kept.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
@@ -206,8 +212,8 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | CC 1 | Low pass |
 | CC 7 / CC 39 | Volume, mapped to 0–8 |
 | Pitch bend | Per channel |
-| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Every clock in a packet counts. Tempo is smoothed over one beat |
-| Note on | Plays the track. Stored in the pattern only while Rec is on |
+| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Every clock in a packet counts, including several that share one timestamp. Tempo is smoothed over a beat, from 40 to 200. Extra clocks are dropped when the queue is nearly full so a following chord is kept |
+| Note on | Up to four notes sound on the track. A fifth replaces the oldest. Note-off, including velocity 0, releases only that note and channel. Stored in the pattern only while Rec is on |
 | Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec |
 | Continue `0xFB` | Resume, no jump. Does not arm Rec |
 | Stop `0xFC` | Stop and leave external sync. Space returns to the internal clock |
