@@ -102,6 +102,7 @@ Voice::Voice() {
   isDelay = false;
   envelopeNum = 0;
   filtLp = 0;
+  filtCoef = 0;
   filtLp2 = 0;
   delayLp = 0;
   revDamp = 0;
@@ -522,10 +523,23 @@ int Voice::ApplyInserts(int sample) {
   if (fx.filter == 1 || fx.filter == 2) {
     // Q10 state so a dark cutoff still moves in fractions of an LSB
     // instead of sticking and then jumping.
-    int coef = 500 + (int)fx.cutoff * 180;
-    if (coef > 22000) {
-      coef = 22000;
+    int want = 500 + (int)fx.cutoff * 180;
+    if (want > 22000) {
+      want = 22000;
     }
+    // About 6 ms. A cutoff edit slews instead of clicking, and a fresh
+    // note starts on the target so the attack is not dulled.
+    if (filtCoef <= 0) {
+      filtCoef = want;
+    } else {
+      int delta = want - filtCoef;
+      if (delta > -256 && delta < 256) {
+        filtCoef = want;
+      } else {
+        filtCoef += delta >> 8;
+      }
+    }
+    int coef = filtCoef;
     int x = sample;
     if (fx.filter == 1 && fx.res > 0) {
       int low = filtLp2 >> 10;
@@ -534,14 +548,16 @@ int Voice::ApplyInserts(int sample) {
       x = clamp30k(x);
     }
     int target = x << 10;
-    // Q10. The state times the coefficient does not fit MULL.
-    filtLp += (int)(((int64_t)(target - filtLp) * coef) >> 15);
+    // Q10. The product does not fit in 32 bits, so this is the wide multiply.
+    filtLp += dspMulShift(target - filtLp, coef, 15);
     int poleLimit = 30000 << 10;
     filtLp = dspClamp(filtLp, -poleLimit, poleLimit);
     if (fx.filter == 1) {
       int mid = filtLp >> 10;
       int target2 = mid << 10;
-      filtLp2 += (int)(((int64_t)(target2 - filtLp2) * coef) >> 15);
+      // The second pole sits a little lower, which steepens the slope.
+      int coef2 = coef - (coef >> 2);
+      filtLp2 += dspMulShift(target2 - filtLp2, coef2, 15);
       filtLp2 = dspClamp(filtLp2, -poleLimit, poleLimit);
       sample = filtLp2 >> 10;
     } else {
@@ -1221,6 +1237,7 @@ void Voice::ResetEffects() {
   delaySamples = 0;
   fx = TrackFx();
   filtLp = 0;
+  filtCoef = 0;
   filtLp2 = 0;
   delayLp = 0;
   revDamp = 0;
@@ -1234,6 +1251,7 @@ void Voice::CopyFx(const TrackFx &in) {
   fx = in;
   trackFxClamp(&fx);
   filtLp = 0;
+  filtCoef = 0;
   filtLp2 = 0;
   delayLp = 0;
   revDamp = 0;

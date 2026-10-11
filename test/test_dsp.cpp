@@ -78,9 +78,31 @@ static void testDither() {
   expect(dspDither16(-40000, &state) == -32768, "dither clamps the bottom");
 }
 
+static int mulRef(int a, int b, int sh) {
+  return (int)(((int64_t)a * (int64_t)b) >> sh);
+}
+
+static void testMulShift() {
+  const int as[] = {0, 1, -1, 180, -22000, 30000 << 10, -(30000 << 10), 32767, -32768};
+  const int bs[] = {0, 1, -1, 500, 22000, -180, 32767};
+  bool ok = true;
+  for (int ai = 0; ai < 9; ai++) {
+    for (int bi = 0; bi < 7; bi++) {
+      for (int sh = 0; sh <= 31; sh += 15) {
+        if (dspMulShift(as[ai], bs[bi], sh) != mulRef(as[ai], bs[bi], sh)) {
+          ok = false;
+        }
+      }
+    }
+  }
+  expect(ok, "the wide multiply matches a 64-bit product");
+  expect(dspMulShift(1000, 1000, 15) == mulRef(1000, 1000, 15), "a small product shifts the same way");
+}
+
 int main() {
   testHermite();
   testDither();
+  testMulShift();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;
