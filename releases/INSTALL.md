@@ -9,7 +9,7 @@ Two images are produced by `./build.sh`:
 
 Checksums are in `SHA256SUMS` next to the images. The application image starts with the byte `E9`.
 
-This folder's application image is 1.3.0 (1,747,152 bytes, magic `E9`, SHA-256 `41d81f307e98d707c24d484e4d22e981ed93002ac19aee4a0f877514e8949be0`). The full-flash image is 1,812,688 bytes, SHA-256 `58bfba6579d6dde36baef68f5022f1fc9b39675514ec79a507ca022cacdfef0a`. It has not been tried on a Cardputer. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is 869,531 bytes, SHA-256 `0023fdcdbe4f6b2345cffa2ad7c173b785d0ea1170a75214d7abf3052aae6c57`. The 1.2.2, 1.2.3, and 1.2.4 releases stay published and are superseded by this image.
+This folder's application image is 1.5.0 (1,748,672 bytes, magic `E9`, SHA-256 `beacfd7f7420f3c833ae09fe55e99d4244289de0526eaa3505516fd15df33e11`). The full-flash image is 1,814,208 bytes, SHA-256 `6118ad07d9d8f8cf146b926d09894c945de31259c7338373e203b3e4236ea073`. It has not been tried on a Cardputer. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is 869,531 bytes, SHA-256 `0023fdcdbe4f6b2345cffa2ad7c173b785d0ea1170a75214d7abf3052aae6c57`. Song page `U` records a short take of the master mix into a fixed buffer. `O` plays it and `Y` plays it an octave higher. Loops, BLE, drums, plugins, and the chain stay loaded.
 
 1.3.0 includes the behavior from 1.2.2, 1.2.3, and 1.2.4. Built-in drums and sound effects are signed 16-bit at 44100 Hz and live in flash. The SD pack is the same format. Loops stream. A card kit that does not fit the 16 KB cache streams through it. Plugin samples stay within 4096 frames.
 

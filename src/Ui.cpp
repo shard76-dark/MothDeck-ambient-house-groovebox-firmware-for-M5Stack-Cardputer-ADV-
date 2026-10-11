@@ -952,7 +952,7 @@ static void drawSong() {
                  snap.chainLen, 2 - snap.masterVolume);
   canvas->setCursor(4, 104);
   canvas->print("S save L load X del T stat");
-  legend("N new  J scene  P clear  G all");
+  legend("N new J scn P clr U rec O ply Y up");
 }
 
 static void drawLoops() {
@@ -1831,6 +1831,9 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     else if (c == 'g') audioCommand('*', 2);
     else if (c == 'j') audioCommand('q', 0);
     else if (c == 'p') audioCommand('q', 1);
+    else if (c == 'u') audioCommand('u', 0);
+    else if (c == 'o') audioCommand('u', 2);
+    else if (c == 'y') audioCommand('u', 1);
     else if (c == 'm') audioCommand('C', 0);
     else if (c == 'h') audioCommand('H', 0);
     else if (c == 'b') audioCommand('B', (snap.bpmSlot + 1) & 3);

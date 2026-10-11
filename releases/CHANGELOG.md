@@ -1,3 +1,9 @@
+## 1.5.0 (2026-10-11)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,748,672 bytes, magic `E9`, chip `0x0009`, SHA-256 `beacfd7f7420f3c833ae09fe55e99d4244289de0526eaa3505516fd15df33e11`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,814,208 bytes, SHA-256 `6118ad07d9d8f8cf146b926d09894c945de31259c7338373e203b3e4236ea073`). Version on the Settings screen is 1.5.0. Static RAM is 156076/327680. Host tests passed. This image has not been tried on a Cardputer.
+
+The Song page records the master mix with `U` (8192 frames, about 0.19 seconds) into a fixed buffer. `O` plays that take. `Y` plays it an octave higher. The buffer is not taken from the loop windows, the kit cache, or BLE. Recording hears the tracks and not the take. Drums, loops, BLE, plugins, and the chain stay loaded.
+
 ## 1.4.0 (2026-10-11)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (1,747,920 bytes, magic `E9`, chip `0x0009`, SHA-256 `88ebeca4ffc5f0b81d4b940774902f8f968cdc17c96ec11a718e9a276687d15d`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,813,456 bytes, SHA-256 `d8e558662d1c28bb75d6d57c6ae3a3e0a9efec2016ab16318d850c77e0ec2295`). Version on the Settings screen is 1.4.0. Static RAM is 139676/327680. Host tests passed. This image has not been tried on a Cardputer.
