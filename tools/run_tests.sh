@@ -129,6 +129,20 @@ for name in names:
 print("card sfx ok")
 PY
 
+echo "Scenes and chain"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_chain.cpp" \
+  "$ROOT/src/Tracker.cpp" \
+  "$ROOT/src/Voice.cpp" \
+  "$ROOT/src/ToneSynth.cpp" \
+  "$ROOT/src/PatchBlocks.cpp" \
+  "$ROOT/src/SongFile.cpp" \
+  "$ROOT/src/MidiProtocol.cpp" \
+  "$ROOT/src/default_samples.cpp" \
+  "$ROOT/test/pcm_hold_stub.cpp" \
+  -o /tmp/mothdeck_test_chain
+/tmp/mothdeck_test_chain
+
 echo "Plugins, loops, WAV, synth render"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_plugins.cpp" \

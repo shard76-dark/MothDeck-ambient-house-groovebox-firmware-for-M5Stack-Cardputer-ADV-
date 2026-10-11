@@ -2,6 +2,12 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.4.0 (2026-10-11)
+
+The Song page stores up to eight scenes. `J` saves the current pattern and the four track mutes as the next scene. `P` clears the chain. While a chain is stored, playback walks it at the end of each pattern and applies that scene's pattern and mutes. An empty chain leaves song mode alone. Loops, BLE, drums, chords, and plugins stay loaded. A song with a chain is version 5. Older songs still load.
+
+Images: `mothdeck-ttgo-t8-1.4.0-test.bin` (1,895,392 bytes, magic `E9`, SHA-256 `8137d0bd4d73b3a80c00204d960bb3fd030becedaefa021fb098362f56b419db`, static RAM 84240/327680) and `mothdeck-ttgo-t8-dac-1.4.0-test.bin` (1,889,456 bytes, magic `E9`, SHA-256 `04e875f77b1fdc75ca6b626f40ffc1dd814b52bd75d113e0bd3a398dd607a12e`, static RAM 83376/327680). The factory slot is still 2,031,616 bytes (margins 136,224 and 142,160). Host tests passed. Nothing here was flashed or listened to. The 1.3.0 images stay and are superseded. The Cardputer 1.4.0 image is a different binary.
+
 ## 1.3.0 (2026-10-11)
 
 Built-in drums and sound effects are rendered again at signed 16-bit, 44100 Hz, from `tools/voices.py`. They are not a stretch of the old 8-bit tables. A drum at its recorded pitch plays one frame per output sample. Pitched reads use 4-point Hermite interpolation. The four tracks sum in 32-bit, and the speaker sample is that sum with triangular dither of one 16-bit LSB.

@@ -137,6 +137,30 @@ void trackFxClamp(TrackFx *fx) {
   if (fx->tremolo > 100) fx->tremolo = 100;
 }
 
+void songChainClamp(SongChain *chain) {
+  if (!chain) {
+    return;
+  }
+  if (chain->len > kChainScenes) {
+    chain->len = kChainScenes;
+  }
+  if (chain->len == 0) {
+    chain->pos = 0;
+  } else if (chain->pos >= chain->len) {
+    chain->pos = 0;
+  }
+  for (int i = 0; i < kChainScenes; i++) {
+    if (chain->pattern[i] > 3) {
+      chain->pattern[i] = 3;
+    }
+    chain->mute[i] = (uint8_t)(chain->mute[i] & 0x0F);
+  }
+}
+
+bool songNeedsV5(const SongData &song) {
+  return song.chain.len > 0;
+}
+
 bool songNeedsV4(const SongData &song) {
   for (int t = 0; t < kSongTracks; t++) {
     const TrackBlock &b = song.blocks[t];
@@ -157,7 +181,7 @@ bool songNeedsV3(const SongData &song) {
 }
 
 bool songNeedsV2(const SongData &song) {
-  if (songNeedsV4(song) || songNeedsV3(song) || song.pluginCount > 0 || song.currentVoice > 11) {
+  if (songNeedsV5(song) || songNeedsV4(song) || songNeedsV3(song) || song.pluginCount > 0 || song.currentVoice > 11) {
     return true;
   }
   for (int t = 0; t < kSongTracks; t++) {
@@ -188,12 +212,18 @@ int songEncodedSize(const SongData &song) {
   if (!songNeedsV2(song)) {
     return kSongFileBytes;
   }
+  bool v5 = songNeedsV5(song);
+  bool v4 = v5 || songNeedsV4(song);
+  bool v3 = v4 || songNeedsV3(song);
   int n = v2Payload(song) + 2;
-  if (songNeedsV3(song) || songNeedsV4(song)) {
+  if (v3) {
     n += kSongTracks * kSongFxBytes;
   }
-  if (songNeedsV4(song)) {
+  if (v4) {
     n += kSongTracks * kSongBlockBytes;
+  }
+  if (v5) {
+    n += kSongChainBytes;
   }
   return n;
 }
@@ -232,6 +262,17 @@ static void writeRefs(const SongData &song, uint8_t *dst, int &i, int count) {
     i += kPluginNameLen;
     memcpy(dst + i, song.loops[t].name, kPluginNameLen);
     i += kPluginNameLen;
+  }
+}
+
+static void writeChain(const SongData &song, uint8_t *dst, int &i) {
+  dst[i++] = song.chain.len;
+  dst[i++] = song.chain.pos;
+  for (int s = 0; s < kChainScenes; s++) {
+    dst[i++] = song.chain.pattern[s];
+  }
+  for (int s = 0; s < kChainScenes; s++) {
+    dst[i++] = song.chain.mute[s];
   }
 }
 
@@ -308,14 +349,15 @@ int songEncode(const SongData &song, uint8_t *dst, int dstLen) {
   if (!dst) {
     return 0;
   }
-  bool v4 = songNeedsV4(song);
+  bool v5 = songNeedsV5(song);
+  bool v4 = v5 || songNeedsV4(song);
   bool v3 = v4 || songNeedsV3(song);
   bool v2 = songNeedsV2(song);
   int need = songEncodedSize(song);
   if (dstLen < need) {
     return 0;
   }
-  uint8_t version = v4 ? kSongVersionV4 : (v3 ? kSongVersionV3 : (v2 ? kSongVersionV2 : kSongVersion));
+  uint8_t version = v5 ? kSongVersionV5 : (v4 ? kSongVersionV4 : (v3 ? kSongVersionV3 : (v2 ? kSongVersionV2 : kSongVersion)));
   int i = writeBody(song, dst, version);
   if (!v2) {
     if (i != kSongFileBytes - 2) {
@@ -337,6 +379,9 @@ int songEncode(const SongData &song, uint8_t *dst, int dstLen) {
   }
   if (v4) {
     writeBlocks(song, dst, i);
+  }
+  if (v5) {
+    writeChain(song, dst, i);
   }
   if (i != need - 2) {
     return 0;
@@ -388,7 +433,8 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
     return false;
   }
   uint8_t version = src[4];
-  if (version != kSongVersion && version != kSongVersionV2 && version != kSongVersionV3 && version != kSongVersionV4) {
+  if (version != kSongVersion && version != kSongVersionV2 && version != kSongVersionV3 && version != kSongVersionV4 &&
+      version != kSongVersionV5) {
     return false;
   }
   memset(song, 0, sizeof(*song));
@@ -439,11 +485,14 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
     return false;
   }
   int expect = kSongV1Payload + 1 + (int)count * (1 + kPluginNameLen) + kSongTracks * (2 + kPluginNameLen * 2);
-  if (version == kSongVersionV3 || version == kSongVersionV4) {
+  if (version == kSongVersionV3 || version == kSongVersionV4 || version == kSongVersionV5) {
     expect += kSongTracks * kSongFxBytes;
   }
-  if (version == kSongVersionV4) {
+  if (version == kSongVersionV4 || version == kSongVersionV5) {
     expect += kSongTracks * kSongBlockBytes;
+  }
+  if (version == kSongVersionV5) {
+    expect += kSongChainBytes;
   }
   if (expect != payload) {
     return false;
@@ -474,7 +523,7 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
       return false;
     }
   }
-  if (version == kSongVersionV3 || version == kSongVersionV4) {
+  if (version == kSongVersionV3 || version == kSongVersionV4 || version == kSongVersionV5) {
     for (int t = 0; t < kSongTracks; t++) {
       TrackFx &fx = song->fx[t];
       fx.filter = src[i++];
@@ -492,7 +541,7 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
       trackFxClamp(&fx);
     }
   }
-  if (version == kSongVersionV4) {
+  if (version == kSongVersionV4 || version == kSongVersionV5) {
     for (int t = 0; t < kSongTracks; t++) {
       TrackBlock &b = song->blocks[t];
       b.scaleMode = src[i++];
@@ -504,6 +553,17 @@ bool songDecode(const uint8_t *src, int srcLen, SongData *song) {
       b.glideMs = readU16(src, i);
       trackBlockClamp(&b);
     }
+  }
+  if (version == kSongVersionV5) {
+    song->chain.len = src[i++];
+    song->chain.pos = src[i++];
+    for (int s = 0; s < kChainScenes; s++) {
+      song->chain.pattern[s] = src[i++];
+    }
+    for (int s = 0; s < kChainScenes; s++) {
+      song->chain.mute[s] = src[i++];
+    }
+    songChainClamp(&song->chain);
   }
   if (i != payload) {
     return false;
