@@ -122,7 +122,7 @@ Type into the USB serial monitor at 115200. The UI lowercases letters.
 | Printable ASCII | That key (`z` `x` `c` play notes, `s` saves on the Song page, and so on) |
 | ESC (`0x1B`) then one byte | Fn plus that key. Fn+`;` is ESC then `;`. |
 
-Shift, Ctrl, and Alt are not sent as their own bytes. ESC then a byte is Fn plus that key, the same as a Fn chord on the pad. The serial port still types the whole alphabet, including letters the pad does not reach. It still works with the panel unplugged, and it still works if the pad is off. Hold-to-exit is not on the serial port.
+Shift, Ctrl, and Alt are not sent as their own bytes. ESC (`0x1B`) then one byte is Fn plus that key, the same chords the Cardputer keyboard uses. The serial port still types the whole alphabet, so every Cardputer key still works from the USB monitor, including with the panel unplugged and with the pad off. Hold-to-exit is not on the serial port. This board has no Launcher.
 
 ### 4×4 keypad
 
@@ -139,40 +139,161 @@ D  C  B  A
 
 The scan index is `row * 4 + (3 - col)` on the firmware row and column. Key 0 is the top-left `*`. The pins are compile-time `PIN_MX_R0`..`PIN_MX_R3` and `PIN_MX_C0`..`PIN_MX_C3`. Any one of them set to `-1` leaves the pad off.
 
-Logical layout, connector on top. The letters are the Cardputer piano keys (C2–B5). Oct steps through those four octaves. The Cardputer's upper `q`–`]` row is not on the pad. High C (`,`) is Oct + D#.
+The menu is the MothSynth 4×4, not a map of the Cardputer letters. Tap a function key on the top row, release it, then tap the key that runs that command. The footer names the armed function. Hold the same function key to open the MothDeck pages that the original sixteen commands do not cover. Press that function key again to leave. One key at a time: a third key on a diode-less pad ghosts.
 
 ```
                  connector / pins on top
-        0 C      1 C#      2 D       3 D#
-        4 E      5 F       6 F#      7 G
-        8 G#     9 A      10 A#     11 B
-       12 Shift 13 Fn    14 Play   15 Oct
+        0 F1     1 F2      2 F3      3 F4
+        4 G#     5 A       6 A#      7 B
+        8 E      9 F      10 F#     11 G
+       12 C     13 C#     14 D      15 D#
 ```
 
-Shift and Fn do nothing if you only tap them. Play and Oct do their base action on release, unless another key was pressed while they were held. Then that other key uses the Play or Oct layer, and the Play or Oct tap is dropped. Hold one modifier. A third key on a diode-less pad ghosts.
+With no function armed, the bottom twelve keys play C through B in that layout. C is the bottom-left key. Octave is F1, then F1–F4 for octaves 0–3, which covers C2–B5 together with the roll cursor. The Cardputer's upper `q`–`]` row is not a separate pad row.
 
-| Key | Base | Shift | Fn | Hold Oct | Hold Play |
+Rows idle high. One row goes low, the columns are read, then the row goes high again. A press is a column reading low. The mask has to sit still for about 20 ms. A function key that is still down after about half a second opens its extended menu. One event is delivered per poll.
+
+#### Live, and the four function menus
+
+These match the original MothOS keypad. The extended menus are below.
+
+| Key | Live | F1 then | F2 then | F3 then | F4 then |
 | --- | --- | --- | --- | --- | --- |
-| 0 C | C `z` | track 1 | up | sampler `'` | clear track 1 |
-| 1 C# | C# `s` | track 2 | down | copy `.` | clear track 2 |
-| 2 D | D `x` | track 3 | left | paste `/` | clear track 3 |
-| 3 D# | D# `d` | track 4 | right | kit − / high C `,` | clear track 4 |
-| 4 E | E `c` | pattern 1 | page − | quantize `q` | clear pattern 1 |
-| 5 F | F `v` | pattern 2 | `9` | rescan `r` | clear pattern 2 |
-| 6 F# | F# `g` | pattern 3 | `0` | BLE name `e` | clear pattern 3 |
-| 7 G | G `b` | pattern 4 | quieter | slot status `t` | clear pattern 4 |
-| 8 G# | G# `h` | page + | louder | master `h` | new song, current length |
-| 9 A | A `n` | menu `` ` `` | lowpass `a` | `i` | |
-| 10 A# | A# `j` | backspace | retrig `f` | `o` | |
-| 11 B | B `m` | Enter | wobble `k` | `u` | |
-| 14 Play | play / stop / rec | BPM + | yes `y` | load / echo `l` | |
-| 15 Oct | octave | BPM − | note length `;` | | |
+| F1 | arm F1 | octave 0 | mute | track 1 | note length 1 |
+| F2 | arm F2 | octave 1 | volume | track 2 | note length 2 |
+| F3 | arm F3 | octave 2 | overdrive | track 3 | note length 3 |
+| F4 | arm F4 | octave 3 | solo | track 4 | play / stop / rec |
+| C | C | Drums | effects off | clear pattern 1 | new song, 2 bars |
+| C# | C# | SFX | low pass | clear pattern 2 | new song, 4 bars |
+| D | D | Sine | retrig | clear pattern 3 | master volume |
+| D# | D# | Square | wobble | clear pattern 4 | song / pattern |
+| E | E | Saw | echo | pattern 1 | copy pattern |
+| F | F | Tri | chord | pattern 2 | paste pattern |
+| F# | F# | Organ | whoosh | pattern 3 | paste all |
+| G | G | Pluck | pitch bend | pattern 4 | sampler |
+| G# | G# | Bell | fade out | clear track 1 | BPM slot 1 |
+| A | A | Flute | fade in | clear track 2 | BPM slot 2 |
+| A# | A# | Bass | no fade | clear track 3 | BPM slot 3 |
+| B | B | Pad | loop envelope | clear track 4 | BPM slot 4 |
 
-A tap of Play or Oct uses whichever other modifier is still held. Shift then Play is BPM +. Fn then Play is `y`, so the BLE save question can be answered (A is `n` for no). Oct then Play is `l` (echo on Play, Load on Song). Fn then Oct is the note-length key.
+F4 then F4 starts and stops, and starting arms Rec, the same as Space on the Cardputer. While a pattern is already playing, Rec in the Settings menu below stores notes or only plays them. A new song from F4 then C or C# clears the patterns. F1's twelve instruments are the built-ins. Plugins, patches, and the Loops instrument are in the Sound menu.
 
-Song-page letters fall out of the note keys: S save is C#, X delete is D, C copy is E, V paste is F, G paste-all is F#, B is G, H master is G#, N is A, M is B. Load is Oct + Play. Letters the pad does not have stay on the serial port.
+The save question (`MIDI mode: loops off`) uses D for yes, D# for no, and F1 to leave BLE off.
 
-Rows idle high. One row goes low, the columns are read, then the row goes high again. A press is a column reading low. The mask has to sit still for about 20 ms. One event is delivered per poll.
+#### Hold F1 — Edit and Sound
+
+Hold F1. The roll is on screen. F1 leaves. F2 is the cursor page. F3 is Sound. F4 enters note entry.
+
+Cursor page:
+
+| Key | Action |
+| --- | --- |
+| G# | one step earlier |
+| A | one step later |
+| A# | cursor up a semitone |
+| B | cursor down a semitone |
+| E | delete the note under the cursor |
+| F | cycle that note's length, 1–4 steps |
+| F# | octave down |
+| G | octave up |
+| C | previous bar |
+| C# | next bar |
+| D | copy the previous step's first note onto the cursor |
+| D# | piano roll / 16-step strip |
+
+Note entry (F4 from the cursor page) writes a chord the way the roll does: each of the twelve note keys adds that pitch at the cursor, and a second pitch in the same column stacks. F2 and F3 move one step earlier or later. F1 returns to the cursor page. F4 switches the roll and the strip. Delete and length stay on the cursor page, so a column can be built and then trimmed.
+
+Sound (F3 from Edit). The Instrument page is on screen. The list is every built-in, then Loops, then each folder under `/moth/instruments`, including patches.
+
+| Key | Action |
+| --- | --- |
+| G# | previous row |
+| A | next row |
+| A# | assign that row to the selected track |
+| B | rescan instruments, kits, and loops |
+| E | previous drum kit |
+| F | next drum kit |
+| F# | sampler mode |
+| G | show the Instrument page |
+| C | Loops instrument on this track |
+
+#### Hold F2 — FX and Mixer
+
+Hold F2. F2 leaves. F1 is the FX page. F3 is the Mixer page.
+
+FX. G# and A move through every insert row: filter, cutoff, resonance, delay, feedback, mix, reverb, crush, drive, chorus, tremolo, scale, root, arp, glide, osc2, blend, and coarse. A# lowers the value, B raises it. E and F select the previous and next track.
+
+Mixer. G# and A raise and lower the track fader (0–8). A# mutes. B solos. E and F select the track.
+
+#### Hold F3 — Loops
+
+Hold F3. The Loops page is on screen. F3 leaves.
+
+| Key | Action |
+| --- | --- |
+| G# | previous entry |
+| A | next entry |
+| A# | previous library |
+| B | next library |
+| E | audition |
+| F | launch onto the selected track |
+| F# | stop the loop on that track |
+| G | quantize: now, beat, bar |
+| C | rescan loops |
+
+#### Hold F4 — Pages, file, and settings
+
+Hold F4. F4 leaves. F1 is Pages, F2 is File, F3 is Settings.
+
+Pages. One key opens that screen:
+
+| Key | Page |
+| --- | --- |
+| G# | Play |
+| A | Instrument |
+| A# | FX |
+| B | Mixer |
+| E | Song |
+| F | Loops |
+| F# | MIDI |
+| G | Settings |
+| C | Exit. This image has no Launcher, so the footer says `Launcher not found` |
+| C# | confirm Exit, only when a Launcher image is present |
+| D | previous page |
+| D# | next page |
+
+File. The Song page is on screen. Slots are `/moth` song slots 1–4.
+
+| Key | Action |
+| --- | --- |
+| G# | save |
+| A | load |
+| A# | delete the slot |
+| B | slot status |
+| E F F# G | select slot 1, 2, 3, 4 |
+| C | new song, one bar longer, wrapping from 8 back to 1 |
+| C# | new song at the current length |
+| D | copy pattern |
+| D# | paste pattern |
+
+Settings.
+
+| Key | Action |
+| --- | --- |
+| G# | speaker down |
+| A | speaker up |
+| A# | brightness down |
+| B | brightness up |
+| E | BLE off |
+| F | BLE on |
+| F# | unload BLE, or load it after an unload. Takes effect on the next boot |
+| G | cancel a pending unload |
+| C | pattern one bar shorter |
+| C# | pattern one bar longer, 1–8 |
+| D | Rec. While the pattern is playing, this stores notes or only plays them |
+| D# | BLE name |
+
+The name editor replaces the menu until you finish it. F1 cancels. F2 cycles four letter pages (`abcdefghijkl`, `mnopqrstuvwx`, `yz0123456789`, `-_`). The twelve note keys append the matching character. F3 deletes one character. F4 stores the name and restarts advertising when the radio is on. The screen shows the same name row as Settings.
 
 #### Wiring
 

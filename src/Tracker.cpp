@@ -849,6 +849,10 @@ void Tracker::SetCommand(char command, int val) {
       TogglePlayStop();
       SetHint(recOn ? "Rec On" : "Rec Off");
       break;
+    case 'R':
+      recOn = !recOn;
+      SetHint(recOn ? "Rec On" : "Rec Off");
+      break;
     case 'p':
       if (isPlaying) {
         TogglePlayStop();

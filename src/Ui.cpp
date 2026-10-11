@@ -1284,6 +1284,25 @@ static void drawBleAsk() {
   canvas->print("` cancels");
 }
 
+#if MOTHDECK_BOARD_TTGO
+static char padLegend[48];
+static int padLatch = -1;
+static int padMenu = -1;
+static int padSub = 0;
+static bool padEntry = false;
+static bool padNaming = false;
+static int padGlyph = 0;
+static int padOct = 1;
+
+static void padLegendSet(const char *msg) {
+  if (!msg || !msg[0]) {
+    padLegend[0] = 0;
+    return;
+  }
+  snprintf(padLegend, sizeof(padLegend), "%s", msg);
+}
+#endif
+
 void uiDraw(BleMidi &ble) {
   if (!canvas) {
     return;
@@ -1312,6 +1331,11 @@ void uiDraw(BleMidi &ble) {
     case kSettingsPage: drawSettings(ble); break;
     default: drawExit(); break;
   }
+#if MOTHDECK_BOARD_TTGO
+  if (padLegend[0]) {
+    legend(padLegend);
+  }
+#endif
   drawToast();
   if (bleAsk) {
     drawBleAsk();
@@ -2062,6 +2086,596 @@ static void handleState(const DeckKeys &st, BleMidi &ble) {
   }
 }
 
+#if MOTHDECK_BOARD_TTGO
+
+static const char *kPadGlyphs[] = {"abcdefghijkl", "mnopqrstuvwx", "yz0123456789", "-_"};
+
+static void padLive() {
+  padMenu = -1;
+  padSub = 0;
+  padEntry = false;
+  padNaming = false;
+  naming = false;
+  padLegendSet(0);
+}
+
+static void padGoto(int p) {
+  if (p == kExitPage && !launcherOk) {
+    toastSet("Launcher not found");
+    return;
+  }
+  if (p < 0 || p >= kPageCount) {
+    return;
+  }
+  page = p;
+  overlay = false;
+  if (!padNaming) {
+    naming = false;
+  }
+}
+
+static void padOpen(int which) {
+  padLatch = -1;
+  padMenu = which;
+  padSub = 0;
+  padEntry = false;
+  padNaming = false;
+  naming = false;
+  audioReadSnap(&snap);
+  padOct = snap.octave;
+  if (which == 0) {
+    padGoto(0);
+    rollView = true;
+    rollFollow = false;
+    padLegendSet("Edit  F1 close  F3 sound");
+  } else if (which == 1) {
+    padGoto(kFxPage);
+    padLegendSet("FX  F2 close  F3 mixer");
+  } else if (which == 2) {
+    padGoto(kLoopsPage);
+    padLegendSet("Loops  F3 close");
+  } else {
+    padLegendSet("Pages  F4 close  F2 file");
+  }
+}
+
+static void padWriteRoll(int pitch) {
+  audioReadSnap(&snap);
+  page = 0;
+  rollFollow = false;
+  if (rollView && !snap.playing) {
+    audioCommand('r', (rollStep & 0xFF) | ((pitch & 0x0F) << 8) | ((padOct & 0x0F) << 12));
+  } else {
+    if (padOct != (int)snap.octave) {
+      audioCommand('O', padOct);
+    }
+    audioCommand('N', pitch);
+  }
+}
+
+static void padDeleteRoll() {
+  page = 0;
+  rollView = true;
+  rollFollow = false;
+  int cover = rollCoverStart();
+#if MOTHDECK_CHORDS
+  if (cover >= 0) {
+    audioCommand('e', rollPitchPack(cover));
+  } else {
+    audioCommand('e', rollStep);
+  }
+#else
+  audioCommand('e', cover >= 0 ? cover : rollStep);
+#endif
+}
+
+static void padHoldRoll() {
+  audioReadSnap(&snap);
+  page = 0;
+  rollView = true;
+  rollFollow = false;
+  int cover = rollCoverStart();
+  if (cover >= 0) {
+#if MOTHDECK_CHORDS
+    audioCommand('g', rollPitchPack(cover));
+#else
+    audioCommand('g', cover);
+#endif
+  } else {
+    audioCommand('L', (int)snap.envLen & 3);
+  }
+}
+
+static void padDupStep() {
+  audioReadSnap(&snap);
+  int src = rollStep - 1;
+  if (src < 0 || src >= (int)snap.rollCount) {
+    toastSet("Empty");
+    return;
+  }
+  uint8_t cell = snap.roll[src];
+  if ((cell & 0x0F) == 0) {
+    toastSet("Empty");
+    return;
+  }
+  int pitch = (cell & 0x0F) - 1;
+  int len = (cell >> 4) & 3;
+  int oct = (cell >> 6) & 3;
+  page = 0;
+  rollView = true;
+  rollFollow = false;
+  audioCommand('r', (rollStep & 0xFF) | ((pitch & 0x0F) << 8) | ((oct & 0x0F) << 12) | (len << 16));
+}
+
+static void padNudgeOct(int dir) {
+  padOct = clampi(padOct + dir, 0, 3);
+  audioCommand('O', padOct);
+}
+
+static void padEditKey(int key) {
+  if (padEntry) {
+    if (key == 0) {
+      padEntry = false;
+      padLegendSet("Edit  F1 close  F4 notes");
+      return;
+    }
+    if (key == 1) {
+      rollFollow = false;
+      rollStep = clampi(rollStep - 1, 0, rollPatLen() - 1);
+      clampRoll();
+      return;
+    }
+    if (key == 2) {
+      rollFollow = false;
+      rollStep = clampi(rollStep + 1, 0, rollPatLen() - 1);
+      clampRoll();
+      return;
+    }
+    if (key == 3) {
+      rollView = !rollView;
+      toastSet(rollView ? "Piano roll" : "Step view");
+      return;
+    }
+    int pitch = ttgoNotePitch(key);
+    if (pitch >= 0) {
+      padWriteRoll(pitch);
+    }
+    return;
+  }
+  if (key == 1) {
+    padSub = 0;
+    padGoto(0);
+    rollView = true;
+    padLegendSet("Edit  F1 close  F4 notes");
+    return;
+  }
+  if (key == 2) {
+    padSub = 1;
+    padGoto(1);
+    padLegendSet("Sound  F1 close  F2 edit");
+    return;
+  }
+  if (key == 3) {
+    padEntry = true;
+    padGoto(0);
+    rollView = true;
+    rollFollow = false;
+    padLegendSet("Notes  F1 cursor  F2/F3 step");
+    return;
+  }
+  if (padSub == 1) {
+    if (key == 4) {
+      cursor = clampi(cursor - 1, 0, instCount() - 1);
+      padGoto(1);
+    } else if (key == 5) {
+      cursor = clampi(cursor + 1, 0, instCount() - 1);
+      padGoto(1);
+    } else if (key == 6) {
+      padGoto(1);
+      assignInstrument();
+    } else if (key == 7) {
+      instrumentBank.Scan();
+      drumKit.Scan();
+      loopLibrary.Scan();
+      if (loopsBlocked) {
+        toastSet("MIDI mode: loops off");
+      } else {
+        loopLibrary.PreloadInstrument(nullptr, 0);
+        toastSet(sdCard.Mounted() ? "Rescanned" : "No SD card");
+      }
+    } else if (key == 8) {
+      cycleKit(-1);
+    } else if (key == 9) {
+      cycleKit(1);
+    } else if (key == 10) {
+      audioCommand('*', 3);
+    } else if (key == 11) {
+      padGoto(1);
+    } else if (key == 12) {
+      audioCommand('I', kLoopsVoice);
+    }
+    return;
+  }
+  page = 0;
+  rollView = true;
+  if (key == 4) {
+    rollFollow = false;
+    rollStep = clampi(rollStep - 1, 0, rollPatLen() - 1);
+    clampRoll();
+  } else if (key == 5) {
+    rollFollow = false;
+    rollStep = clampi(rollStep + 1, 0, rollPatLen() - 1);
+    clampRoll();
+  } else if (key == 6) {
+    rollFollow = false;
+    rollPitch = clampi(rollPitch + 1, 0, kRollRows - 1);
+  } else if (key == 7) {
+    rollFollow = false;
+    rollPitch = clampi(rollPitch - 1, 0, kRollRows - 1);
+  } else if (key == 8) {
+    padDeleteRoll();
+  } else if (key == 9) {
+    padHoldRoll();
+  } else if (key == 10) {
+    padNudgeOct(-1);
+  } else if (key == 11) {
+    padNudgeOct(1);
+  } else if (key == 12) {
+    audioCommand('W', -1);
+  } else if (key == 13) {
+    audioCommand('W', 1);
+  } else if (key == 14) {
+    padDupStep();
+  } else if (key == 15) {
+    rollView = !rollView;
+    toastSet(rollView ? "Piano roll" : "Step view");
+  }
+}
+
+static void padFxKey(int key) {
+  if (key == 0) {
+    padSub = 0;
+    padGoto(kFxPage);
+    padLegendSet("FX  F2 close  F3 mixer");
+    return;
+  }
+  if (key == 2) {
+    padSub = 1;
+    padGoto(kMixerPage);
+    padLegendSet("Mix  F2 close  F1 fx");
+    return;
+  }
+  if (padSub == 1) {
+    audioReadSnap(&snap);
+    if (key == 4) {
+      audioCommand('v', clampi((int)snap.vol[snap.track] + 1, 0, 8));
+    } else if (key == 5) {
+      audioCommand('v', clampi((int)snap.vol[snap.track] - 1, 0, 8));
+    } else if (key == 6) {
+      audioCommand('V', 0);
+    } else if (key == 7) {
+      audioCommand('V', 3);
+    } else if (key == 8) {
+      audioCommand('T', (snap.track + 3) & 3);
+    } else if (key == 9) {
+      audioCommand('T', (snap.track + 1) & 3);
+    }
+    padGoto(kMixerPage);
+    return;
+  }
+  padGoto(kFxPage);
+  if (key == 4) {
+    mixRow = clampi(mixRow - 1, 0, kFxRows - 1);
+  } else if (key == 5) {
+    mixRow = clampi(mixRow + 1, 0, kFxRows - 1);
+  } else if (key == 6) {
+    tweakFx(-1);
+  } else if (key == 7) {
+    tweakFx(1);
+  } else if (key == 8) {
+    audioReadSnap(&snap);
+    audioCommand('T', (snap.track + 3) & 3);
+  } else if (key == 9) {
+    audioReadSnap(&snap);
+    audioCommand('T', (snap.track + 1) & 3);
+  }
+}
+
+static void padLoopKey(int key) {
+  padGoto(kLoopsPage);
+  int libs = loopLibrary.Count();
+  int rows = 0;
+  if (libs > 0) {
+    rows = loopLibrary.At(loopLib).entryCount - 1;
+  }
+  if (rows < 0) {
+    rows = 0;
+  }
+  if (key == 4) {
+    loopRow = clampi(loopRow - 1, 0, rows);
+  } else if (key == 5) {
+    loopRow = clampi(loopRow + 1, 0, rows);
+  } else if (key == 6 && libs > 0) {
+    loopLib = (loopLib + libs - 1) % libs;
+    loopRow = 0;
+  } else if (key == 7 && libs > 0) {
+    loopLib = (loopLib + 1) % libs;
+    loopRow = 0;
+  } else if (key == 8) {
+    launchLoop(true);
+  } else if (key == 9) {
+    launchLoop(false);
+  } else if (key == 10) {
+    audioReadSnap(&snap);
+    audioStopLoop(snap.track);
+    toastSet("Loop stop");
+  } else if (key == 11) {
+    quantize = (quantize + 1) % 3;
+    toastSet(quantize == 0 ? "Quantize now" : (quantize == 1 ? "Quantize beat" : "Quantize bar"));
+  } else if (key == 12) {
+    loopLibrary.Scan();
+    toastSet("Rescanned loops");
+  }
+}
+
+static void padSlot(int slot) {
+  songSlot = slot;
+  padGoto(kSongPage);
+  bool has = false;
+  storage.Status(songSlot, &has);
+  toastSet(has ? "Slot full" : "Slot empty");
+}
+
+static void padFileKey(int key) {
+  padGoto(kSongPage);
+  audioReadSnap(&snap);
+  int bars = snap.barCount ? (int)snap.barCount : 1;
+  if (key == 4) {
+    doSave();
+  } else if (key == 5) {
+    doLoad();
+  } else if (key == 6) {
+    toastSet(SdStorage::ResultText(storage.Delete(songSlot), songSlot));
+  } else if (key == 7) {
+    bool has = false;
+    SdResult st = storage.Status(songSlot, &has);
+    if (st == SD_OK) {
+      toastSet(has ? "Slot full" : "Slot empty");
+    } else {
+      toastSet(SdStorage::ResultText(st, songSlot));
+    }
+  } else if (key >= 8 && key <= 11) {
+    padSlot(key - 8);
+  } else if (key == 12) {
+    bars = bars >= 8 ? 1 : bars + 1;
+    audioCommand('X', bars - 1);
+    toastSet("New song");
+  } else if (key == 13) {
+    audioCommand('X', bars - 1);
+    toastSet("New song");
+  } else if (key == 14) {
+    audioCommand('*', 0);
+  } else if (key == 15) {
+    audioCommand('*', 1);
+  }
+}
+
+static void padNameKey(int key, BleMidi &ble) {
+  if (key == 0) {
+    padNaming = false;
+    naming = false;
+    toastSet("Name kept");
+    padLegendSet("Settings  F4 close");
+    return;
+  }
+  if (key == 1) {
+    padGlyph = (padGlyph + 1) % 4;
+    toastSet(kPadGlyphs[padGlyph]);
+    return;
+  }
+  if (key == 2) {
+    int n = (int)strlen(edit);
+    if (n > 0) {
+      edit[n - 1] = 0;
+    }
+    return;
+  }
+  if (key == 3) {
+    if (edit[0]) {
+      snprintf(bleName, sizeof(bleName), "%s", edit);
+      savePrefs();
+      ble.Restart(bleName);
+      toastSet("BLE name set");
+    }
+    padNaming = false;
+    naming = false;
+    padLegendSet("Settings  F4 close");
+    return;
+  }
+  int index = key - 4;
+  const char *pageChars = kPadGlyphs[padGlyph];
+  int nchars = (int)strlen(pageChars);
+  if (index < 0 || index >= nchars) {
+    return;
+  }
+  int n = (int)strlen(edit);
+  if (n < 16) {
+    edit[n] = pageChars[index];
+    edit[n + 1] = 0;
+  }
+}
+
+static void padSettingsKey(int key, BleMidi &ble) {
+  padGoto(kSettingsPage);
+  audioReadSnap(&snap);
+  int bars = snap.barCount ? (int)snap.barCount : 1;
+  if (key == 4) {
+    cursor = 0;
+    outVol = (uint8_t)clampi((int)outVol - 8, 0, 255);
+    audioSetSpeakerVolume(outVol);
+    savePrefs();
+  } else if (key == 5) {
+    cursor = 0;
+    outVol = (uint8_t)clampi((int)outVol + 8, 0, 255);
+    audioSetSpeakerVolume(outVol);
+    savePrefs();
+  } else if (key == 6) {
+    cursor = 1;
+    bright = (uint8_t)clampi((int)bright - 8, 10, 255);
+    boardSetBrightness(bright);
+    savePrefs();
+  } else if (key == 7) {
+    cursor = 1;
+    bright = (uint8_t)clampi((int)bright + 8, 10, 255);
+    boardSetBrightness(bright);
+    savePrefs();
+  } else if (key == 8) {
+    cursor = 3;
+    finishBleOff(ble);
+  } else if (key == 9) {
+    cursor = 3;
+    requestBleOn(ble);
+  } else if (key == 10) {
+    cursor = 4;
+    if (ble.Resident()) {
+      doUnloadBle(ble);
+    } else {
+      doLoadBle(ble);
+    }
+  } else if (key == 11) {
+    cursor = 4;
+    if (bleUnloadPending) {
+      doLoadBle(ble);
+    }
+  } else if (key == 12) {
+    cursor = 8;
+    audioCommand('Y', clampi(bars - 1, 1, 8));
+  } else if (key == 13) {
+    cursor = 8;
+    audioCommand('Y', clampi(bars + 1, 1, 8));
+  } else if (key == 14) {
+    audioCommand('R', 0);
+  } else if (key == 15) {
+    cursor = 2;
+    naming = true;
+    padNaming = true;
+    padGlyph = 0;
+    snprintf(edit, sizeof(edit), "%s", bleName);
+    padLegendSet("Name  F1 cancel  F4 apply");
+    toastSet(kPadGlyphs[0]);
+  }
+}
+
+static void padPagesKey(int key) {
+  if (key >= 4 && key <= 11) {
+    padGoto(key - 4);
+    return;
+  }
+  if (key == 12) {
+    padGoto(kExitPage);
+    return;
+  }
+  if (key == 13) {
+    if (launcherOk) {
+      requestExit();
+    } else {
+      toastSet("Launcher not found");
+    }
+    return;
+  }
+  if (key == 14) {
+    page = stepPage(page, -1);
+  } else if (key == 15) {
+    page = stepPage(page, 1);
+  }
+}
+
+static void padSongKey(int key, BleMidi &ble) {
+  if (key == 0) {
+    padSub = 0;
+    padLegendSet("Pages  F4 close  F2 file");
+    return;
+  }
+  if (key == 1) {
+    padSub = 1;
+    padGoto(kSongPage);
+    padLegendSet("File  F4 close  F1 pages");
+    return;
+  }
+  if (key == 2) {
+    padSub = 2;
+    padGoto(kSettingsPage);
+    padLegendSet("Settings  F4 close  F1 pages");
+    return;
+  }
+  if (padSub == 1) {
+    padFileKey(key);
+  } else if (padSub == 2) {
+    padSettingsKey(key, ble);
+  } else {
+    padPagesKey(key);
+  }
+}
+
+static void handlePad(int key, bool hold, BleMidi &ble) {
+  if (key < 0 || key > 15) {
+    return;
+  }
+  if (bleAsk) {
+    if (key == 0) {
+      answerBleAsk(0, true, ble);
+    } else if (key == 14) {
+      answerBleAsk('y', false, ble);
+    } else if (key == 15) {
+      answerBleAsk('n', false, ble);
+    }
+    return;
+  }
+  if (padNaming) {
+    padNameKey(key, ble);
+    return;
+  }
+  if (hold && key <= 3) {
+    padOpen(key);
+    return;
+  }
+  if (padMenu >= 0) {
+    if (key == padMenu && !(padMenu == 0 && padEntry)) {
+      padLive();
+      toastSet("Play");
+      return;
+    }
+    if (padMenu == 0) {
+      padEditKey(key);
+    } else if (padMenu == 1) {
+      padFxKey(key);
+    } else if (padMenu == 2) {
+      padLoopKey(key);
+    } else {
+      padSongKey(key, ble);
+    }
+    return;
+  }
+  TtgoPadAct act = ttgoBaseAct(padLatch, key);
+  padLatch = act.latch;
+  if (act.cmd == 0) {
+    if (padLatch == 0) {
+      padLegendSet("F1 inst  hold = edit");
+    } else if (padLatch == 1) {
+      padLegendSet("F2 fx  hold = fx");
+    } else if (padLatch == 2) {
+      padLegendSet("F3 track  hold = loops");
+    } else if (padLatch == 3) {
+      padLegendSet("F4 song  hold = pages");
+    }
+    return;
+  }
+  padLegendSet(0);
+  audioCommand(act.cmd, act.val);
+}
+
+#endif
+
 void uiPoll(BleMidi &ble) {
   loopsBlocked = ble.UserEnabled() && !MOTHDECK_LOOPS_WITH_BLE;
   bool esc = boardEscHeld();
@@ -2090,6 +2704,12 @@ void uiPoll(BleMidi &ble) {
   }
   DeckKeys st;
   if (boardPollKeys(&st)) {
+#if MOTHDECK_BOARD_TTGO
+    if (st.padKey >= 0) {
+      handlePad(st.padKey, st.padHold, ble);
+      return;
+    }
+#endif
     KeyEvent ev = eventFrom(st);
     if (bleAsk) {
       if (st.del || ev.ch == '`') {
