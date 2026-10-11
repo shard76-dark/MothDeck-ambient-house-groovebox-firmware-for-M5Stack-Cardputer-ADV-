@@ -83,6 +83,11 @@ public:
   void TriggerLoopVoice(int track, int note);
   int Bpm() const { return bpms[bpmSlot]; }
   uint8_t BpmSlot() const { return bpmSlot; }
+  // Live MIDI notes sounding on a track. Four is the limit; a fifth replaces
+  // the oldest. A note-off clears only the matching note and channel.
+  static const int kLiveVoices = 4;
+  int LiveHeld(int track) const;
+  bool LiveDown(int track, int midi) const;
 
 private:
   float bps;
@@ -97,6 +102,23 @@ private:
   uint8_t haveClockTs;
   uint32_t tempoMs;
   int tempoClocks;
+  // Clocks that shared the previous BLE timestamp. Several 0xF8 bytes often
+  // arrive in one packet with one timestamp, and the span covers all of them.
+  int clocksInStamp;
+  int bpmSmooth;
+  struct LiveVoice {
+    uint8_t on;
+    uint8_t midi;
+    uint8_t channel;
+    uint8_t tonal;
+    uint32_t age;
+    int freq;
+    int8_t id;
+    int8_t pitch;
+    ToneVoice tone;
+  };
+  LiveVoice live[4][kLiveVoices];
+  uint32_t liveAge;
   // Clocks since the last position-zero (Start or Song Position 0). Used to
   // learn an external loop length. A Stop, Space, or a non-zero Song
   // Position abandons the measurement.
@@ -134,6 +156,12 @@ private:
   void MidiContinue();
   void MidiStop();
   void MidiClock(uint16_t timestamp13);
+  void ResetTempoWindow();
+  void SilenceLive();
+  void SoundLive(int track, uint8_t channel, uint8_t midi, int pitch, int oct);
+  void ReleaseLive(int track, uint8_t channel, uint8_t midi);
+  int AllocLive(int track, uint8_t channel, uint8_t midi);
+  int MixLive(int track);
   void MidiSongPosition(int sixteenth);
   bool LearnLoopLength();
   void ApplyExternalBpm(int bpm);

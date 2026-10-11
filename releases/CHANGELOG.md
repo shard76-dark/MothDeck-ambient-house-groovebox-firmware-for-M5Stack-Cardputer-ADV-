@@ -1,6 +1,16 @@
+## 1.2.4 (2026-10-11)
+
+Flash `releases/mothdeck-cardputer-adv.bin`. Version on the Settings screen is 1.2.4. Host tests passed. Use earphones. This image has not been tried on a Cardputer.
+
+MIDI clock from an MPC follows every tick in the packet, including several `0xF8` bytes that share one timestamp. Six ticks advance one step. The BPM on screen is smoothed over a beat and tracks from 40 to 200. Notes on one channel sound together, up to four voices. A fifth replaces the oldest note. Note-off releases only that note. Velocity 0 is note-off.
+
+The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin`. It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
+
+The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
+
 ## 1.2.3 (2026-10-11)
 
-Flash `releases/mothdeck-cardputer-adv.bin` (1,151,680 bytes, magic `E9`, chip `0x0009`, SHA-256 `45837a975607b7933722ae37fa8492c1d06b53418b3837596f43b79820e8e8ec`). Version on the Settings screen is 1.2.3. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 136004/327680.
+Flash the 1.2.3 application image (1,151,680 bytes, magic `E9`, chip `0x0009`, SHA-256 `45837a975607b7933722ae37fa8492c1d06b53418b3837596f43b79820e8e8ec`). Version on the Settings screen is 1.2.3. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 136004/327680. Superseded by 1.2.4.
 
 Incoming MIDI notes play and are not stored while Rec is off. Start and Continue do not arm Rec. Space arms Rec, and then those notes are written at the playhead. A piano-roll key while the transport is running follows that same rule. Stopped, the roll still writes the cell under the cursor.
 

@@ -210,6 +210,9 @@ int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, Mi
   // continuation of a SysEx, in which case it is raw SysEx data.
   if ((data[i] & 0x80) == 0 && sysex) {
     // continued SysEx, data[i] stays for the loop
+  } else if (data[i] >= 0xF8) {
+    // Real-time status is never a timestamp. The header time stands, and
+    // the loop below counts this clock instead of swallowing it.
   } else if (data[i] & 0x80) {
     noteTimestamp(&timestamp, data[i]);
     i++;

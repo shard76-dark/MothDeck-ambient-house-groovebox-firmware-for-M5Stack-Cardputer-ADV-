@@ -40,6 +40,10 @@ Tracker::Tracker() {
   haveClockTs = 0;
   tempoMs = 0;
   tempoClocks = 0;
+  clocksInStamp = 0;
+  bpmSmooth = 0;
+  liveAge = 0;
+  memset(live, 0, sizeof(live));
   clocksSinceZero = 0;
   blockLearn = false;
   autoLength = true;
@@ -323,6 +327,7 @@ void Tracker::MidiStart() {
   pressedOnce = true;
   // Rec stays wherever Space left it. Start is transport, not record.
   clockCount = 0;
+  ResetTempoWindow();
   stepSampleCount = 0;
   barCount = 0;
   followView = true;
@@ -343,6 +348,7 @@ void Tracker::MidiContinue() {
   pressedOnce = true;
   // Same as Start: transport only, Rec is unchanged.
   clockCount = 0;
+  ResetTempoWindow();
   SetHint("MIDI Cont");
 }
 
@@ -352,31 +358,63 @@ void Tracker::MidiStop() {
   clockCount = 0;
   clocksSinceZero = 0;
   blockLearn = true;
+  ResetTempoWindow();
   SetHint("MIDI Stop");
 }
 
+void Tracker::ResetTempoWindow() {
+  haveClockTs = 0;
+  tempoMs = 0;
+  tempoClocks = 0;
+  clocksInStamp = 0;
+  bpmSmooth = 0;
+}
+
+void Tracker::SilenceLive() {
+  memset(live, 0, sizeof(live));
+  liveAge = 0;
+}
+
 void Tracker::MidiClock(uint16_t timestamp13) {
+  uint16_t ts = (uint16_t)(timestamp13 & 0x1FFF);
   if (haveClockTs) {
-    uint16_t delta = (uint16_t)((timestamp13 - lastClockTs) & 0x1FFF);
+    uint16_t delta = (uint16_t)((ts - lastClockTs) & 0x1FFF);
     if (delta > 0 && delta < 2000) {
+      // clocksInStamp is every tick since the previous timestamp, including
+      // the ones that shared it. The delta is their combined span, not the
+      // period of a single tick. One packet at a 50 ms link holds about
+      // two and a half clocks at 120 BPM; counting the packet as one tick
+      // is what pinned the readout near 47.
       tempoMs += delta;
-      tempoClocks++;
-      if (tempoClocks >= 24) {
-        int bpm = (int)(60000.0f / (float)tempoMs + 0.5f);
-        ApplyExternalBpm(bpm);
+      tempoClocks += clocksInStamp > 0 ? clocksInStamp : 1;
+      clocksInStamp = 0;
+      if (tempoClocks >= 24 && tempoMs > 0) {
+        int raw = (int)((60000.0f * (float)tempoClocks) / (24.0f * (float)tempoMs) + 0.5f);
+        if (bpmSmooth <= 0) {
+          bpmSmooth = raw;
+        } else {
+          bpmSmooth = (bpmSmooth * 3 + raw + 2) / 4;
+        }
+        ApplyExternalBpm(bpmSmooth);
         tempoMs = 0;
         tempoClocks = 0;
       }
+    } else if (delta >= 2000) {
+      tempoMs = 0;
+      tempoClocks = 0;
+      clocksInStamp = 0;
     }
   }
-  lastClockTs = timestamp13 & 0x1FFF;
+  lastClockTs = ts;
   haveClockTs = 1;
+  clocksInStamp++;
   if (!extSync || !isPlaying) {
     return;
   }
   clocksSinceZero++;
   clockCount++;
   // 24 clocks per quarter note, and a pattern step is a 16th, so 6 clocks.
+  // Every tick in the packet advances, not only the first.
   if (clockCount >= 6) {
     clockCount = 0;
     stepSampleCount = 0;
@@ -433,6 +471,7 @@ int Tracker::UpdateTracker() {
     if (loopPlay[i].enabled && loopPlay[i].frames > 1 && (loopPlay[i].pcm || loopPlay[i].hold > 0)) {
       extra = ReadLoop(&loopPlay[i]);
     }
+    extra += MixLive(i);
     // The loop used to replace the voice, so a sample cut the drums (and
     // the insert never saw the loop). Both go through the track FX.
     int samp = voices[i].OutputWith(extra) / div;
@@ -1087,6 +1126,8 @@ void Tracker::ClearAll(int val) {
     voices[j].bend14 = 8192;
     voices[j].ReleaseShots();
   }
+  SilenceLive();
+  ResetTempoWindow();
   int bars = val + 1;
   if (bars < 1) {
     bars = 1;
@@ -1335,6 +1376,153 @@ void Tracker::ApplyController(const MidiEvent &event) {
   }
 }
 
+int Tracker::AllocLive(int track, uint8_t channel, uint8_t midi) {
+  int same = -1;
+  int freeSlot = -1;
+  int oldest = -1;
+  for (int i = 0; i < kLiveVoices; i++) {
+    LiveVoice &slot = live[track][i];
+    if (slot.on && slot.channel == channel && slot.midi == midi) {
+      same = i;
+      break;
+    }
+    if (!slot.on && freeSlot < 0) {
+      freeSlot = i;
+    }
+    if (slot.on && (oldest < 0 || slot.age < live[track][oldest].age)) {
+      oldest = i;
+    }
+  }
+  if (same >= 0) {
+    return same;
+  }
+  if (freeSlot >= 0) {
+    return freeSlot;
+  }
+  LiveVoice &old = live[track][oldest];
+  if (!old.tonal) {
+    voices[track].ReleaseHit(old.pitch);
+  }
+  old.on = 0;
+  return oldest;
+}
+
+void Tracker::SoundLive(int track, uint8_t channel, uint8_t midi, int pitch, int oct) {
+  if (track < 0 || track > 3) {
+    return;
+  }
+  int inst = trackVoice[track];
+  Voice &voice = voices[track];
+  if (voice.block.scaleMode > 0 && pitch >= 0 && pitch <= 11) {
+    int locked = synthToMidiNote(pitch, oct);
+    locked = scaleLock(locked, voice.block.scaleRoot, voice.block.scaleMode);
+    midiNoteToSynth(locked, pitch, oct);
+  }
+  if (inst == kLoopsVoice || inst >= 12) {
+    voice.SetNote(pitch, false, oct, inst);
+    if (inst == kLoopsVoice) {
+      TriggerLoopVoice(track, pitch);
+    }
+    return;
+  }
+  bool tonal = voice.samplerMode || (inst >= 2 && inst <= 11);
+  int slot = AllocLive(track, channel, midi);
+  LiveVoice &held = live[track][slot];
+  if (held.on && !held.tonal) {
+    voice.ReleaseHit(held.pitch);
+  }
+  held.on = 1;
+  held.midi = midi;
+  held.channel = channel;
+  held.tonal = tonal ? 1 : 0;
+  held.age = ++liveAge;
+  held.pitch = (int8_t)pitch;
+  if (!tonal) {
+    voice.SetNote(pitch, false, oct, inst);
+    return;
+  }
+  int id = inst;
+  if (voice.samplerMode && pitch >= 2 && pitch <= 11) {
+    id = pitch;
+  }
+  if (id < 2 || id > 11) {
+    id = 2;
+  }
+  held.id = (int8_t)id;
+  held.freq = voice.NoteFreq(pitch, oct);
+  toneNoteOn(&held.tone, id);
+}
+
+void Tracker::ReleaseLive(int track, uint8_t channel, uint8_t midi) {
+  if (track < 0 || track > 3) {
+    return;
+  }
+  int oldest = -1;
+  for (int i = 0; i < kLiveVoices; i++) {
+    LiveVoice &slot = live[track][i];
+    if (!slot.on || slot.channel != channel || slot.midi != midi) {
+      continue;
+    }
+    if (oldest < 0 || slot.age < live[track][oldest].age) {
+      oldest = i;
+    }
+  }
+  if (oldest < 0) {
+    return;
+  }
+  LiveVoice &slot = live[track][oldest];
+  if (!slot.tonal) {
+    voices[track].ReleaseHit(slot.pitch);
+  }
+  slot.on = 0;
+}
+
+int Tracker::MixLive(int track) {
+  if (track < 0 || track > 3) {
+    return 0;
+  }
+  Voice &voice = voices[track];
+  int acc = 0;
+  for (int i = 0; i < kLiveVoices; i++) {
+    LiveVoice &slot = live[track][i];
+    if (!slot.on || !slot.tonal) {
+      continue;
+    }
+    int freq = slot.freq;
+    if (voice.bend14 != 8192) {
+      freq = scaleByBend(freq, voice.bend14);
+    }
+    int sample = toneSample(&slot.tone, slot.id, freq);
+    acc += (sample * (int)voice.volume) / 3;
+  }
+  return acc;
+}
+
+int Tracker::LiveHeld(int track) const {
+  if (track < 0 || track > 3) {
+    return 0;
+  }
+  int n = 0;
+  for (int i = 0; i < kLiveVoices; i++) {
+    if (live[track][i].on) {
+      n++;
+    }
+  }
+  return n;
+}
+
+bool Tracker::LiveDown(int track, int midi) const {
+  if (track < 0 || track > 3) {
+    return false;
+  }
+  for (int i = 0; i < kLiveVoices; i++) {
+    if (live[track][i].on && live[track][i].midi == (uint8_t)midi) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void Tracker::HandleMidi(const MidiEvent &event) {
   switch (event.type) {
     case MIDI_MSG_CLOCK:
@@ -1375,13 +1563,25 @@ void Tracker::HandleMidi(const MidiEvent &event) {
       int oct = 0;
       midiNoteToSynth(event.number, pitch, oct);
       voices[selectedTrack].SetOctave(oct);
-      SetNote(pitch, selectedTrack);
+      if (recOn && isPlaying && pressedOnce) {
+        SetNote(pitch, selectedTrack);
+      }
+      int inst = trackVoice[selectedTrack];
+      if (inst == kLoopsVoice) {
+        if (!(recOn && isPlaying && pressedOnce)) {
+          SetNote(pitch, selectedTrack);
+        }
+      } else {
+        SoundLive(selectedTrack, event.channel, event.number, pitch, oct);
+      }
       break;
     }
     case MIDI_MSG_NOTE_OFF:
       if (voices[selectedTrack].block.arpMode == 3) {
         int inst = trackVoice[selectedTrack];
         voices[selectedTrack].HeldNote(event.number, false, inst);
+      } else {
+        ReleaseLive(selectedTrack, event.channel, event.number);
       }
       break;
     case MIDI_MSG_MSB:
@@ -1527,6 +1727,8 @@ void Tracker::ApplySong(const SongData &song) {
   followView = true;
   clocksSinceZero = 0;
   blockLearn = true;
+  SilenceLive();
+  ResetTempoWindow();
   ClampTransport();
   trackIndex = patternLength * currentPattern;
   stepSampleCount = 0;

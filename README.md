@@ -8,10 +8,10 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.2.3
-- SHA-256: `45837a975607b7933722ae37fa8492c1d06b53418b3837596f43b79820e8e8ec`
-- Size: 1,151,680 bytes (app image, magic `E9`)
-- Incoming MIDI notes only play while Rec is off; they record when Rec is on. MIDI Start does not arm Rec. Space does. BLE memory is reserved at boot (that was 1.2.2), so turning it on always starts advertising. Unload BLE frees that memory for large loops on the next boot. The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
+- Version 1.2.4
+- SHA-256: filled in with the built image
+- Size: filled in with the built image (app image, magic `E9`)
+- External MIDI clock follows every tick in a BLE packet, from 40 to 200 BPM. Notes on one track sound together, up to four, and note-off releases only that note. Incoming notes only play while Rec is off; they record when Rec is on. MIDI Start does not arm Rec. Space does. The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
@@ -301,7 +301,7 @@ Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, radio, card, bars
 
 ![MIDI mode notice](docs/screenshots/screen-ble-loops-warning-2x.png)
 
-The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.3 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.3`.
+The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.4 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.4`.
 
 ![Settings, BLE row](docs/screenshots/screen-settings-ble-2x.png)
 
@@ -321,7 +321,7 @@ On an MPC Live II, open Menu, then Preferences, then Bluetooth. Turn BLE on in S
 
 Advertised as a BLE MIDI peripheral on legacy connectable advertising. The name `Mothdeck` and the MIDI service UUID are both in the primary advertising packet, which is what an MPC lists. A name longer than 8 characters is shortened there; the full name is in the scan response and on the MIDI page. The stack is NimBLE, and its controller memory is internal RAM, reserved at boot before the loop windows. The Stamp-S3A has no PSRAM. Audio starts before the screen sprite. Advertising stays off until Settings turns it on, and that switch does not allocate. Unload BLE frees the stack's block on the next boot so a large loop library can use it. The sprite is rgb332 (32,400 bytes) and is expanded to the panel eight rows at a time, so the blit does not allocate a second full frame. Pairing is Just Works with bonding and no passkey, the same security 1.1.0 used. The host starts pairing. MIDI bytes are not gated on encryption, so a host that never finishes pairing can still connect.
 
-Incoming BLE MIDI is parsed a whole packet at a time. One packet may hold several notes and interleaved `0xF8` clocks; Note On with velocity 0 is Note Off. Channels 1–4 play the four tracks, and any other channel plays the track that is already selected. While Rec is off those notes only play, and they are not written into the pattern. Space arms Rec, and then they record at the playhead. MIDI Start, Continue, Stop, and Song Position move the transport and do not arm Rec. Clock is 24 per quarter note, and a pattern step is a 16th, so six clocks advance one step. Start puts the current pattern on bar 1 step 1 and plays that step. Continue resumes without moving. Song Position is a sixteenth-note index taken modulo the pattern length, and it does not switch patterns. The tempo shown on screen is averaged over one beat of those clocks. Space still starts and stops the internal clock.
+Incoming BLE MIDI is parsed a whole packet at a time. One packet may hold several notes and interleaved `0xF8` clocks; Note On with velocity 0 is Note Off. Channels 1–4 play the four tracks, and any other channel plays the track that is already selected. While Rec is off those notes only play, and they are not written into the pattern. Space arms Rec, and then they record at the playhead. MIDI Start, Continue, Stop, and Song Position move the transport and do not arm Rec. Clock is 24 per quarter note, and a pattern step is a 16th, so six clocks advance one step. Start puts the current pattern on bar 1 step 1 and plays that step. Continue resumes without moving. Song Position is a sixteenth-note index taken modulo the pattern length, and it does not switch patterns. The tempo shown on screen is smoothed over one beat. Every clock in the packet counts, including several that share one timestamp. A track sounds up to four MIDI notes at once. Note-off releases only the matching note. Space still starts and stops the internal clock.
 
 MIDI has no message for the other machine's sequence length. Auto-length watches for Start, or a Song Position of 0, after a whole number of bars of clocks (one bar is 96 clocks, and the count has to land within half a beat of that). It rounds to 1–8 bars and adopts that length. The MPC Live II manual documents MIDI Clock, Start, Stop, and Continue. It does not document a message at the sequence loop point, and in practice the Live II keeps the clock running through the loop and does not send Start or Song Position there. When nothing comes back to zero, auto-length leaves the length set on the device. Phase still follows the clock from the last Start: a 1-bar pattern stays locked to a longer MPC sequence, and a length that does not divide the MPC sequence drifts until the next Start or Song Position. Stop, Space, and a Song Position that is not zero throw away the measurement so the next Start does not resize from a partial pass.
 
@@ -334,7 +334,7 @@ After a connection has been up for 250 ms the link asks for a 7.5–15 ms interv
 | CC 1 mod | Low pass |
 | CC 7 / CC 39 volume | 14-bit, mapped to voice volume 0–8 |
 | Pitch bend | Per channel, ± the voice pitch ratio |
-| Clock `0xF8` | 24 per quarter. Six clocks advance one 16th. Tempo is one beat of clock spacing |
+| Clock `0xF8` | 24 per quarter. Six clocks advance one 16th. Every clock in the packet counts. Tempo is smoothed over one beat |
 | Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec. Learns a loop length only after a full run of clocks |
 | Continue `0xFB` | Resume external sync, no jump. Does not arm Rec |
 | Stop `0xFC` | Stop, leave external sync, cancel auto-length |

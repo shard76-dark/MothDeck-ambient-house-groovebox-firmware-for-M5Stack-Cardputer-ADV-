@@ -34,6 +34,9 @@ public:
   // cursors so a new hit mixes with the ones still ringing.
   int OutputWith(int extra);
   void ReleaseShots();
+  // Stop one layered drum or effect hit of this pitch. Other hits stay.
+  void ReleaseHit(int pitch);
+  int NoteFreq(int val, int oct);
   void SetNote(int val, bool delay, int optOctave, int optInstrument);
   void SetVolume(int val);
   void SetOctave(int val);

@@ -1,10 +1,10 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.3 (1,151,680 bytes, magic `E9`, SHA-256 `45837a975607b7933722ae37fa8492c1d06b53418b3837596f43b79820e8e8ec`). Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does. NimBLE has been reserved at boot since 1.2.2, and On and Off only start or stop advertising. Unload BLE frees that memory for large loops on the next boot. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.4. Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does. An external clock counts every tick in a BLE packet, and the BPM follows from 40 to 200. Notes on one track sound together, up to four. NimBLE has been reserved at boot since 1.2.2, and On and Off only start or stop advertising. Unload BLE frees that memory for large loops on the next boot. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
-The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.3 still uses. On a 1.2.3 board the Settings version line says `v1.2.3`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`).
+The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.4 still uses. On a 1.2.4 board the Settings version line says `v1.2.4`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`).
 
 ## Moving around
 
@@ -206,7 +206,7 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | CC 1 | Low pass |
 | CC 7 / CC 39 | Volume, mapped to 0–8 |
 | Pitch bend | Per channel |
-| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Tempo is averaged over one beat of those clocks |
+| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Every clock in a packet counts. Tempo is smoothed over one beat |
 | Note on | Plays the track. Stored in the pattern only while Rec is on |
 | Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec |
 | Continue `0xFB` | Resume, no jump. Does not arm Rec |
@@ -223,7 +223,7 @@ Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change the selected row.
 
 ![Settings, BLE row](screenshots/screen-settings-ble-2x.png)
 
-Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and 1.2.3 do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.3`. The dev build still uses the row for a heap readout.
+Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.4`. The dev build still uses the row for a heap readout.
 
 | Row | Keys |
 | --- | --- |
