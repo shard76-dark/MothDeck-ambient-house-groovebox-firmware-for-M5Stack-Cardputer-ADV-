@@ -8,7 +8,7 @@
 #define MOTHDECK_BOARD_TTGO 0
 #endif
 
-#define MOTHDECK_VERSION "1.2.2"
+#define MOTHDECK_VERSION "1.2.3"
 #define MOTHDECK_BLE_NAME_DEFAULT "Mothdeck"
 
 #if MOTHDECK_BOARD_TTGO

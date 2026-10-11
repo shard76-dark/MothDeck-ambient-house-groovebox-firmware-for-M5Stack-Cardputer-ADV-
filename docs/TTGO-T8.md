@@ -2,7 +2,7 @@
 
 MothDeck on a LilyGO TTGO T8 V1.8. This is a classic ESP32-WROVER: dual core, 4MB flash, 4MB PSRAM, and a microSD slot. The board has no panel and no keyboard of its own. The display for this port is a confirmed ST7789 240×135, and the stock image drives it. The keys are a standard 4×4 membrane, mounted with the connector on top. The Cardputer ADV image is a different build, on `main`. Do not flash a TTGO binary onto a Cardputer, or the other way around.
 
-This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The pre-release tag is `ttgo-t8-v1.2.2`. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins are the same 1.2.2 features, plus chords (below) and the 4×4 keypad. On this board the loop windows, sample buffers, pattern grid, chord notes, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record.
+This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The pre-release tag is `ttgo-t8-v1.2.3`. The earlier tag `ttgo-t8-v1.2.2` stays and is superseded. The version string is 1.2.3, so the Settings line and the boot log are not the 1.2.2 test. From this version on, a build that reaches Chris with a change gets a new version number. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins match the Cardputer 1.2.3 Rec rule, plus chords (below) and the 4×4 keypad, which the Cardputer image does not have. On this board the loop windows, sample buffers, pattern grid, chord notes, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record. BLE memory has been reserved at boot since 1.2.2.
 
 ## Chords
 
@@ -48,7 +48,7 @@ Leave GPIO 6–11 alone. Those are the flash bus. Leave GPIO12 alone. It is a st
 
 ## Power and the USB port
 
-USB is a serial adapter, not native USB. The keyboard protocol below is bytes on that UART at 115200 8N1. The boot log is the same port: `MothDeck 1.2.2 TTGO T8`.
+USB is a serial adapter, not native USB. The keyboard protocol below is bytes on that UART at 115200 8N1. The boot log is the same port: `MothDeck 1.2.3 TTGO T8`.
 
 ## microSD
 
@@ -320,7 +320,7 @@ GPIO35 is about a 2:1 divider into the 3.3V ADC. The percent would run from 3300
 
 ## BLE, loops, and patterns
 
-The radio starts at boot, before the sprite and before the speaker DMA, the same resident-stack rule as the 1.2.2 Cardputer test. This chip's Arduino build uses Bluedroid. The Cardputer build uses NimBLE. Advertising still follows the stored switch, and the default is off. The air name is `Mothdeck`. Rec starts off. Turning BLE on stops Rec. It does not unload loops, and it does not ask to save the song.
+The radio starts at boot, before the sprite and before the speaker DMA, the same resident-stack rule as Cardputer 1.2.2. This chip's Arduino build uses Bluedroid. The Cardputer build uses NimBLE. Advertising still follows the stored switch, and the default is off. The air name is `Mothdeck`. Rec starts off. Turning BLE on stops Rec. It does not unload loops, and it does not ask to save the song.
 
 Loop windows are the same shape as the Cardputer (five slots, 1024 frames, double buffered, 20480 bytes) and they are allocated in PSRAM first. Sample instruments use the same allocator, with a 48000-frame cap when PSRAM is present. The pattern grid is 4 × 256 × 2 bytes (2048) plus a copy buffer of 4 × 128 × 2 bytes (1024). Both are allocated in PSRAM. If that allocation fails, the firmware uses static internal arrays and still boots. The tracker object is about 68KB and is allocated in PSRAM when audio starts, because the classic ESP32 DRAM segment left beside Bluedroid is too small for it.
 
