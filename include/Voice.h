@@ -36,6 +36,8 @@ public:
   // cursors so a new hit mixes with the ones still ringing.
   int OutputWith(int extra);
   void ReleaseShots();
+  // Stop the oscillator, one-shots, held arp, and the delay tail.
+  void Silence();
   // Stop one layered drum or effect hit of this pitch. Other hits stay.
   void ReleaseHit(int pitch);
   int NoteFreq(int val, int oct);

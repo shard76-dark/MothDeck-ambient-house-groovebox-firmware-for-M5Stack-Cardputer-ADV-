@@ -58,6 +58,18 @@ Tracker::Tracker() {
   clocksSinceZero = 0;
   blockLearn = false;
   autoLength = true;
+  lengthLock = false;
+  internalRun = true;
+  sppAt = 0;
+  clocksSinceSpp = 0;
+  sppValid = 0;
+  sppArm = 0;
+  swingPct = 50;
+  swingBoundary = 0;
+  swingHave = 0;
+  swingPair[0] = 0;
+  swingPair[1] = 0;
+  swingFill = 0;
   editBar = 0;
   followView = true;
   patternCopyLen = 0;
@@ -250,10 +262,34 @@ void Tracker::NudgeEditBar(int dir) {
   SetHintF("Bar %d", editBar + 1);
 }
 
+bool Tracker::TryAdoptSixteenths(int sixteenths) {
+  if (lengthLock || !autoLength) {
+    return false;
+  }
+  if (sixteenths < kStepsPerBar) {
+    return false;
+  }
+  int bars = (sixteenths + (kStepsPerBar / 2)) / kStepsPerBar;
+  int err = sixteenths - bars * kStepsPerBar;
+  if (err < 0) {
+    err = -err;
+  }
+  // Two sixteenths is the same slack LearnLoopLength allows in clocks.
+  if (bars < 1 || err > 2) {
+    return false;
+  }
+  if (bars > kMaxBars) {
+    bars = kMaxBars;
+  }
+  int before = patternLength;
+  SetBars(bars);
+  return patternLength != before;
+}
+
 bool Tracker::LearnLoopLength() {
   int clocks = clocksSinceZero;
   clocksSinceZero = 0;
-  if (blockLearn || !autoLength) {
+  if (blockLearn || !autoLength || lengthLock) {
     blockLearn = false;
     return false;
   }
@@ -274,6 +310,57 @@ bool Tracker::LearnLoopLength() {
   int before = patternLength;
   SetBars(nearest);
   return patternLength != before;
+}
+
+void Tracker::SeekSixteenth(int sixteenth) {
+  if (sixteenth < 0) {
+    sixteenth = 0;
+  }
+  int span = patternLength > 0 ? patternLength : kStepsPerBar;
+  int local = sixteenth % span;
+  ClampTransport();
+  trackIndex = currentPattern * span + local;
+  if (trackIndex >= kMaxSteps) {
+    trackIndex = currentPattern * span;
+  }
+  clockCount = 0;
+  stepSampleCount = 0;
+  swingHave = 0;
+  SyncEditBar();
+}
+
+void Tracker::PlaySixteenth(int sixteenth) {
+  SeekSixteenth(sixteenth);
+  AdvanceStep();
+}
+
+void Tracker::SilenceTransport() {
+  for (int i = 0; i < 4; i++) {
+    voices[i].Silence();
+  }
+  SilenceLive();
+}
+
+void Tracker::CloseSwing(uint16_t timestamp13) {
+  uint16_t ts = (uint16_t)(timestamp13 & 0x1FFF);
+  if (swingHave) {
+    int delta = (int)((uint16_t)((ts - swingBoundary) & 0x1FFF));
+    // One 16th at 40–240 BPM is about 62–375 ms. A gap outside that is a
+    // stalled link, not swing.
+    if (delta >= 40 && delta <= 500) {
+      swingPair[swingFill & 1] = delta;
+      swingFill++;
+      if ((swingFill & 1) == 0 && swingPair[0] > 0 && swingPair[1] > 0) {
+        int sum = swingPair[0] + swingPair[1];
+        int pct = (swingPair[0] * 100 + sum / 2) / sum;
+        if (pct >= 45 && pct <= 80) {
+          swingPct = (swingPct * 3 + pct + 2) / 4;
+        }
+      }
+    }
+  }
+  swingBoundary = ts;
+  swingHave = 1;
 }
 
 void Tracker::AdvanceStep() {
@@ -349,6 +436,7 @@ void Tracker::ApplyExternalBpm(int bpm) {
 void Tracker::MidiStart() {
   bool learned = LearnLoopLength();
   extSync = true;
+  internalRun = false;
   isPlaying = true;
   pressedOnce = true;
   // Rec stays wherever Space left it. Start is transport, not record.
@@ -358,7 +446,14 @@ void Tracker::MidiStart() {
   barCount = 0;
   followView = true;
   editBar = 0;
+  sppAt = 0;
+  sppValid = 1;
+  sppArm = 0;
+  clocksSinceSpp = 0;
+  swingHave = 0;
   ClampTransport();
+  // From the top of the current pattern. The downbeat sounds now. The next
+  // six clocks are the following 16th.
   trackIndex = patternLength * currentPattern;
   AdvanceStep();
   if (learned) {
@@ -370,21 +465,33 @@ void Tracker::MidiStart() {
 
 void Tracker::MidiContinue() {
   extSync = true;
+  internalRun = false;
   isPlaying = true;
   pressedOnce = true;
   // Same as Start: transport only, Rec is unchanged.
-  clockCount = 0;
   ResetTempoWindow();
+  if (sppArm && sppValid) {
+    // Song Position named this 16th. Play it now so the bar stays aligned.
+    PlaySixteenth(sppAt);
+    sppArm = 0;
+  }
+  clockCount = 0;
   SetHint("MIDI Cont");
 }
 
 void Tracker::MidiStop() {
   isPlaying = false;
   extSync = false;
+  // Leave the sample counter alone. Space is what returns to it.
+  internalRun = false;
   clockCount = 0;
   clocksSinceZero = 0;
+  clocksSinceSpp = 0;
+  sppArm = 0;
+  swingHave = 0;
   blockLearn = true;
   ResetTempoWindow();
+  SilenceTransport();
   SetHint("MIDI Stop");
 }
 
@@ -438,12 +545,16 @@ void Tracker::MidiClock(uint16_t timestamp13) {
     return;
   }
   clocksSinceZero++;
+  clocksSinceSpp++;
   clockCount++;
   // 24 clocks per quarter note, and a pattern step is a 16th, so 6 clocks.
-  // Every tick in the packet advances, not only the first.
+  // Every tick in the packet advances, not only the first. The audio block
+  // does not. A swung clock lands the offbeat late because the step waits
+  // for the sixth tick, not for an even sample count.
   if (clockCount >= 6) {
     clockCount = 0;
     stepSampleCount = 0;
+    CloseSwing(ts);
     AdvanceStep();
   }
 }
@@ -453,22 +564,27 @@ void Tracker::MidiSongPosition(int sixteenth) {
     sixteenth = 0;
   }
   bool learned = false;
+  // A jump backward is the loop. The MPC sends this, then Continue.
+  // The length is how far the clock got, in 16ths, not the packet rate.
+  if (sppValid && sixteenth < sppAt) {
+    int traveled = sppAt + clocksSinceSpp / 6;
+    int loop16 = sixteenth == 0 ? traveled : traveled - sixteenth;
+    learned = TryAdoptSixteenths(loop16);
+  }
   if (sixteenth == 0) {
-    learned = LearnLoopLength();
+    if (LearnLoopLength()) {
+      learned = true;
+    }
   } else {
     clocksSinceZero = 0;
     blockLearn = true;
   }
-  int span = patternLength > 0 ? patternLength : kStepsPerBar;
-  int local = sixteenth % span;
-  ClampTransport();
-  trackIndex = currentPattern * span + local;
-  if (trackIndex >= kMaxSteps) {
-    trackIndex = currentPattern * span;
-  }
-  clockCount = 0;
-  stepSampleCount = 0;
-  SyncEditBar();
+  sppAt = sixteenth;
+  sppValid = 1;
+  sppArm = 1;
+  clocksSinceSpp = 0;
+  swingHave = 0;
+  SeekSixteenth(sixteenth);
   if (learned) {
     SetHintF("Bars %d", Bars());
   } else {
@@ -479,13 +595,13 @@ void Tracker::MidiSongPosition(int sixteenth) {
 int Tracker::UpdateTracker() {
   tempoBlink = 0;
 
-  if (extSync) {
+  if (extSync && isPlaying) {
     // Keep loop phase moving inside the current step, but do not start the
     // next step from the sample counter. The clock does that.
     if (samplesPerStep > 1 && stepSampleCount + 1 < samplesPerStep) {
       stepSampleCount++;
     }
-  } else if (++stepSampleCount >= samplesPerStep) {
+  } else if (internalRun && ++stepSampleCount >= samplesPerStep) {
     stepSampleCount = 0;
     AdvanceStep();
   }
@@ -494,7 +610,8 @@ int Tracker::UpdateTracker() {
   int mix = 0;
   for (int i = 0; i < 4; i++) {
     int extra = 0;
-    if (loopPlay[i].enabled && loopPlay[i].frames > 1 && (loopPlay[i].pcm || loopPlay[i].hold > 0)) {
+    bool transport = internalRun || (extSync && isPlaying);
+    if (transport && loopPlay[i].enabled && loopPlay[i].frames > 1 && (loopPlay[i].pcm || loopPlay[i].hold > 0)) {
       extra = ReadLoop(&loopPlay[i]);
     }
     extra += MixLive(i);
@@ -605,6 +722,8 @@ void Tracker::SetCommand(char command, int val) {
       SetHintF("Bars %d", Bars());
       break;
     case 'Y':
+      // Manual length. Song Position will not resize it until a new song.
+      lengthLock = true;
       SetBars(val);
       SetHintF("Bars %d", Bars());
       break;
@@ -1083,6 +1202,7 @@ void Tracker::TogglePlayStop() {
   // external sync back on. Drop any half-measured external loop so the
   // next Start does not resize the pattern.
   extSync = false;
+  internalRun = true;
   clocksSinceZero = 0;
   blockLearn = true;
   isPlaying = !isPlaying;
@@ -1196,8 +1316,16 @@ void Tracker::ClearAll(int val) {
   editBar = 0;
   followView = true;
   clocksSinceZero = 0;
+  clocksSinceSpp = 0;
+  sppAt = 0;
+  sppValid = 0;
+  sppArm = 0;
   blockLearn = true;
   autoLength = true;
+  lengthLock = false;
+  internalRun = true;
+  swingPct = 50;
+  swingHave = 0;
   patternCopyLen = 0;
   uint16_t empty = EmptyStep();
   for (int t = 0; t < 4; t++) {
@@ -1351,7 +1479,9 @@ void Tracker::ArmTransport() {
 }
 
 void Tracker::QueueMidi(MidiMsgType type, uint8_t channel, uint8_t number, uint8_t value) {
-  if (midiOutCount >= 4) {
+  // Clock, start, stop, continue, and song position are never queued.
+  // Clock out is a send-side switch and defaults off.
+  if (midiIsRealtime(type) || midiOutCount >= 4) {
     return;
   }
   MidiEvent &slot = midiOutQ[midiOutCount++];

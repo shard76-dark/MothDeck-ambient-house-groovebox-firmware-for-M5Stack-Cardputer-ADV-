@@ -162,6 +162,7 @@ void setup() {
   } else {
     ble.MarkSkipped();
   }
+  ble.SetClockOut(uiClockOut());
   logHeap("after ble");
   // Loops use the leftover. While the radio is on they stay unloaded.
   if (!ble.UserEnabled()) {

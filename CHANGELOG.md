@@ -2,6 +2,18 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.8.1 (2026-10-11)
+
+Stop from an MPC now stops. `0xFC` holds the playhead and silences the voices. It does not hand the pattern back to the internal clock. Space does that. Start plays from the top. Continue after a Song Position plays that 16th, so a loop that sends Song Position and Continue stays bar-aligned. Six clocks are one 16th, 24 per quarter note.
+
+Each BLE write is copied into a 2 KB ring in the radio callback and parsed on the audio task, so a connection event that carries several packets is not collapsed to one. The tempo is the time between clock bytes, including several that share a timestamp. A connected audio block is 128 samples, about 2.9 ms, which is shorter than one clock at 174 BPM. Clock, start, continue, stop, and song position are not sent unless Settings, Clock out is on. It is off.
+
+Song Position that jumps backward, or a return to zero after a whole number of bars, sets the pattern length from 1 to 8 bars. Bars on the Settings page locks that length until a new song. Swing is reported only when the clock itself is uneven, and the step waits for the sixth clock so the offbeat lands with the clock. MIDI clock does not carry a time signature. The bar is 4/4, 16 steps. A 3/4 or 5/4 loop is not resized, and an even clock has no swing to follow.
+
+The dev image prints each packet as `BLE rx` and, once a second, `BLE 1s` with raw `0xF8` / `0xFC` counts, parsed clocks and stops, dropped packets, and the negotiated connection interval.
+
+Image: `releases/mothdeck-cardputer-adv.bin` (2,284,016 bytes, magic `E9`, SHA-256 `ac308241c2e643a7b81bef473cf1f38a8544fb144572494f4e0462fd689a7e75`, static RAM 179092/327680). `releases/mothdeck-cardputer-adv-full.bin` is 2,349,552 bytes, SHA-256 `b3c2a01ff7d0df56c694bc73240b847ad8a7c69e14d6fd5cda93e3e9c840852a`. Flash used is 2,248,947 of 3,932,160 bytes in one OTA slot. Host tests passed. Nothing here was flashed or listened to. The TTGO image is a separate branch.
+
 ## 1.8.0 (2026-10-11)
 
 The filter's wide multiply is MULL and MULSH on Xtensa. `MOTHDECK_DSP_C` keeps the portable 64-bit path. Host tests check that path against a 64-bit product, including negative numbers. The low-pass second pole sits a quarter below the first, so the slope is steeper, and a cutoff change slews for about 6 ms instead of stepping. A new note still starts on the cutoff you set. The voice count is unchanged.
