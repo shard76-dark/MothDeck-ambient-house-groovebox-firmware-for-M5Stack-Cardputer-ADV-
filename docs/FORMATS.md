@@ -10,7 +10,7 @@ Names used in paths (`name`, `sample`, `loop`, `pattern`, folder names) are at m
 
 Path: `/moth/slot1.mos` through `/moth/slot4.mos`.
 
-A song that only uses the built-in instruments, and no loop assignment, is version 1. That file is 3155 bytes and matches MothOS:
+A song that only uses the built-in instruments, and no loop assignment, is version 1. That file is 3155 bytes and matches MothOS. Version 5 adds 18 chain bytes after the version 4 block: length, position, eight pattern slots, and eight mute masks. Length 0 is not written, so an older song stays version 1 through 4.
 
 | Offset | Size | Field |
 | --- | --- | --- |

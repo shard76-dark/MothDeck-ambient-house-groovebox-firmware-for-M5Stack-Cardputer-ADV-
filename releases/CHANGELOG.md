@@ -1,3 +1,9 @@
+## 1.4.0 (2026-10-11)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,747,920 bytes, magic `E9`, chip `0x0009`, SHA-256 `88ebeca4ffc5f0b81d4b940774902f8f968cdc17c96ec11a718e9a276687d15d`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,813,456 bytes, SHA-256 `d8e558662d1c28bb75d6d57c6ae3a3e0a9efec2016ab16318d850c77e0ec2295`). Version on the Settings screen is 1.4.0. Static RAM is 139676/327680. Host tests passed. This image has not been tried on a Cardputer.
+
+The Song page stores up to eight scenes with `J` and clears them with `P`. Playback walks the chain at each pattern end and applies that scene's pattern and mutes. An empty chain leaves song mode alone. A song with a chain is version 5. Older songs still load. Loops, BLE, drums, and plugins stay loaded.
+
 ## 1.3.0 (2026-10-11)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (1,747,152 bytes, magic `E9`, chip `0x0009`, SHA-256 `41d81f307e98d707c24d484e4d22e981ed93002ac19aee4a0f877514e8949be0`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,812,688 bytes, SHA-256 `58bfba6579d6dde36baef68f5022f1fc9b39675514ec79a507ca022cacdfef0a`). The SD pack is `releases/mothdeck-sd-pack.zip` (869,531 bytes, SHA-256 `0023fdcdbe4f6b2345cffa2ad7c173b785d0ea1170a75214d7abf3052aae6c57`). Version on the Settings screen is 1.3.0. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 139596/327680. Flash used is 1,716,303 of 3,932,160 bytes in one OTA slot.

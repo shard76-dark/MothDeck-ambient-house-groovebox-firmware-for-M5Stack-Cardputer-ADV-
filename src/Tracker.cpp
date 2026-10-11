@@ -59,6 +59,7 @@ Tracker::Tracker() {
   bpms[3] = 180;
   ClearAll(0);
   SetBPM(0);
+  memset(&chain, 0, sizeof(chain));
 }
 
 uint16_t Tracker::PackStep(uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode) {
@@ -298,7 +299,21 @@ void Tracker::AdvanceStep() {
   trackIndex++;
   int patternEnd = patternLength * (currentPattern + 1);
   if (trackIndex >= patternEnd || trackIndex >= kMaxSteps) {
-    if (allPatternPlay) {
+    if (chain.len > 0) {
+      chain.pos = (uint8_t)((chain.pos + 1) % chain.len);
+      int pat = chain.pattern[chain.pos];
+      if (pat >= PatternSlots()) {
+        pat = PatternSlots() - 1;
+      }
+      if (pat < 0) {
+        pat = 0;
+      }
+      currentPattern = pat;
+      uint8_t mute = (uint8_t)(chain.mute[chain.pos] & 0x0F);
+      for (int t = 0; t < 4; t++) {
+        voices[t].mute = (mute >> t) & 1;
+      }
+    } else if (allPatternPlay) {
       currentPattern++;
       if (currentPattern >= PatternSlots()) {
         currentPattern = 0;
@@ -622,6 +637,26 @@ void Tracker::SetCommand(char command, int val) {
     case 'H':
       masterVolume = masterVolume ? 0 : 1;
       SetHintF("Mstr Volume: %d", 2 - masterVolume);
+      break;
+    case 'q':
+      if (val == 1) {
+        memset(&chain, 0, sizeof(chain));
+        SetHint("Chain clear");
+      } else if (chain.len >= kChainScenes) {
+        SetHint("Chain full");
+      } else {
+        int i = chain.len;
+        chain.pattern[i] = (uint8_t)currentPattern;
+        uint8_t mute = 0;
+        for (int t = 0; t < 4; t++) {
+          if (voices[t].mute) {
+            mute = (uint8_t)(mute | (1 << t));
+          }
+        }
+        chain.mute[i] = mute;
+        chain.len++;
+        SetHintF("Scene %d", chain.len);
+      }
       break;
     case 'C':
       allPatternPlay = !allPatternPlay;
@@ -1642,6 +1677,7 @@ void Tracker::CaptureSong(SongData *song) const {
     out.bend14 = voice.bend14;
     song->fx[t] = voice.fx;
     song->blocks[t] = voice.block;
+    song->chain = chain;
     song->loops[t].enabled = (loopPlay[t].enabled || loopPlay[t].pending) ? 1 : 0;
     song->loops[t].quantize = loopPlay[t].quantize;
     memcpy(song->loops[t].library, loopPlay[t].library, 24);
@@ -1662,6 +1698,8 @@ void Tracker::ApplySong(const SongData &song) {
     selectedTrack = 0;
   }
   allPatternPlay = song.allPatternPlay != 0;
+  chain = song.chain;
+  songChainClamp(&chain);
   solo = false;
   for (int t = 0; t < 4; t++) {
     for (int s = 0; s < kMaxSteps; s++) {
@@ -2018,6 +2056,8 @@ void Tracker::FillSnap(Snap *snap) const {
   snap->barIndex = (uint8_t)(bar + 1);
   snap->barCount = (uint8_t)bars;
   snap->patternSlots = (uint8_t)PatternSlots();
+  snap->chainLen = chain.len;
+  snap->chainPos = chain.pos;
   for (int t = 0; t < 4; t++) {
     snap->level[t] = (int16_t)lastSamples[t];
     snap->vol[t] = voices[t].volume;
