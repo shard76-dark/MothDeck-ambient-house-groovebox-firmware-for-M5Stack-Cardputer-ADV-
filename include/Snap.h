@@ -71,6 +71,8 @@ struct Snap {
   uint8_t barIndex;
   uint8_t barCount;
   uint8_t patternSlots;
+  uint8_t chainLen;
+  uint8_t chainPos;
 };
 
 struct LoopArm {

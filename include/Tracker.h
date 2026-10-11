@@ -82,6 +82,7 @@ public:
   void FillSnap(Snap *snap) const;
   // Starts a preloaded SD loop on this track, phased to the current bar.
   void TriggerLoopVoice(int track, int note);
+  SongChain chain;
   int Bpm() const { return bpms[bpmSlot]; }
   uint8_t BpmSlot() const { return bpmSlot; }
   // Live MIDI notes sounding on a track. Four is the limit; a fifth replaces

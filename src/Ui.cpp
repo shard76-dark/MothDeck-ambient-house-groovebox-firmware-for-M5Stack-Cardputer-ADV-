@@ -1003,11 +1003,11 @@ static void drawSong() {
   }
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(4, 92);
-  canvas->printf("Bars %u/8  %s  Mstr %u", snap.barCount ? snap.barCount : 1, snap.songMode ? "song" : "patt",
-                 2 - snap.masterVolume);
+  canvas->printf("Bars %u/8  %s  Ch %u  Mstr %u", snap.barCount ? snap.barCount : 1, snap.songMode ? "song" : "patt",
+                 snap.chainLen, 2 - snap.masterVolume);
   canvas->setCursor(4, 104);
   canvas->print("S save L load X del T stat");
-  legend("N new  C copy  V paste  G all");
+  legend("N new  J scene  P clear  G all");
 }
 
 static void drawLoops() {
@@ -1924,6 +1924,8 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     } else if (c == 'c') audioCommand('*', 0);
     else if (c == 'v') audioCommand('*', 1);
     else if (c == 'g') audioCommand('*', 2);
+    else if (c == 'j') audioCommand('q', 0);
+    else if (c == 'p') audioCommand('q', 1);
     else if (c == 'm') audioCommand('C', 0);
     else if (c == 'h') audioCommand('H', 0);
     else if (c == 'b') audioCommand('B', (snap.bpmSlot + 1) & 3);

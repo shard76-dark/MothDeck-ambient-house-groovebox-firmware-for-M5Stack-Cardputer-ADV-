@@ -1,3 +1,9 @@
+## 1.4.0 (2026-10-11)
+
+TTGO T8 images, not the Cardputer files below. `mothdeck-ttgo-t8-1.4.0-test.bin` is 1,895,392 bytes, magic `E9`, SHA-256 `8137d0bd4d73b3a80c00204d960bb3fd030becedaefa021fb098362f56b419db`, static RAM 84240/327680, PCM5102A. `mothdeck-ttgo-t8-dac-1.4.0-test.bin` is 1,889,456 bytes, magic `E9`, SHA-256 `04e875f77b1fdc75ca6b626f40ffc1dd814b52bd75d113e0bd3a398dd607a12e`, static RAM 83376/327680, GPIO25 DAC. Host tests passed. Nothing here was flashed or listened to.
+
+The Song page stores up to eight scenes with `J` and clears them with `P`. Playback walks the chain at each pattern end and applies that scene's pattern and mutes. An empty chain leaves song mode alone. A song with a chain is version 5. Older songs still load. Loops, BLE, drums, chords, and plugins stay loaded. The Cardputer 1.4.0 image is a different binary.
+
 ## 1.3.0 (2026-10-11)
 
 TTGO T8 images, not the Cardputer files below. `mothdeck-ttgo-t8-1.3.0-test.bin` is 1,894,608 bytes, magic `E9`, SHA-256 `cbbc7017ada1760708682b1b2fce0aa3b6cd645f1e75c4a274502d0bf9608b39`, static RAM 84184/327680, PCM5102A. `mothdeck-ttgo-t8-dac-1.3.0-test.bin` is 1,888,656 bytes, magic `E9`, SHA-256 `72dc194cbbaaf180f88728910713f69b07fb5c860d69056a14ee6c48d433e221`, static RAM 83320/327680, GPIO25 DAC. Host tests passed. Nothing here was flashed or listened to.

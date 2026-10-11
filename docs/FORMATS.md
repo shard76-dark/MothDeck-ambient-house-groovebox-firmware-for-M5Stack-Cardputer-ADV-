@@ -47,6 +47,8 @@ Version 3 is version 2 plus 48 bytes, 12 per track, written only when an insert 
 
 Version 4 is version 3's layout plus 32 bytes, 8 per track, written when a track uses scale lock, the held arpeggiator, a second oscillator, blend, coarse, or glide. The largest file is 3636 bytes. Interval walks (`arp` 1 and 2) stay in the version 1 voice byte and do not force version 4. A version 4 file always includes the 48 insert bytes, even when every insert is off. Each track's 8 bytes are: scale mode (0 off, 1 major, 2 minor, 3 harmonic minor, 4 mixolydian, 5 phrygian, 6 chromatic), scale root 0..11, arp mode (0 off, 3 held), second-oscillator wave (0 off, 1 sine, 2 square, 3 saw, 4 triangle), coarse transpose −24..24, blend 0..100, and glide time in milliseconds as uint16 (0..2000).
 
+Version 5 adds 18 chain bytes after the version 4 block: length, position, eight pattern slots, and eight mute masks. Length 0 is not written, so an older song stays version 1 through 4. A chain file always includes the version 4 block. The largest file is 3654 bytes.
+
 ## Instrument folder
 
 `/moth/instruments/<folder>/manifest.txt`
