@@ -34,6 +34,17 @@ static void testTimestamp() {
 
 static void testNoteRoundTrip() {
   uint8_t packet[8];
+  expect(buildBleMidiPacket(packet, 8, 10, MIDI_MSG_CLOCK, 0, 0, 0) == 0, "a clock is not a note packet");
+  expect(buildBleMidiPacket(packet, 8, 10, MIDI_MSG_START, 0, 0, 0) == 0, "start is not sent as a note");
+  expect(buildBleMidiPacket(packet, 8, 10, MIDI_MSG_STOP, 0, 0, 0) == 0, "stop is not sent as a note");
+  expect(buildBleMidiPacket(packet, 8, 10, MIDI_MSG_CONTINUE, 0, 0, 0) == 0, "continue is not sent as a note");
+  expect(buildBleMidiPacket(packet, 8, 10, MIDI_MSG_SONG_POS, 0, 0, 0) == 0, "song position is not sent as a note");
+  expect(!midiIsRealtime(MIDI_MSG_NOTE_ON) && midiIsRealtime(MIDI_MSG_CLOCK) && midiIsRealtime(MIDI_MSG_STOP), "real-time is clock and transport");
+  int rt = buildBleMidiRealtime(packet, 8, 0, MIDI_MSG_STOP, 0);
+  expect(rt == 3 && packet[2] == 0xFC, "clock out can build a stop when it is asked");
+  rt = buildBleMidiRealtime(packet, 8, 0, MIDI_MSG_SONG_POS, 6);
+  expect(rt == 5 && packet[2] == 0xF2 && packet[3] == 6 && packet[4] == 0, "clock out can build song position");
+
   int n = buildBleMidiPacket(packet, 8, 0x1234, MIDI_MSG_NOTE_ON, 2, 60, 100);
   expect(n == 5, "note packet is 5 bytes");
   expect(packet[0] == 0xA4 && packet[1] == 0xB4, "note packet carries timestamp MSB and LSB");
@@ -131,6 +142,32 @@ static void testClockAndNotes() {
     }
   }
   expect(noteOk, "note split by a clock keeps pitch and velocity");
+
+  // Stop between the data bytes of a running-status note, and a clock before it.
+  const uint8_t split[] = {0x80, 0x80, 0x90, 60, 100, 0xF8, 62, 0xFC, 110};
+  count = parseBleMidiPacket(split, (int)sizeof(split), &state, &parsed);
+  expect(count == 4, "running status keeps the note when clock and stop sit inside it");
+  expect(parsed.events[0].type == MIDI_MSG_NOTE_ON && parsed.events[0].number == 60 && parsed.events[0].value == 100, "the first note is intact");
+  bool splitNote = false;
+  bool splitStop = false;
+  bool splitClock = false;
+  for (int i = 0; i < parsed.count; i++) {
+    if (parsed.events[i].type == MIDI_MSG_CLOCK) {
+      splitClock = true;
+    }
+    if (parsed.events[i].type == MIDI_MSG_STOP) {
+      splitStop = true;
+    }
+    if (parsed.events[i].type == MIDI_MSG_NOTE_ON && parsed.events[i].number == 62 && parsed.events[i].value == 110) {
+      splitNote = true;
+    }
+  }
+  expect(splitClock && splitNote && splitStop, "clock and stop inside the running-status note leave the note intact");
+
+  // 0xF4 is a timestamp (high bit, below real-time). It is not a clock.
+  const uint8_t ts[] = {0x80, 0xF4, 0xF8};
+  count = parseBleMidiPacket(ts, (int)sizeof(ts), &state, &parsed);
+  expect(count == 1 && parsed.events[0].type == MIDI_MSG_CLOCK, "a timestamp of 0xF4 is not a second clock");
 
   const uint8_t spp[] = {0x80, 0x80, 0xF2, 0x06, 0x00, 0x81, 0xFA, 0x82, 0xFB, 0x83, 0xFC};
   count = parseBleMidiPacket(spp, (int)sizeof(spp), &state, &parsed);

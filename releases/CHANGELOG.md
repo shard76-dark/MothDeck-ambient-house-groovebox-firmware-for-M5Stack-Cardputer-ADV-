@@ -1,3 +1,9 @@
+## 1.8.1 (2026-10-11)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (2,284,016 bytes, magic `E9`, chip `0x0009`, SHA-256 `ac308241c2e643a7b81bef473cf1f38a8544fb144572494f4e0462fd689a7e75`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (2,349,552 bytes, SHA-256 `b3c2a01ff7d0df56c694bc73240b847ad8a7c69e14d6fd5cda93e3e9c840852a`). Version on the Settings screen is 1.8.1. Static RAM is 179092/327680. Host tests passed. This image has not been tried on a Cardputer.
+
+Stop silences the voices and holds the playhead. Start plays from the top. Song Position plus Continue plays that 16th and can set the pattern length to 1–8 bars when the position jumps backward or returns to zero after whole bars. Bars locks the length until a new song. Clock out is off, so clock, start, continue, stop, and song position are not sent. The dev build logs each received packet and the `0xF8` / `0xFC` counts per second with the negotiated link interval. MIDI clock does not carry a time signature. The bar is assumed to be 4/4.
+
 ## 1.8.0 (2026-10-11)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (2,281,616 bytes, magic `E9`, chip `0x0009`, SHA-256 `942beb403d95091251e874075907e1c06bad7442ab4e338dc173940fd71736a9`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (2,347,152 bytes, SHA-256 `3e5b88f8a285de98fe2d4411f50a80f8413a8c917d93f90e87b28f4dfba3e063`). Version on the Settings screen is 1.8.0. Static RAM is 176308/327680. Host tests passed. This image has not been tried on a Cardputer.

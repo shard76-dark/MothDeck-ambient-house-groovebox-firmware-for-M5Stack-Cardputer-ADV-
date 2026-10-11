@@ -80,22 +80,137 @@ static char diagBuf[44];
 static char counterBuf[44];
 static char linkBuf[20];
 
+static bool isTransport(MidiMsgType type) {
+  return type == MIDI_MSG_START || type == MIDI_MSG_CONTINUE || type == MIDI_MSG_STOP || type == MIDI_MSG_SONG_POS;
+}
+
 static bool pushEvent(const MidiEvent &event) {
   uint32_t head = __atomic_load_n(&qHead, __ATOMIC_RELAXED);
   uint32_t tail = __atomic_load_n(&qTail, __ATOMIC_ACQUIRE);
   uint32_t next = (head + 1) % kQueueLen;
-  if (next == tail) {
-    __atomic_fetch_add(&statOverflow, 1, __ATOMIC_RELAXED);
-    return false;
-  }
   uint32_t used = (head + kQueueLen - tail) % kQueueLen;
-  if (event.type == MIDI_MSG_CLOCK && used >= (uint32_t)(kQueueLen - 1 - kNoteReserve)) {
+  // Clocks yield the last slots to notes. Start, stop, continue, and song
+  // position may use those slots. A full queue still drops them, which the
+  // raw packet ring is there to avoid.
+  if (!isTransport(event.type)) {
+    if (next == tail || (event.type == MIDI_MSG_CLOCK && used >= (uint32_t)(kQueueLen - 1 - kNoteReserve))) {
+      __atomic_fetch_add(&statOverflow, 1, __ATOMIC_RELAXED);
+      return false;
+    }
+  } else if (next == tail) {
     __atomic_fetch_add(&statOverflow, 1, __ATOMIC_RELAXED);
     return false;
   }
   midiQueue[head] = event;
   __atomic_store_n(&qHead, next, __ATOMIC_RELEASE);
   return true;
+}
+
+// Raw writes, copied in the radio callback and parsed on the audio task.
+// Parsing in the callback held the host task across a connection event, and
+// a later write could replace the characteristic value before the first
+// packet was consumed. The bytes live in one 2 KB ring so the queue does
+// not take a fixed slot per maximum ATT payload.
+static const int kRxBytes = 2048;
+static const int kPktMax = 244;
+static uint8_t rxBytes[kRxBytes];
+static uint16_t rxHead = 0;
+static uint16_t rxTail = 0;
+static uint32_t statRawF8 = 0;
+static uint32_t statRawFC = 0;
+static uint32_t statRawFA = 0;
+static uint32_t statStops = 0;
+static uint32_t statPktDrop = 0;
+static uint32_t prevPk = 0;
+static uint32_t prevF8 = 0;
+static uint32_t prevFC = 0;
+static uint32_t prevClk = 0;
+static uint32_t prevStop = 0;
+static uint32_t prevDrop = 0;
+static volatile uint8_t resetRunning = 0;
+
+static void countRaw(const uint8_t *data, int len) {
+  for (int i = 0; i < len; i++) {
+    if (data[i] == 0xF8) {
+      __atomic_fetch_add(&statRawF8, 1, __ATOMIC_RELAXED);
+    } else if (data[i] == 0xFC) {
+      __atomic_fetch_add(&statRawFC, 1, __ATOMIC_RELAXED);
+    } else if (data[i] == 0xFA) {
+      __atomic_fetch_add(&statRawFA, 1, __ATOMIC_RELAXED);
+    }
+  }
+}
+
+static int rxUsed(uint16_t head, uint16_t tail) {
+  return (head + kRxBytes - tail) % kRxBytes;
+}
+
+static void rxWrite(uint16_t *head, const uint8_t *data, int n) {
+  for (int i = 0; i < n; i++) {
+    rxBytes[*head] = data[i];
+    *head = (uint16_t)((*head + 1) % kRxBytes);
+  }
+}
+
+static void rxRead(uint16_t *tail, uint8_t *dst, int n) {
+  for (int i = 0; i < n; i++) {
+    dst[i] = rxBytes[*tail];
+    *tail = (uint16_t)((*tail + 1) % kRxBytes);
+  }
+}
+
+static bool enqueueRx(const uint8_t *data, size_t len) {
+  if (!data || len == 0) {
+    return false;
+  }
+  if (len > kPktMax) {
+    len = kPktMax;
+  }
+  // Two length bytes plus the payload. One byte stays empty so head == tail
+  // means the ring is empty.
+  int need = (int)len + 2;
+  portENTER_CRITICAL(&midiMux);
+  if (rxUsed(rxHead, rxTail) + need >= kRxBytes) {
+    portEXIT_CRITICAL(&midiMux);
+    __atomic_fetch_add(&statPktDrop, 1, __ATOMIC_RELAXED);
+    return false;
+  }
+  uint16_t head = rxHead;
+  uint8_t lenb[2] = {(uint8_t)(len & 0xFF), (uint8_t)((len >> 8) & 0xFF)};
+  rxWrite(&head, lenb, 2);
+  rxWrite(&head, data, (int)len);
+  rxHead = head;
+  portEXIT_CRITICAL(&midiMux);
+  return true;
+}
+
+static int dequeueRx(uint8_t *dst, int cap) {
+  portENTER_CRITICAL(&midiMux);
+  if (rxTail == rxHead) {
+    portEXIT_CRITICAL(&midiMux);
+    return 0;
+  }
+  uint16_t tail = rxTail;
+  uint8_t lenb[2];
+  rxRead(&tail, lenb, 2);
+  int n = (int)lenb[0] | ((int)lenb[1] << 8);
+  if (n < 0 || n > kPktMax) {
+    rxTail = rxHead;
+    portEXIT_CRITICAL(&midiMux);
+    return 0;
+  }
+  int copy = n;
+  if (copy > cap) {
+    copy = cap;
+  }
+  rxRead(&tail, dst, copy);
+  for (int i = copy; i < n; i++) {
+    uint8_t skip;
+    rxRead(&tail, &skip, 1);
+  }
+  rxTail = tail;
+  portEXIT_CRITICAL(&midiMux);
+  return copy;
 }
 
 static void countParsed(const MidiEvent &event) {
@@ -117,14 +232,12 @@ class MidiCharCallbacks : public BLECharacteristicCallbacks {
     if (!data || len == 0) {
       return;
     }
+    // Copy and return. The host task has to get back to the next ATT write
+    // in this connection event. Parsing happens when the audio task polls.
     __atomic_fetch_add(&statPackets, 1, __ATOMIC_RELAXED);
-    parseBleMidiPacket(data, (int)len, &running, &parsed);
-    if (parsed.overflow > 0) {
-      __atomic_fetch_add(&statOverflow, (uint32_t)parsed.overflow, __ATOMIC_RELAXED);
-    }
-    for (int i = 0; i < parsed.count; i++) {
-      countParsed(parsed.events[i]);
-      pushEvent(parsed.events[i]);
+    countRaw(data, (int)len);
+    if (!enqueueRx(data, len)) {
+      __atomic_fetch_add(&statOverflow, 1, __ATOMIC_RELAXED);
     }
   }
 };
@@ -190,7 +303,7 @@ class MidiServerCallbacks : public BLEServerCallbacks {
     connParamDue = 0;
     connHandle = 0xFFFF;
     linkInterval = 0;
-    running.sysex = 0;
+    resetRunning = 1;
     BLESecurity::resetSecurity();
     if (userEnabled) {
       // Same call 1.1.0 made from this callback. Rebuilding the payload
@@ -352,6 +465,15 @@ static void stopRadio() {
 
 BleMidi::BleMidi() {
   started = false;
+  clockOut = false;
+}
+
+void BleMidi::SetClockOut(bool on) {
+  clockOut = on;
+}
+
+bool BleMidi::ClockOut() const {
+  return clockOut;
 }
 
 bool BleMidi::Begin(const char *name, bool advertise) {
@@ -663,13 +785,29 @@ void BleMidi::Maintain() {
     lastStatMs = now;
     uint32_t packets = __atomic_load_n(&statPackets, __ATOMIC_RELAXED);
     if (connected || packets != 0) {
+      uint32_t f8 = __atomic_load_n(&statRawF8, __ATOMIC_RELAXED);
+      uint32_t fc = __atomic_load_n(&statRawFC, __ATOMIC_RELAXED);
+      uint32_t clk = __atomic_load_n(&statClocks, __ATOMIC_RELAXED);
+      uint32_t stops = __atomic_load_n(&statStops, __ATOMIC_RELAXED);
+      uint32_t drop = __atomic_load_n(&statPktDrop, __ATOMIC_RELAXED);
+      uint16_t interval = linkInterval;
       DEV_LOGF(
-        "MIDI: pk=%lu msg=%lu clk=%lu note=%lu ovf=%lu\n",
-        (unsigned long)packets,
-        (unsigned long)__atomic_load_n(&statMessages, __ATOMIC_RELAXED),
-        (unsigned long)__atomic_load_n(&statClocks, __ATOMIC_RELAXED),
-        (unsigned long)__atomic_load_n(&statNotes, __ATOMIC_RELAXED),
-        (unsigned long)__atomic_load_n(&statOverflow, __ATOMIC_RELAXED));
+        "BLE 1s pk=%lu rawF8=%lu rawFC=%lu clk=%lu stop=%lu drop=%lu link=%u (%.1f ms) pend=%u\n",
+        (unsigned long)(packets - prevPk),
+        (unsigned long)(f8 - prevF8),
+        (unsigned long)(fc - prevFC),
+        (unsigned long)(clk - prevClk),
+        (unsigned long)(stops - prevStop),
+        (unsigned long)(drop - prevDrop),
+        interval,
+        (double)interval * 1.25,
+        connParamsPending ? 1 : 0);
+      prevPk = packets;
+      prevF8 = f8;
+      prevFC = fc;
+      prevClk = clk;
+      prevStop = stops;
+      prevDrop = drop;
     }
   }
   if (restartAdvert && userEnabled && initOk && serverOk && !connected) {
@@ -793,6 +931,55 @@ const char *BleMidi::CounterLine() {
   return counterBuf;
 }
 
+static void logRx(const uint8_t *data, int len) {
+#if MOTHOS_DEV_LOG
+  int shown = len;
+  if (shown > 64) {
+    shown = 64;
+  }
+  Serial.printf("BLE rx %d:", len);
+  for (int i = 0; i < shown; i++) {
+    Serial.printf(" %02X", data[i]);
+  }
+  if (shown < len) {
+    Serial.print(" ...");
+  }
+  Serial.println();
+#else
+  (void)data;
+  (void)len;
+#endif
+}
+
+static void drainRx() {
+  if (resetRunning) {
+    resetRunning = 0;
+    running.sysex = 0;
+  }
+  // Every queued write, not one per connection event and not one per audio
+  // block. A 128-sample block is 2.9 ms. One clock at 174 BPM is 14 ms, so
+  // the block is not what caps the tick rate. Dropped writes are.
+  uint8_t raw[kPktMax];
+  for (int n = 0; n < 32; n++) {
+    int len = dequeueRx(raw, kPktMax);
+    if (len <= 0) {
+      return;
+    }
+    logRx(raw, len);
+    parseBleMidiPacket(raw, len, &running, &parsed);
+    if (parsed.overflow > 0) {
+      __atomic_fetch_add(&statOverflow, (uint32_t)parsed.overflow, __ATOMIC_RELAXED);
+    }
+    for (int i = 0; i < parsed.count; i++) {
+      countParsed(parsed.events[i]);
+      if (parsed.events[i].type == MIDI_MSG_STOP) {
+        __atomic_fetch_add(&statStops, 1, __ATOMIC_RELAXED);
+      }
+      pushEvent(parsed.events[i]);
+    }
+  }
+}
+
 int BleMidi::Poll(MidiEvent *out, int maxOut) {
   if (!out || maxOut <= 0) {
     return 0;
@@ -800,8 +987,12 @@ int BleMidi::Poll(MidiEvent *out, int maxOut) {
   if (!userEnabled) {
     uint32_t head = __atomic_load_n(&qHead, __ATOMIC_ACQUIRE);
     __atomic_store_n(&qTail, head, __ATOMIC_RELEASE);
+    portENTER_CRITICAL(&midiMux);
+    rxTail = rxHead;
+    portEXIT_CRITICAL(&midiMux);
     return 0;
   }
+  drainRx();
   uint32_t tail = __atomic_load_n(&qTail, __ATOMIC_RELAXED);
   uint32_t head = __atomic_load_n(&qHead, __ATOMIC_ACQUIRE);
   int count = 0;
@@ -825,8 +1016,18 @@ void BleMidi::Send(const MidiEvent &event) {
   if (!userEnabled || !started || !connected || !midiChar) {
     return;
   }
-  uint8_t packet[5];
-  int n = buildBleMidiPacket(packet, (int)sizeof(packet), (uint16_t)millis(), event.type, event.channel, event.number, event.value);
+  // Slaved or not: real-time stays in unless Clock out is on. Default off.
+  // Notes and controller changes still go out.
+  if (midiIsRealtime(event.type) && !clockOut) {
+    return;
+  }
+  uint8_t packet[8];
+  int n = 0;
+  if (midiIsRealtime(event.type)) {
+    n = buildBleMidiRealtime(packet, (int)sizeof(packet), (uint16_t)millis(), event.type, event.value14);
+  } else {
+    n = buildBleMidiPacket(packet, (int)sizeof(packet), (uint16_t)millis(), event.type, event.channel, event.number, event.value);
+  }
   if (n <= 0) {
     return;
   }

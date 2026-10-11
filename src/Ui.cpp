@@ -114,6 +114,7 @@ static void toastSet(const char *msg) {
 
 static uint8_t bleOn = 0;
 static uint8_t bleLoad = 1;
+static uint8_t clockOut = 0;
 static bool bleUnloadPending = false;
 
 static void savePrefs() {
@@ -123,6 +124,7 @@ static void savePrefs() {
   prefs.putUChar("bleOn", bleOn);
   prefs.putUChar("bleEn", bleOn);
   prefs.putUChar("bleLoad", bleLoad);
+  prefs.putUChar("clkOut", clockOut);
 }
 
 static int clampi(int v, int lo, int hi) {
@@ -228,7 +230,13 @@ void uiLoadPrefs() {
   // bleEn is new in 1.1.2. A 1.1.1 bleOn of 1 must not start the radio.
   bleOn = prefs.getUChar("bleEn", 0) ? 1 : 0;
   bleLoad = prefs.getUChar("bleLoad", 1) ? 1 : 0;
+  clockOut = prefs.getUChar("clkOut", 0) ? 1 : 0;
   prefsLoaded = true;
+}
+
+bool uiClockOut() {
+  uiLoadPrefs();
+  return clockOut != 0;
 }
 
 bool uiBleEnabled() {
@@ -1081,11 +1089,11 @@ static void drawSettings(BleMidi &ble) {
   canvas->setCursor(2, 16);
   canvas->print("Settings");
   const char *rows[] = {"Speaker", "Brightness", "BLE name", "BLE", "Unload", "Battery", "Radio", "Card", "Bars",
-                        "WiFi"};
+                        "WiFi", "Clock out"};
   int top = cursor > 3 ? cursor - 3 : 0;
   for (int i = 0; i < 5; i++) {
     int idx = top + i;
-    if (idx > 9) {
+    if (idx > 10) {
       break;
     }
     int y = 30 + i * 12;
@@ -1143,6 +1151,8 @@ static void drawSettings(BleMidi &ble) {
       canvas->printf("%u", snap.barCount ? snap.barCount : 1);
     } else if (idx == 9) {
       canvas->print(wifiPortalStatus());
+    } else if (idx == 10) {
+      canvas->print(clockOut ? "on" : "off");
     } else {
       canvas->printf("%u", snap.barCount ? snap.barCount : 1);
     }
@@ -1160,7 +1170,9 @@ static void drawSettings(BleMidi &ble) {
     legend(ble.Resident() ? (bleUnloadPending ? "Ent unload  Fn , keep" : "Ent unload") : "Ent load");
   } else {
     legend(naming ? "Ent apply  Bksp  ` cancel"
-                 : (cursor == 8 ? "Fn ,/ bars" : (cursor == 9 ? "Ent WiFi on/off" : "Lf/Rt change  Ent name")));
+                 : (cursor == 8 ? "Fn ,/ bars"
+                                : (cursor == 10 ? "Fn , off  Fn / on"
+                                                : (cursor == 9 ? "Ent WiFi on/off" : "Lf/Rt change  Ent name"))));
   }
 }
 
@@ -1587,7 +1599,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         }
         loopRow = clampi(loopRow - 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor - 1, 0, 9);
+        cursor = clampi(cursor - 1, 0, 10);
       }
       return;
     }
@@ -1609,7 +1621,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
         }
         loopRow = clampi(loopRow + 1, 0, n < 0 ? 0 : n);
       } else if (page == kSettingsPage) {
-        cursor = clampi(cursor + 1, 0, 9);
+        cursor = clampi(cursor + 1, 0, 10);
       }
       return;
     }
@@ -1639,6 +1651,11 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       } else if (page == kSettingsPage && cursor == 8) {
         int bars = snap.barCount ? (int)snap.barCount : 1;
         audioCommand('Y', clampi(bars - 1, 1, 8));
+      } else if (page == kSettingsPage && cursor == 10) {
+        clockOut = 0;
+        savePrefs();
+        ble.SetClockOut(false);
+        toastSet("Clock out off");
       } else if (page == 0 && rollView) {
         rollFollow = false;
         rollStep = clampi(rollStep - 1, 0, rollPatLen() - 1);
@@ -1677,6 +1694,11 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
       } else if (page == kSettingsPage && cursor == 8) {
         int bars = snap.barCount ? (int)snap.barCount : 1;
         audioCommand('Y', clampi(bars + 1, 1, 8));
+      } else if (page == kSettingsPage && cursor == 10) {
+        clockOut = 1;
+        savePrefs();
+        ble.SetClockOut(true);
+        toastSet("Clock out on");
       } else if (page == 0 && rollView) {
         rollFollow = false;
         rollStep = clampi(rollStep + 1, 0, rollPatLen() - 1);

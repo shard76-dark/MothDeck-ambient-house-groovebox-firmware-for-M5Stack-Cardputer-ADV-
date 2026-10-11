@@ -50,11 +50,19 @@ Loops stream from the card. BLE is off at boot, so the loop windows are reserved
 
 The air name is `Mothdeck`. Forget an older `MothDeck` bond on the other machine before pairing. Notes on channels 1–4 play tracks 1–4. Any other channel plays the selected track. Incoming notes are stored only while Rec is on. MIDI Start and Continue do not arm Rec.
 
-An external clock counts every clock byte in a packet. Six clocks advance one 16th. The tempo readout tracks about 40–200 BPM. A track sounds up to four notes at once. A fifth replaces the oldest. Note-off releases only the matching note.
+An external clock counts every clock byte in a packet. Six clocks advance one 16th. Twenty-four clocks are one quarter note. The tempo readout follows those clocks. Start plays from the top. Song Position plus Continue plays that 16th, which is how a loop stays bar-aligned. Stop silences the voices and holds the playhead. Space returns to the internal clock.
+
+The pattern length follows a Song Position that jumps backward, or a return to zero after a whole number of bars, and lands on 1–8 bars. The MPC sends Song Position and Continue when a sequence loops. Bars on the Settings page keeps the length you set until a new song. Swing is followed only when the clock itself is uneven. The step waits for the sixth clock, so a late offbeat lands late. Even clocks stay straight.
+
+MIDI clock does not carry a time signature. The bar is 4/4, 16 steps. A 3/4 or 5/4 loop is not resized. It also does not carry a swing parameter, the MPC pattern number, or the track count.
+
+Clock out is off. Clock, start, continue, stop, and song position are not sent unless Settings, Clock out is on. Notes and controllers still go out.
+
+A track sounds up to four notes at once. A fifth replaces the oldest. Note-off releases only the matching note.
 
 ## Settings
 
-Rows are Speaker, Brightness, BLE name, BLE, Unload BLE, Battery, Radio, Card, Bars, and WiFi.
+Rows are Speaker, Brightness, BLE name, BLE, Unload BLE, Battery, Radio, Card, Bars, WiFi, and Clock out. Clock out is off. Bars locks the pattern length against Song Position until a new song.
 
 Fn+`,` and Fn+`/` change the highlighted row. BLE on and off do not unload loops by themselves. If the open project has loops, turning BLE on asks you to save, then frees the loop windows and starts advertising. Unload BLE takes effect on the next boot. The toast says `BLE unloads after restart`.
 
