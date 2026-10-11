@@ -9,9 +9,9 @@ Two images are produced by `./build.sh`:
 
 Checksums are in `SHA256SUMS` next to the images. The application image starts with the byte `E9`.
 
-This folder's application image is 1.2.4 (1,153,504 bytes, magic `E9`, SHA-256 `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`). The full-flash image is 1,219,040 bytes, SHA-256 `0994efa5bfdf23d3fd5b662cb8db5016b2284c8a128c71b6e0efa112f433bd4d`. It has not been tried on a Cardputer. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). The 1.2.2 and 1.2.3 releases stay published and are superseded by this image.
+This folder's application image is 1.3.0 (1,746,832 bytes, magic `E9`, SHA-256 `c6868ddb64fbb2c1c6dcca160173e489118ffde2552a1fa65df3da7559bf7d96`). The full-flash image is 1,812,368 bytes, SHA-256 `e6abe6686c379d42d8ca28ff8981c8f7a84665bdc077f6f53fa769cddf446ac6`. It has not been tried on a Cardputer. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is 869,531 bytes, SHA-256 `0023fdcdbe4f6b2345cffa2ad7c173b785d0ea1170a75214d7abf3052aae6c57`. The 1.2.2, 1.2.3, and 1.2.4 releases stay published and are superseded by this image.
 
-1.2.4 includes the behavior from 1.2.2 and 1.2.3:
+1.3.0 includes the behavior from 1.2.2, 1.2.3, and 1.2.4. Built-in drums and sound effects are signed 16-bit at 44100 Hz and live in flash. The SD pack is the same format. Loops stream. A card kit that does not fit the 16 KB cache streams through it. Plugin samples stay within 4096 frames.
 
 - **1.2.2.** BLE memory is reserved at boot, so turning it on always starts advertising and does not allocate. Unload BLE frees that memory for large loops on the next boot. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes only play while Rec is off. They are not written into the pattern. Space turns Rec on, and then they record. MIDI Start does not arm Rec.
@@ -71,4 +71,4 @@ The first frame after power-on is a one-second amber moth on a grey panel, then 
 
 ## SD contents
 
-Optional. Unzip `mothdeck-sd-pack.zip` onto the card root so `moth/` is at the top. It holds the 808 and Dusty drum kits, four one-bar house loops, six sample instruments, and six patches under `moth/instruments/` (`a-minor`, `held-arp`, `glide-bass`, `saw-pluck`, `body`, `room-drive`). The Ambient House kit is already in the firmware. Every WAV in the pack is unsigned 8-bit mono at 22050 Hz. On the Instrument page, `,` and `/` load a kit from `/moth/drums` onto Drums. Enter assigns a plugin or a patch. Layout and file formats are in the pack README and in `docs/FORMATS.md`.
+Optional. Unzip `mothdeck-sd-pack.zip` onto the card root so `moth/` is at the top. It holds the 808 and Dusty drum kits, four one-bar house loops, six sample instruments, and six patches under `moth/instruments/` (`a-minor`, `held-arp`, `glide-bass`, `saw-pluck`, `body`, `room-drive`). The Ambient House kit is already in the firmware. Every WAV in the pack is signed 16-bit mono at 44100 Hz. On the Instrument page, `,` and `/` load a kit from `/moth/drums` onto Drums. Enter assigns a plugin or a patch. Layout and file formats are in the pack README and in `docs/FORMATS.md`.

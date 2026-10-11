@@ -10,8 +10,8 @@
 
 // Keyboard order, not the old kick/snare/hat groups. See docs/FORMATS.md.
 // C kick, C# rim, D snare, D# clap, E hat, F open hat, F# perc, G tom,
-// G# shaker, A ride, A# snap, B crash. Unsigned 8-bit mono, 22050 Hz.
-static const uint8_t *const kDrumWaves[12] = {
+// G# shaker, A ride, A# snap, B crash. Signed 16-bit mono, 44100 Hz.
+static const int16_t *const kDrumWaves[12] = {
   kick1, snare1, special1, hihat1, kick2, snare2, special2, hihat2, kick3, snare3, special3, hihat3
 };
 static const int kDrumLens[12] = {
@@ -20,9 +20,9 @@ static const int kDrumLens[12] = {
   kick3Length, snare3Length, special3Length, hihat3Length
 };
 static const int kDrumRates[12] = {
-  22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050, 22050
+  44100, 44100, 44100, 44100, 44100, 44100, 44100, 44100, 44100, 44100, 44100, 44100
 };
-static const int kSfxRate = 22050;
+static const int kSfxRate = 44100;
 
 __attribute__((weak)) bool drumKitHit(int note, DrumHitView *out) {
   (void)note;
@@ -30,7 +30,14 @@ __attribute__((weak)) bool drumKitHit(int note, DrumHitView *out) {
   return false;
 }
 
-static const uint8_t *const kSfxWaves[12] = {
+__attribute__((weak)) int drumStreamAt(int track, int pad, int frame) {
+  (void)track;
+  (void)pad;
+  (void)frame;
+  return 0;
+}
+
+static const int16_t *const kSfxWaves[12] = {
   sfx1, sfx2, sfx3, sfx4, sfx5, sfx6, sfx7, sfx8, sfx9, sfx10, sfx11, sfx12
 };
 static const int kSfxLens[12] = {
@@ -91,6 +98,7 @@ Voice::Voice() {
   memset(shots, 0, sizeof(shots));
   memset(&block, 0, sizeof(block));
   sounding = 1;
+  trackId = -1;
   heldCount = 0;
   heldPos = 0;
   arpSamples = 0;
@@ -172,23 +180,23 @@ void Voice::ArmPcm(int instrument) {
   }
   if (instrument == 0) {
     DrumHitView hit;
-    if ((unsigned)note <= 11 && drumKitHit(note, &hit) && hit.data && hit.length > 1) {
+    if ((unsigned)note <= 11 && drumKitHit(note, &hit) && hit.length > 1 && (hit.data || hit.streamed)) {
       int rate = hit.rate > 0 ? hit.rate : kSampleRate;
-      StartShot(hit.data, hit.length, pcmStep(rate, true, octave, recOctave), false, 1, true, 0);
+      StartShot(hit.streamed ? nullptr : hit.data, hit.length, pcmStep(rate, true, octave, recOctave), false, 1, true, 0);
       return;
     }
     if ((unsigned)note > 11) {
       return;
     }
     int rate = kDrumRates[note] > 0 ? kDrumRates[note] : kSampleRate;
-    StartShot(kDrumWaves[note], kDrumLens[note], pcmStep(rate, true, octave, recOctave), true, 1, false, 0);
+    StartShot(kDrumWaves[note], kDrumLens[note], pcmStep(rate, true, octave, recOctave), false, 1, false, 0);
     return;
   }
   if (instrument == 1) {
     if ((unsigned)note > 11) {
       return;
     }
-    StartShot(kSfxWaves[note], kSfxLens[note], pcmStep(kSfxRate, false, octave, recOctave), true, 2, false, 1);
+    StartShot(kSfxWaves[note], kSfxLens[note], pcmStep(kSfxRate, false, octave, recOctave), false, 2, false, 1);
     return;
   }
   if (instrument >= 12) {
@@ -223,6 +231,38 @@ void Voice::ReleaseHit(int pitch) {
   }
 }
 
+int Voice::ShotFrame(const Shot &shot, bool streamed, int frame) const {
+  if (frame < 0) {
+    frame = 0;
+  }
+  if (shot.length < 1) {
+    return 0;
+  }
+  if (frame >= shot.length) {
+    frame = shot.length - 1;
+  }
+  if (streamed) {
+    return drumStreamAt(trackId, shot.note, frame);
+  }
+  if (!shot.data) {
+    return 0;
+  }
+  if (shot.eightBit) {
+    return ((int)static_cast<const uint8_t *>(shot.data)[frame] - 128) << 8;
+  }
+  return static_cast<const int16_t *>(shot.data)[frame];
+}
+
+int Voice::ShotHermite(const Shot &shot, bool streamed, int idx, int frac) const {
+  return dspHermite(
+      ShotFrame(shot, streamed, idx - 1),
+      ShotFrame(shot, streamed, idx),
+      ShotFrame(shot, streamed, idx + 1),
+      ShotFrame(shot, streamed, idx + 2),
+      frac,
+      1000);
+}
+
 int Voice::MixShots() {
   int newest = -1;
   for (int i = 0; i < kShotCount; i++) {
@@ -237,13 +277,20 @@ int Voice::MixShots() {
   int acc = 0;
   for (int i = 0; i < kShotCount; i++) {
     Shot &shot = shots[i];
-    if (!shot.active || !shot.data || shot.length < 2) {
+    bool streamed = shot.fromKit && shot.kind == 1 && !shot.data;
+    if (!shot.active || shot.length < 2 || (!shot.data && !streamed)) {
       shot.active = 0;
       continue;
     }
     if (shot.kind == 1 && shot.fromKit) {
       DrumHitView hit;
-      if (!drumKitHit(shot.note, &hit) || hit.data != shot.data) {
+      if (!drumKitHit(shot.note, &hit)) {
+        shot.active = 0;
+        continue;
+      }
+      if (hit.streamed) {
+        streamed = true;
+      } else if (hit.data != shot.data) {
         shot.active = 0;
         continue;
       }
@@ -270,24 +317,7 @@ int Voice::MixShots() {
     }
     int idx = pos / 1000;
     int frac = pos % 1000;
-    int idx2 = idx + 1;
-    if (idx2 >= shot.length) {
-      idx2 = shot.length - 1;
-    }
-    int s0;
-    int s1;
-    if (shot.eightBit) {
-      const uint8_t *p = static_cast<const uint8_t *>(shot.data);
-      s0 = ((int)p[idx] - 128) << 8;
-      s1 = ((int)p[idx2] - 128) << 8;
-    } else {
-      const int16_t *p = static_cast<const int16_t *>(shot.data);
-      s0 = p[idx];
-      s1 = p[idx2];
-    }
-    // frac is 0..999. The product fits MULL; divide keeps the read linear
-    // between frames instead of a staircase. frac 0 is the raw frame.
-    int sample = s0 + dspMul(s1 - s0, frac) / 1000;
+    int sample = ShotHermite(shot, streamed, idx, frac);
     int step = shot.step > 0 ? shot.step : 1;
     if (bend14 != 8192) {
       step = scaleByBend(step, bend14);
@@ -710,11 +740,37 @@ int Voice::ReadPcmShot(const void *data, int length, int rate, bool native, bool
     } else if (idx >= sampleLen) {
       idx = sampleLen - 1;
     }
-    if (eightBit) {
-      sample = ((int)static_cast<const uint8_t *>(data)[idx] - 128) << 8;
-    } else {
-      sample = static_cast<const int16_t *>(data)[idx];
+    int frac = sampleIndex % 1000;
+    int idx1 = idx + 1;
+    if (idx1 >= sampleLen) {
+      idx1 = sampleLen - 1;
     }
+    int idx2 = idx + 2;
+    if (idx2 >= sampleLen) {
+      idx2 = sampleLen - 1;
+    }
+    int idxm = idx - 1;
+    if (idxm < 0) {
+      idxm = 0;
+    }
+    int sm1;
+    int s0;
+    int s1;
+    int s2;
+    if (eightBit) {
+      const uint8_t *p = static_cast<const uint8_t *>(data);
+      sm1 = ((int)p[idxm] - 128) << 8;
+      s0 = ((int)p[idx] - 128) << 8;
+      s1 = ((int)p[idx1] - 128) << 8;
+      s2 = ((int)p[idx2] - 128) << 8;
+    } else {
+      const int16_t *p = static_cast<const int16_t *>(data);
+      sm1 = p[idxm];
+      s0 = p[idx];
+      s1 = p[idx1];
+      s2 = p[idx2];
+    }
+    sample = dspHermite(sm1, s0, s1, s2, frac, 1000);
     int step;
     if (native) {
       // Kit pieces stay at the recorded pitch. Octave still selects which
@@ -751,12 +807,12 @@ int Voice::ReadPcmShot(const void *data, int length, int rate, bool native, bool
   return sample;
 }
 
-int Voice::ReadOneShot(const uint8_t *const *tables, const int *lengths, const int *rates) {
+int Voice::ReadOneShot(const int16_t *const *tables, const int *lengths, const int *rates) {
   if ((unsigned)note > 11 || !tables || !lengths) {
     return 0;
   }
   int rate = (rates && rates[note] > 0) ? rates[note] : kSampleRate;
-  return ReadPcmShot(tables[note], lengths[note], rate, false, true);
+  return ReadPcmShot(tables[note], lengths[note], rate, false, false);
 }
 
 int Voice::ReadDrumWaveform() {
@@ -768,7 +824,7 @@ int Voice::ReadDrumWaveform() {
     return 0;
   }
   int rate = kDrumRates[note] > 0 ? kDrumRates[note] : kSampleRate;
-  return ReadPcmShot(kDrumWaves[note], kDrumLens[note], rate, true, true);
+  return ReadPcmShot(kDrumWaves[note], kDrumLens[note], rate, true, false);
 }
 
 int Voice::ReadSfxWaveform() {
@@ -910,7 +966,32 @@ int Voice::ReadExt() {
   if (idx < 0 || idx >= view.length) {
     return 0;
   }
-  int sample = view.data[idx];
+  int frac = sampleIndex % 1000;
+  if (frac < 0) {
+    frac = 0;
+  }
+  auto at = [&](int frame) -> int {
+    if (oneshot) {
+      if (frame < 0) {
+        frame = 0;
+      }
+      if (frame >= view.length) {
+        frame = view.length - 1;
+      }
+    } else {
+      if (frame < loopA) {
+        frame = loopA;
+      }
+      if (frame >= loopB) {
+        frame = loopA + (frame - loopA) % span;
+      }
+    }
+    if (frame < 0 || frame >= view.length) {
+      return 0;
+    }
+    return view.data[frame];
+  };
+  int sample = dspHermite(at(idx - 1), at(idx), at(idx + 1), at(idx + 2), frac, 1000);
   sample = MixOsc2(sample, glideCur > 0 ? glideCur : baseFreq);
   int step = extBaseStep > 0 ? extBaseStep : 1000;
   if (bend14 != 8192) {

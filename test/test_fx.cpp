@@ -122,7 +122,7 @@ static void testDrumHitsOverlap() {
   Voice kick;
   kick.SetNote(0, false, -1, 0);
   int first = kick.UpdateVoice();
-  int want = (((int)kick1[0] - 128) << 8) * kick.volume / 3;
+  int want = (int)kick1[0] * kick.volume / 3;
   expect(first == want, "a single kick starts at the recorded level");
 
   Voice both;

@@ -4,8 +4,8 @@ import struct
 import wave
 
 
-# Card assets are unsigned 8-bit mono at this rate. 128 is silence.
-ASSET_RATE = 22050
+# Card assets are signed 16-bit mono at the mix rate.
+ASSET_RATE = 44100
 
 
 def clamp16(x):
@@ -45,9 +45,8 @@ def resample(samples, src_rate, dst_rate):
     return out
 
 
-def write_wav(path, samples, rate, bits=8):
-    # Card assets are mono. 8-bit 22050 Hz is the default (about 22 KB/s).
-    # 16-bit is still accepted by the firmware for older files.
+def write_wav(path, samples, rate, bits=16):
+    # Card assets are mono 16-bit at 44100 Hz. 8-bit still loads.
     with wave.open(path, "w") as handle:
         handle.setnchannels(1)
         handle.setframerate(rate)

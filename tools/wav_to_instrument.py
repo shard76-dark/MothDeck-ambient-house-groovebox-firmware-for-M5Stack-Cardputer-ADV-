@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn a WAV file into a MothDeck instrument folder.
 
-Writes manifest.txt plus an unsigned 8-bit mono WAV at 22050 Hz (128 is
-silence). Pass --raw to keep little-endian int16 at the source rate.
+Writes manifest.txt plus a signed 16-bit mono WAV at 44100 Hz.
+Pass --raw to keep little-endian int16 at the source rate.
 
 Example:
   python3 tools/wav_to_instrument.py kick.wav sd-card/instruments/kick \\

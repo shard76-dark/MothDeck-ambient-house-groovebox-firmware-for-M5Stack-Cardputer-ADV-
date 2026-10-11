@@ -160,6 +160,7 @@ int pcmHoldSlots() {
 }
 
 static bool fillWin(PcmSlot &slot, PcmWin &win, int start) {
+  SdBusGuard bus;
   if (!win.sample) {
     return false;
   }
@@ -208,6 +209,7 @@ static bool fillWin(PcmSlot &slot, PcmWin &win, int start) {
 }
 
 int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen) {
+  SdBusGuard bus;
   if (frames) {
     *frames = 0;
   }
@@ -311,6 +313,7 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
 }
 
 void pcmHoldClose(int id) {
+  SdBusGuard bus;
   if (id < 1 || id > kPcmHolds) {
     return;
   }

@@ -31,6 +31,15 @@ private:
 
 extern SdCard sdCard;
 
+// One bus, one caller. The kit stream runs on the other core.
+void sdBusLock();
+void sdBusUnlock();
+
+struct SdBusGuard {
+  SdBusGuard() { sdBusLock(); }
+  ~SdBusGuard() { sdBusUnlock(); }
+};
+
 void *deckAlloc(size_t bytes);
 void deckFree(void *p);
 size_t deckFreeInternal();

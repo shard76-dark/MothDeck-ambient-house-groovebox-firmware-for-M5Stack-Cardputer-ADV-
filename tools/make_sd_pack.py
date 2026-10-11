@@ -25,30 +25,30 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAGE = os.path.join(ROOT, "build", "sd-pack")
 ZIP_PATH = os.path.join(ROOT, "releases", "mothdeck-sd-pack.zip")
 
-# Unsigned 8-bit mono at 22050 Hz (see pcmutil.ASSET_RATE). Playback stretches
-# that up to the 44100 Hz mix. No-PSRAM limits: a plugin sample is 4096 frames,
-# a kit pad is 1800, and a whole kit is 8000 int16 frames after decode. Pad
-# caps below sum to 6950 so a 22050 Hz kit still fits. Loops are streamed.
-KIT_RATE = 22050
+# Signed 16-bit mono at 44100 Hz, rendered here rather than expanded from
+# 8-bit. A plugin sample stays within 4096 frames so it can remain loaded
+# beside BLE. Drum kits longer than the 8000-frame cache are streamed.
+# Loops are streamed. One bar at 120 BPM is two seconds.
+KIT_RATE = 44100
 PAD_CAP = {
-    "kick": 1500,
-    "snare": 800,
-    "clap": 600,
-    "hat": 350,
-    "openhat": 700,
-    "rim": 250,
-    "perc": 550,
-    "tom": 550,
-    "shaker": 350,
-    "ride": 550,
-    "snap": 200,
-    "crash": 550,
+    "kick": 38000,
+    "snare": 38000,
+    "clap": 38000,
+    "hat": 38000,
+    "openhat": 38000,
+    "rim": 38000,
+    "perc": 38000,
+    "tom": 38000,
+    "shaker": 38000,
+    "ride": 38000,
+    "snap": 38000,
+    "crash": 38000,
 }
-LOOP_RATE = 22050
+LOOP_RATE = 44100
 LOOP_BPM = 120
-LOOP_FRAMES = 44100  # one bar at LOOP_RATE and LOOP_BPM
-INST_RATE = 22050
-INST_FRAMES = 3600
+LOOP_FRAMES = 88200  # one bar at LOOP_RATE and LOOP_BPM
+INST_RATE = 44100
+INST_FRAMES = 4096
 
 
 def fit(samples, limit):
@@ -258,17 +258,17 @@ Keyboard order for every kit, low octave white keys first:
 | A# | Snap |
 | B | Soft crash |
 
-A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines in that order. Audio is unsigned 8-bit mono PCM WAV at 22050 Hz (128 is silence, about 22 KB/s). The speaker mix is still 44100 Hz. A 16-bit mono WAV still loads, and stereo is folded to mono. On this board each pad is kept to 1800 frames and the twelve together to 8000 frames, in internal RAM, after the file is expanded to 16-bit. These files are already inside that limit. The low tom is `perc.wav`. Loops are streamed from the card instead of being copied into RAM.
+A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines in that order. Audio is signed 16-bit mono PCM WAV at 44100 Hz. An older unsigned 8-bit file still loads. Stereo is folded to mono. On the Cardputer the twelve pads stay in an 8000-frame cache when they fit. A 44100 Hz kit is larger than that, so the firmware streams it through the same 16 KB and does not take the loop-window pool. The low tom is `perc.wav`. Loops are streamed from the card instead of being copied into RAM.
 
 ## Loops instrument
 
-Assign **Loops** (the row after Pad) to a track. Each note starts one of the audio loops in `/moth/loops`, wrapping if there are fewer loops than keys, and lines the loop up with the current bar. Playback follows the project BPM, so a faster song speeds the loop up. The loops in this pack are one bar at 120 BPM, unsigned 8-bit mono, 22050 Hz, 44100 frames (about 44 KB each). They stream from the card in a small window, so the whole file is not kept in RAM.
+Assign **Loops** (the row after Pad) to a track. Each note starts one of the audio loops in `/moth/loops`, wrapping if there are fewer loops than keys, and lines the loop up with the current bar. Playback follows the project BPM, so a faster song speeds the loop up. The loops in this pack are one bar at 120 BPM, signed 16-bit mono, 44100 Hz, 88200 frames. They stream from the card in a small window, so the whole file is not kept in RAM.
 
 The Loops page can still audition and launch a single loop onto a track. That is separate from the Loops instrument, and both use the same cache.
 
 ## Plugins
 
-Assign a plugin from the Instrument list with Enter. The folder name is what a song remembers. Sample folders follow `mothdeck-instrument 1`. The six patch folders follow `mothdeck-patch 1`: they set a built-in or a short sample plus scale, arp, glide, and the FX rows. On the FX page, Scale, Root, Arp, Glide, Osc2, Blend, and Coarse change those after assign. Without PSRAM a plugin sample can be at most 4096 frames and at most four stay loaded. The sample folders here are unsigned 8-bit mono, 22050 Hz, 3600 frames. `body` is 1800 frames. Both fit on the Cardputer ADV. Patches stay loaded while BLE is on. Loops do not.
+Assign a plugin from the Instrument list with Enter. The folder name is what a song remembers. Sample folders follow `mothdeck-instrument 1`. The six patch folders follow `mothdeck-patch 1`: they set a built-in or a short sample plus scale, arp, glide, and the FX rows. On the FX page, Scale, Root, Arp, Glide, Osc2, Blend, and Coarse change those after assign. Without PSRAM a plugin sample can be at most 4096 frames and at most four stay loaded. The sample folders here are signed 16-bit mono at 44100 Hz, 4096 frames, so they still load while BLE is on. `body` is a short pluck under that cap. Patches stay loaded while BLE is on. Loops do not.
 
 ## Sources and licence
 

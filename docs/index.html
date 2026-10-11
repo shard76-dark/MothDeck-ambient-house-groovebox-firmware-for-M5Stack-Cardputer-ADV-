@@ -46,7 +46,7 @@
         "applicationCategory": "MusicApplication",
         "applicationSubCategory": "Groovebox firmware",
         "operatingSystem": "M5Stack Cardputer ADV (ESP32-S3)",
-        "softwareVersion": "1.2.4",
+        "softwareVersion": "1.3.0",
         "license": "https://opensource.org/licenses/MIT",
         "isAccessibleForFree": true,
         "offers": {
@@ -177,7 +177,7 @@
       <li><strong>Piano roll</strong> Play opens on a roll. Time runs across, keys down the left, and a note is a block 1–4 steps long. Enter returns to the 16-step strip. Patterns are still 1–8 bars.</li>
       <li><strong>BLE MIDI</strong> The stack's memory is reserved at boot, so turning it on always works. Advertising stays off until Settings. The air name is Mothdeck. Unload BLE frees that memory for large loops on the next boot. Notes on channels 1–4 play the four tracks, and they are stored only while Rec is on. Clock, Start, Continue, Stop, and Song Position follow an MPC. Forget an old MothDeck bond on the MPC before pairing this name.</li>
       <li><strong>SD patches</strong> A folder can be a patch of a sound that already exists, with scale, a held arp, a second oscillator, and glide. Enter on the Instrument page assigns it.</li>
-      <li><strong>Lean samples</strong> Unsigned 8-bit mono at 22050 Hz, about 22 KB/s. The mix stays 44100 Hz.</li>
+      <li><strong>16-bit samples</strong> Built-in drums and sound effects are signed 16-bit at 44100 Hz, in flash. The mix stays 44100 Hz, with Hermite interpolation and dither at the speaker.</li>
     </ul>
 
     <h2>Flash it</h2>
@@ -190,8 +190,14 @@
     </ol>
     <p>Unzip <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/raw/main/releases/mothdeck-sd-pack.zip">mothdeck-sd-pack.zip</a> onto the card root when you want the extra kits, loops, sample instruments, and patches. Checksums are in <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/SHA256SUMS">SHA256SUMS</a>.</p>
 
+    <h2>1.3.0</h2>
+    <p>Version 1.3.0 is the Cardputer image to flash. The application image is 1,746,832 bytes, SHA-256 <code>c6868ddb64fbb2c1c6dcca160173e489118ffde2552a1fa65df3da7559bf7d96</code>. It has not been tried on a Cardputer. Use earphones. It includes 1.2.2 through 1.2.4, and those releases stay published. The same notes are in the <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/CHANGELOG.md">changelog</a>, the <a href="USER-GUIDE.md">user guide</a>, and <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md">install notes</a>.</p>
+    <ul>
+      <li><strong>16-bit 44100 Hz samples.</strong> The built-in drums and twelve sound effects are rendered again from the original synthesizers, not stretched from 8-bit. They stay in flash, and the image still fits one of the two app slots. Pitched playback uses 4-point Hermite interpolation. The speaker sample is a 32-bit mix with triangular dither of one 16-bit LSB. The SD pack matches: 16-bit 44100 Hz kits, loops, and short instruments. Loops stream. A kit that does not fit the 16 KB cache streams through that same cache, so BLE and the loop windows are left alone. Plugin samples stay within 4096 frames.</li>
+    </ul>
+
     <h2>1.2.2 through 1.2.4</h2>
-    <p>Version 1.2.4 is the Cardputer image to flash. The application image is 1,153,504 bytes, SHA-256 <code>014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1</code>. It has not been tried on a Cardputer. Use earphones. 1.2.2 and 1.2.3 stay published, and this image supersedes them. The same three changes are in the <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/CHANGELOG.md">changelog</a>, the <a href="USER-GUIDE.md">user guide</a>, and <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md">install notes</a>.</p>
+    <p>Version 1.2.4 was the previous Cardputer image. The application image was 1,153,504 bytes, SHA-256 <code>014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1</code>. It was not tried on a Cardputer. 1.3.0 supersedes it.</p>
     <ul class="grid">
       <li><strong>1.2.2 — BLE stays resident</strong> NimBLE is reserved at boot, before the loop windows. Turning it on starts advertising and does not allocate, so it does not fail for lack of a free block. Unload BLE skips the stack on the next boot and frees that block for a large loop library. The toast says <code>BLE unloads after restart</code>.</li>
       <li><strong>1.2.3 — Rec off only plays</strong> Incoming MIDI notes sound and are not written into the pattern while Rec is off. Space turns Rec on, and then they record at the playhead. MIDI Start and Continue do not arm Rec.</li>

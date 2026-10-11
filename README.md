@@ -8,20 +8,21 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.2.4
-- SHA-256: `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`
-- Size: 1,153,504 bytes (app image, magic `E9`)
-- 1.2.4 includes BLE resident at boot, Rec-off play-through, and the clock, polyphony, and dropped-note fixes. Details are in [What 1.2.4 includes](#what-124-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
+- Version 1.3.0
+- SHA-256: `c6868ddb64fbb2c1c6dcca160173e489118ffde2552a1fa65df3da7559bf7d96`
+- Size: 1,746,832 bytes (app image, magic `E9`)
+- 1.3.0 keeps the 1.2.2–1.2.4 behavior and replaces the built-in drums and sound effects with 16-bit 44100 Hz renders. Details are in [What 1.3.0 includes](#what-130-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
 
 The public source and releases live in this repository. Flash the application image with [releases/INSTALL.md](releases/INSTALL.md). The same overview, with HTML meta tags for search and link previews, is [docs/index.html](docs/index.html).
 
-## What 1.2.4 includes
+## What 1.3.0 includes
 
-1.2.4 is the Cardputer image to flash. It includes the 1.2.2 and 1.2.3 behavior. This image has not been tried on a Cardputer. Use earphones.
+1.3.0 is the Cardputer image to flash. It includes the 1.2.2, 1.2.3, and 1.2.4 behavior. This image has not been tried on a Cardputer. Use earphones.
 
+- **1.3.0.** Built-in drums and sound effects are rendered again at signed 16-bit, 44100 Hz, from `tools/voices.py`. They are not a stretch of the old 8-bit tables. All twenty-four stay in flash, and the image still fits one OTA slot, so the second slot stays. A drum at its recorded pitch plays one frame per output sample. Pitched reads use 4-point Hermite interpolation. The mix is a 32-bit sum, and the speaker sample is that sum with triangular dither of one 16-bit LSB. The SD pack is the same 16-bit 44100 Hz render. Loops stream. A kit that fits the 8000-frame cache is copied in. A larger kit streams through that same 16 KB and does not take the loop-window pool. Plugin samples stay within 4096 frames so they still load while BLE is on. Built-in drums use no extra RAM, so they keep playing with BLE and with loops.
 - **1.2.2.** NimBLE is reserved at boot, before the loop windows. Turning BLE on starts advertising and does not allocate, so it does not fail for lack of a free block. Unload BLE skips the stack on the next boot and frees that block for a large loop library. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes only play while Rec is off. They are not written into the pattern. Space turns Rec on, and then they record at the playhead. MIDI Start and Continue do not arm Rec. A piano-roll key while the transport is running follows that same rule.
 - **1.2.4.** An external clock counts every `0xF8` in a BLE packet, including several that share one timestamp. Six clocks advance one 16th. The BPM on screen is smoothed over a beat and tracks from 40 to 200. A track sounds up to four notes at once. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel, so a stolen or retriggered note does not cut a different voice. Notes that arrive in one packet each get a voice. When the MIDI queue is nearly full, extra clocks are dropped so a chord behind them is kept.
@@ -46,7 +47,7 @@ These TTGO images have not been flashed, and the keys have not been pressed on h
 - Per-track FX (filter, delay, reverb, bitcrush, drive, chorus, tremolo) and a mixer with volume, mute, and solo
 - SD kits, plugin instruments, and loops. Loops stream from the card instead of filling RAM
 - BLE MIDI peripheral (notes, clock, transport, bank, volume, pitch bend), named Mothdeck in the advertising packet
-- Built-in sounds are unsigned 8-bit mono at 22050 Hz so they fit the 8MB flash and the internal SRAM
+- Built-in drums and sound effects are signed 16-bit mono at 44100 Hz, in flash, beside both OTA slots
 - One-second amber moth splash, then the Play page, with a checked exit back to Launcher
 
 This repository is the Cardputer ADV firmware. The PlatformIO target is `cardputer-adv`. `cardputer-adv-dev` is that same firmware with SD and speaker logs on USB serial. The board id in `platformio.ini` is `esp32-s3-devkitc-1` because PlatformIO has no Stamp-S3A entry; the pins in `include/BoardConfig.h` are the ADV. There is no second ADV build.
@@ -166,7 +167,7 @@ An allocation also leaves about 8KB of internal heap for the rest of the system.
 
 ## Sample format
 
-Built-in drums, built-in sound effects, the SD pack, and the default output of `tools/wav_to_instrument.py` and `tools/wav_to_loop.py` are unsigned 8-bit mono PCM at 22050 Hz. 128 is silence. That is about 22 KB/s. A 44.1 kHz stereo 16-bit file is about 176 KB/s. The mix stays 44100 Hz and stretches 22050 up to it. Prefer mono. A 16-bit WAV still loads, and stereo is folded to mono. `--raw` on the instrument converter writes little-endian int16 at the source rate.
+Built-in drums, built-in sound effects, the SD pack, and the default output of `tools/wav_to_instrument.py` and `tools/wav_to_loop.py` are signed 16-bit mono PCM at 44100 Hz. That is about 88 KB/s. Prefer mono. An older unsigned 8-bit WAV still loads (128 is silence), and stereo is folded to mono on the way in. `--raw` on the instrument converter writes little-endian int16 at the source rate. Pitched playback uses 4-point Hermite interpolation. The speaker output is dithered by one 16-bit LSB.
 
 Regenerate the flash tables with `python3 tools/gen_samples.py` and the card pack with `python3 tools/make_sd_pack.py`.
 
@@ -202,7 +203,7 @@ The pack in `releases/mothdeck-sd-pack.zip` contains:
 | `moth/instruments/body` | Patch: short pluck sample |
 | `moth/instruments/room-drive` | Patch: sine, drive, delay, reverb, chorus |
 
-Kit pad order is kick, rim, snare, clap, hat, openhat, perc, tom, shaker, ride, snap, crash. `perc.wav` is the low tom. Each pad file is already inside the 1800-frame and 8000-frame cache. Plugin samples in the pack are 3600 frames at 22050 Hz, under the 4096-frame cap. A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines.
+Kit pad order is kick, rim, snare, clap, hat, openhat, perc, tom, shaker, ride, snap, crash. `perc.wav` is the low tom. A kit that fits in 8000 frames (1800 per pad) is copied into that cache. The 44100 Hz kits in the pack are longer, so they stream through the same 16 KB. Plugin samples in the pack are 4096 frames at 44100 Hz, which is the cache cap. A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines.
 
 ```bash
 python3 tools/wav_to_instrument.py take.wav card/moth/instruments/take --name take --root 60
@@ -210,7 +211,7 @@ python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \
     card/moth/loops/house kick.wav hats.wav
 ```
 
-Those two commands resample to 22050 Hz and write 8-bit mono WAV. Song, instrument, loop, kit, and pattern bytes are specified in [docs/FORMATS.md](docs/FORMATS.md).
+Those two commands resample to 44100 Hz and write 16-bit mono WAV. Song, instrument, loop, kit, and pattern bytes are specified in [docs/FORMATS.md](docs/FORMATS.md).
 
 Plugins get ids 12–62. Id 63 is Loops. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. A song that stays on the built-in instruments is a 3155-byte MothOS version 1 file. Plugins and loops make version 2. An insert effect makes version 3. Scale, a held arp, a second oscillator, or glide makes version 4.
 
@@ -322,7 +323,7 @@ Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, radio, card, bars
 
 ![MIDI mode notice](docs/screenshots/screen-ble-loops-warning-2x.png)
 
-The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.4 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.4`.
+The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.3.0 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.3.0`.
 
 ![Settings, BLE row](docs/screenshots/screen-settings-ble-2x.png)
 

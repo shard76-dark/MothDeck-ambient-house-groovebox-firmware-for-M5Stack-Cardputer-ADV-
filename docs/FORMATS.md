@@ -2,7 +2,7 @@
 
 The firmware and the host tests share these parsers. A bad file returns an error string and is skipped. It does not reset the device.
 
-Card audio is unsigned 8-bit mono PCM at 22050 Hz. In an 8-bit WAV, 128 is silence. That is about 22 KB per second. The speaker mix stays 44100 Hz and stretches these files up to it. A 16-bit mono WAV still loads, and a stereo file is mixed to mono on the way in. A plugin `sample.raw` is little-endian int16 with no header, at the rate written in the manifest. Built-in drums and sound effects in flash use the same 8-bit 22050 Hz layout.
+Card audio is signed 16-bit mono PCM at 44100 Hz. That is about 88 KB per second. An older unsigned 8-bit WAV still loads, and in that file 128 is silence. A stereo file is mixed to mono on the way in. A plugin `sample.raw` is little-endian int16 with no header, at the rate written in the manifest. Built-in drums and sound effects in flash are signed 16-bit at 44100 Hz.
 
 Names used in paths (`name`, `sample`, `loop`, `pattern`, folder names) are at most 23 characters and may contain letters, digits, `_`, `-`, and a single `.`. `..`, slashes, and empty names are rejected.
 
@@ -57,7 +57,7 @@ name=soft-pluck
 type=sample
 sample=sample.wav
 root=60
-rate=22050
+rate=44100
 loop_start=0
 loop_end=0
 oneshot=0
@@ -73,7 +73,7 @@ fm_ratio=2
 fm_index=40
 ```
 
-`type` is `sample`, `wavetable`, `subtractive`, or `fm`. `sample` and `wavetable` require `sample=`. Audio is unsigned 8-bit mono WAV at 22050 Hz (128 is silence, about 22 KB/s), or little-endian int16 raw with no header. A 16-bit mono WAV still loads, and a stereo file is mixed to mono. `root` is the MIDI note the recording is at. Loop end must be greater than loop start when it is not zero. `wave` is `sine`, `square`, `saw`, or `triangle`. Synth types are rendered once, at load, into a 168-frame cycle.
+`type` is `sample`, `wavetable`, `subtractive`, or `fm`. `sample` and `wavetable` require `sample=`. Audio is signed 16-bit mono WAV at 44100 Hz, or little-endian int16 raw with no header. An older unsigned 8-bit WAV still loads, and a stereo file is mixed to mono. `root` is the MIDI note the recording is at. Loop end must be greater than loop start when it is not zero. `wave` is `sine`, `square`, `saw`, or `triangle`. Synth types are rendered once, at load, into a 168-frame cycle. Pitched playback uses 4-point Hermite interpolation.
 
 The folder name is the id stored in a song. Up to 4 instruments stay in memory. Without PSRAM a sample is kept to 4096 frames. Plugin ids are 12..62. Id 63 is the Loops instrument, not a plugin folder.
 
@@ -119,7 +119,7 @@ loop=hats.wav
 pattern=offbeat.pat
 ```
 
-`bpm` is 40..240. `bars` is 1..8. Up to 16 entries in a file, and the browser lists all of them. Audio is unsigned 8-bit mono WAV at 22050 Hz, or raw int16. A 16-bit WAV still loads. Playback resamples with linear interpolation so the loop's BPM matches the project BPM. Pitch moves with tempo. Launch quantize is immediate, next beat, or next bar.
+`bpm` is 40..240. `bars` is 1..8. Up to 16 entries in a file, and the browser lists all of them. Audio is signed 16-bit mono WAV at 44100 Hz, or raw int16. An older 8-bit WAV still loads. Playback uses 4-point Hermite interpolation so the loop's BPM matches the project BPM. Pitch moves with tempo. Launch quantize is immediate, next beat, or next bar.
 
 The **Loops** instrument (id 63, the row after Pad) plays these audio loops from the keyboard. The stream windows are one heap block. BLE is off at boot, so the preferred pool (20480 bytes) is reserved then. Turning BLE on frees that pool before NimBLE starts. Turning it off loads the windows that still fit beside the stack. If the pool cannot hold every audio loop, the Loops page and the toast say `Loops: N of M ready`. Playback reads the WAV from the card through a short window, so the file is not copied into the heap. A song that selects Loops is version 2. Plugin folders use ids 12..62 so they do not collide with it. A patch that does not assign Loops stays loaded while BLE is on.
 
@@ -146,7 +146,7 @@ pad=crash.wav
 
 Exactly twelve `pad=` lines, in keyboard order: C kick, C# rim, D snare, D# clap, E closed hat, F open hat, F# low tom, G tom, G# shaker, A ride, A# snap, B crash. `name` is a display label and may contain spaces. Pad filenames follow the same rules as other manifest filenames.
 
-Audio is unsigned 8-bit mono PCM WAV at 22050 Hz (128 is silence). A 16-bit WAV still loads. On the Cardputer ADV (no PSRAM) each pad is stored up to 1800 frames and the kit up to 8000 frames, expanded to 16-bit in RAM. A longer pad is shortened. If the cache cannot be allocated, the toast reports kilobytes needed and kilobytes free, and the previous kit stays selected. The built-in kit is in flash and is not a file. On the Instrument page, `,` and `/` switch kits (Fn+`,` and Fn+`/` do the same). Selecting the built-in kit drops the SD buffers. The card is never erased by a kit change. Pads play at the recorded pitch. Changing octave does not transpose them.
+Audio is signed 16-bit mono PCM WAV at 44100 Hz. An older unsigned 8-bit WAV still loads. On the Cardputer ADV (no PSRAM) a kit that fits in 8000 frames, 1800 per pad, is copied into that cache. A longer kit streams through the same 16 KB: the first 256 frames of each pad stay resident, and one window per track refills from the card on the other core. That cache is not the loop-window pool. If it cannot be allocated, the toast says `Kit unchanged` and the previous kit stays selected. The built-in kit is in flash and is not a file. On the Instrument page, `,` and `/` switch kits (Fn+`,` and Fn+`/` do the same). Selecting the built-in kit drops the SD buffers. The card is never erased by a kit change. Pads play at the recorded pitch. Changing octave does not transpose them.
 
 A pattern file:
 

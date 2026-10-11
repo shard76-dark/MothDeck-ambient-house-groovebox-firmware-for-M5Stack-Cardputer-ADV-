@@ -1,6 +1,14 @@
+## 1.3.0 (2026-10-11)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,746,832 bytes, magic `E9`, chip `0x0009`, SHA-256 `c6868ddb64fbb2c1c6dcca160173e489118ffde2552a1fa65df3da7559bf7d96`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,812,368 bytes, SHA-256 `e6abe6686c379d42d8ca28ff8981c8f7a84665bdc077f6f53fa769cddf446ac6`). The SD pack is `releases/mothdeck-sd-pack.zip` (869,531 bytes, SHA-256 `0023fdcdbe4f6b2345cffa2ad7c173b785d0ea1170a75214d7abf3052aae6c57`). Version on the Settings screen is 1.3.0. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 139596/327680. Flash used is 1,715,995 of 3,932,160 bytes in one OTA slot.
+
+Built-in drums and the twelve sound effects are signed 16-bit mono at 44100 Hz, rendered from `tools/voices.py` at that rate. They sit in flash. Pitched playback uses 4-point Hermite interpolation. The speaker sample is dithered by one 16-bit LSB. The SD pack uses the same format. Loops stream. Kits that fit the 8000-frame cache are copied in. Larger kits stream through that same 16 KB and do not use the loop-window pool. Plugin samples stay within 4096 frames. An older 8-bit WAV still loads. Built-in drums need no extra RAM, so they keep playing with BLE and with loops.
+
+This image includes the 1.2.2, 1.2.3, and 1.2.4 behavior. The LilyGO TTGO T8 port of 1.2.4 is a different binary, pre-release [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4) on the `ttgo-t8` branch. It is not in this folder.
+
 ## 1.2.4 (2026-10-11)
 
-Flash `releases/mothdeck-cardputer-adv.bin` (1,153,504 bytes, magic `E9`, chip `0x0009`, SHA-256 `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`). Version on the Settings screen is 1.2.4. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 137812/327680.
+Flash the 1.2.4 application image (1,153,504 bytes, magic `E9`, chip `0x0009`, SHA-256 `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`). Version on the Settings screen is 1.2.4. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 137812/327680. Superseded by 1.3.0.
 
 MIDI clock from an MPC follows every tick in the packet, including several `0xF8` bytes that share one timestamp. Six ticks advance one step. The BPM on screen is smoothed over a beat and tracks from 40 to 200. Notes on one channel sound together, up to four voices. A fifth replaces the oldest note. Note-off, including velocity 0, releases only that note and channel. Notes in one packet each get a voice. Extra clocks are dropped when the queue is nearly full so a chord behind them is kept.
 

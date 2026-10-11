@@ -6,6 +6,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CXX="${CXX:-g++}"
 FLAGS=(-std=c++17 -Wall -Wextra -Werror -I"$ROOT/include")
 
+echo "DSP interpolation and dither"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_dsp.cpp" \
+  -o /tmp/mothdeck_test_dsp
+/tmp/mothdeck_test_dsp
+
 echo "BLE MIDI advertising payload"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_ble_advert.cpp" \

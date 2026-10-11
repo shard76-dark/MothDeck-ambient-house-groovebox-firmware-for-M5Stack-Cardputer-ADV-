@@ -2,7 +2,7 @@
 """Build sd-card-example/ with original synthesized instruments and loops.
 
 Copy the moth/ folder onto a FAT32 card. Nothing here is a recorded sample.
-WAV files are unsigned 8-bit mono at 22050 Hz (128 is silence).
+WAV files are signed 16-bit mono at 44100 Hz, rendered at that rate.
 """
 import math
 import os
@@ -72,13 +72,15 @@ def pad_loop(rate, seconds, freq):
 
 
 def main():
-    rate = 22050
+    rate = 44100
     inst = os.path.join(OUT, "instruments")
     pluck_dir = os.path.join(inst, "soft-pluck")
     os.makedirs(pluck_dir, exist_ok=True)
-    # 3600 frames stays under the 4096-frame plugin cache.
-    frames = 3600
-    write_wav(os.path.join(pluck_dir, "sample.wav"), pluck(frames, rate, 261.63), rate)
+    # Same duration as the old 3600-frame 22050 Hz pluck, then the head that
+    # fits the 4096-frame cache kept beside BLE.
+    full = int(round(rate * 3600 / 22050.0))
+    frames = 4096
+    write_wav(os.path.join(pluck_dir, "sample.wav"), pluck(full, rate, 261.63)[:frames], rate)
     write(
         os.path.join(pluck_dir, "manifest.txt"),
         "\n".join(
@@ -88,9 +90,9 @@ def main():
                 "type=sample",
                 "sample=sample.wav",
                 "root=60",
-                "rate=22050",
-                "loop_start=900",
-                "loop_end=3500",
+                "rate=44100",
+                "loop_start=1800",
+                "loop_end=4088",
                 "attack=0",
                 "decay=40",
                 "sustain=70",
@@ -194,7 +196,8 @@ def main():
     # manifests. body.wav is a short original pluck under the 4096-frame cap.
     body = os.path.join(inst, "body")
     os.makedirs(body, exist_ok=True)
-    write_wav(os.path.join(body, "body.wav"), pluck(1800, rate, 196.0), rate)
+    body_frames = int(round(rate * 1800 / 22050.0))
+    write_wav(os.path.join(body, "body.wav"), pluck(body_frames, rate, 196.0), rate)
     write(
         os.path.join(body, "manifest.txt"),
         "\n".join(
@@ -204,7 +207,7 @@ def main():
                 "source=sample",
                 "sample=body.wav",
                 "root=55",
-                "rate=22050",
+                "rate=44100",
                 "oneshot=1",
                 "gain=100",
                 "envelope=0",
