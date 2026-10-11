@@ -192,7 +192,7 @@ static void testBarsAndExternalLoop() {
   tracker.ApplySong(song);
   expect(tracker.patternLength == 16, "a short saved length rounds up to one bar");
 
-  tracker.SetCommand('Y', 1);
+  tracker.SetCommand('X', 0);
   transport(tracker, MIDI_MSG_START, 0);
   expect(tracker.patternLength == 16, "the first Start does not invent a length");
   clocks(tracker, 96 * 4);
@@ -201,13 +201,14 @@ static void testBarsAndExternalLoop() {
   expect(tracker.currentPattern == 0, "Start stays on the current pattern");
 
   tracker.SetCommand('Y', 2);
+  expect(tracker.LengthLocked() && tracker.patternLength == 32, "Bars locks the length");
   transport(tracker, MIDI_MSG_START, 0);
   clocks(tracker, 96 * 4);
   transport(tracker, MIDI_MSG_STOP, 0);
   transport(tracker, MIDI_MSG_START, 0);
-  expect(tracker.patternLength == 32, "Stop cancels auto-length, so the next Start keeps two bars");
+  expect(tracker.patternLength == 32, "a locked length stays two bars across Stop and Start");
 
-  tracker.SetCommand('Y', 2);
+  tracker.SetCommand('X', 1);
   transport(tracker, MIDI_MSG_START, 0);
   transport(tracker, MIDI_MSG_SONG_POS, 40);
   expect(tracker.currentPattern == 0 && tracker.trackIndex == 8, "song position is modulo the 32-step pattern");
@@ -488,9 +489,9 @@ static void noteOff(Tracker &tracker, int channel, int note) {
 }
 
 static void testExternalClockPackets() {
-  const int rates[] = {60, 120, 174};
-  const int groups[] = {2, 3, 4};
-  for (int r = 0; r < 3; r++) {
+  const int rates[] = {60, 90, 120, 174};
+  const int groups[] = {2, 3, 4, 3};
+  for (int r = 0; r < 4; r++) {
     int bpm = rates[r];
     Tracker shared;
     transport(shared, MIDI_MSG_START, 0);
@@ -607,6 +608,95 @@ static void testMidiPolyphony() {
   expect(renderEnergy(drums, 16) > 0, "the other drum hits keep ringing");
 }
 
+static void testStopAndSlaveTiming() {
+  Tracker stopped;
+  stopped.SetCommand('I', 2);
+  transport(stopped, MIDI_MSG_START, 0);
+  noteOn(stopped, 0, 60);
+  expect(stopped.isPlaying && stopped.LiveHeld(0) == 1, "a note is sounding when the clock is running");
+  stopped.voices[0].SetNote(0, false, 1, 2);
+  expect(stopped.voices[0].sounding == 1, "the voice is open before Stop");
+  int head = stopped.trackIndex;
+  clocks(stopped, 12);
+  expect(stopped.trackIndex == head + 2, "twelve clocks are two 16ths before Stop");
+  transport(stopped, MIDI_MSG_STOP, 0);
+  expect(!stopped.isPlaying && stopped.LiveHeld(0) == 0, "Stop releases live notes");
+  expect(stopped.voices[0].sounding == 0, "Stop silences the voice");
+  int frozen = stopped.trackIndex;
+  for (int i = 0; i < 20000; i++) {
+    stopped.UpdateTracker();
+  }
+  clocks(stopped, 24);
+  expect(stopped.trackIndex == frozen, "Stop holds the playhead. The internal clock does not resume");
+
+  MidiEvent leaked;
+  int realtime = 0;
+  int popped = 0;
+  while (stopped.PopMidiOut(&leaked)) {
+    popped++;
+    if (midiIsRealtime(leaked.type)) {
+      realtime++;
+    }
+  }
+  expect(realtime == 0, "clock, start, stop, and song position are not queued back out");
+
+  Tracker looped;
+  looped.SetCommand('X', 0);
+  transport(looped, MIDI_MSG_START, 0);
+  clocks(looped, 96 * 2);
+  transport(looped, MIDI_MSG_SONG_POS, 0);
+  transport(looped, MIDI_MSG_CONTINUE, 0);
+  expect(looped.Bars() == 2 && looped.patternLength == 32, "Song Position 0 after two bars sets two bars");
+  expect(looped.isPlaying && looped.trackIndex == 1, "Continue plays the 16th Song Position named");
+  int aligned = looped.trackIndex;
+  clocks(looped, 5);
+  expect(looped.trackIndex == aligned, "five clocks stay inside the 16th");
+  clocks(looped, 1);
+  expect(looped.trackIndex == aligned + 1, "the sixth clock advances one 16th");
+
+  Tracker jumped;
+  jumped.SetCommand('X', 0);
+  transport(jumped, MIDI_MSG_START, 0);
+  transport(jumped, MIDI_MSG_SONG_POS, 32);
+  transport(jumped, MIDI_MSG_SONG_POS, 0);
+  transport(jumped, MIDI_MSG_CONTINUE, 0);
+  expect(jumped.Bars() == 2, "a Song Position that jumps from 32 back to 0 is a two-bar loop");
+
+  Tracker locked;
+  locked.SetCommand('Y', 1);
+  transport(locked, MIDI_MSG_START, 0);
+  transport(locked, MIDI_MSG_SONG_POS, 32);
+  transport(locked, MIDI_MSG_SONG_POS, 0);
+  transport(locked, MIDI_MSG_CONTINUE, 0);
+  expect(locked.LengthLocked() && locked.Bars() == 1, "Bars keeps one bar when Song Position loops");
+
+  Tracker swing;
+  swing.SetCommand('X', 0);
+  swing.SetCommand('Y', 2);
+  transport(swing, MIDI_MSG_START, 0);
+  // Six clocks per 16th. The on-16th spans 80 ms, the off-16th 40 ms (about 67%).
+  int stamp = 0;
+  for (int step = 0; step < 16; step++) {
+    int span = (step & 1) == 0 ? 40 : 80;
+    for (int tick = 0; tick < 6; tick++) {
+      MidiEvent clk = {};
+      clk.type = MIDI_MSG_CLOCK;
+      stamp += (tick == 5) ? (span - 10) : 2;
+      clk.value14 = (uint16_t)(stamp & 0x1FFF);
+      swing.HandleMidi(clk);
+    }
+  }
+  expect(swing.trackIndex == 1 + 16, "swung clocks still advance one step per six ticks");
+  int swingPct = swing.Swing();
+  expect(swingPct >= 60 && swingPct <= 74, "uneven clock spacing reports swing");
+
+  Tracker straight;
+  straight.SetCommand('X', 0);
+  transport(straight, MIDI_MSG_START, 0);
+  clocks(straight, 96);
+  expect(straight.Swing() >= 48 && straight.Swing() <= 55, "even clocks stay near straight");
+}
+
 int main() {
   testAssignStaysOnTrack();
   testMidiBankStaysOnChannel();
@@ -616,6 +706,7 @@ int main() {
   testMidiNotesRespectRec();
   testExternalClockPackets();
   testMidiPolyphony();
+  testStopAndSlaveTiming();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

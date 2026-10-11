@@ -2,6 +2,18 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.8.1 (2026-10-11)
+
+Stop from an MPC now stops. `0xFC` holds the playhead and silences the voices, including stacked chord tones. It does not hand the pattern back to the internal clock. Space does that. Start plays from the top. Continue after a Song Position plays that 16th, so a loop that sends Song Position and Continue stays bar-aligned. Six clocks are one 16th, 24 per quarter note.
+
+Each BLE write is copied into a 2 KB ring in the radio callback and parsed on the audio task, so a connection event that carries several packets is not collapsed to one. The tempo is the time between clock bytes, including several that share a timestamp. A connected audio block is 128 samples, about 2.9 ms, which is shorter than one clock at 174 BPM. Clock, start, continue, stop, and song position are not sent unless Settings, Clock out is on. It is off. Chords, loops, and the Bluedroid stack stay.
+
+Song Position that jumps backward, or a return to zero after a whole number of bars, sets the pattern length from 1 to 8 bars. Bars on the Settings page locks that length until a new song. Swing is reported only when the clock itself is uneven, and the step waits for the sixth clock so the offbeat lands with the clock. MIDI clock does not carry a time signature. The bar is 4/4, 16 steps. A 3/4 or 5/4 loop is not resized, and an even clock has no swing to follow.
+
+A build with `MOTHOS_DEV_LOG` prints each packet as `BLE rx` and, once a second, `BLE 1s` with raw `0xF8` / `0xFC` counts, parsed clocks and stops, dropped packets, and the negotiated connection interval. The release `ttgo-t8` and `ttgo-t8-dac` images leave that log out.
+
+Images: `mothdeck-ttgo-t8-1.8.1-test.bin` (1,899,296 bytes, magic `E9`, SHA-256 `fb43e840d1749e8785daa35897dfbb5bc9cb4df50a2efeb1e8e63f5b9d3700af`, static RAM 103408/327680) and `mothdeck-ttgo-t8-dac-1.8.1-test.bin` (1,893,312 bytes, magic `E9`, SHA-256 `616352c12a92106355dcb9735e27c6c962fec3c55b1101bdd8382bf674e2b814`, static RAM 102544/327680). Factory slot margins are 132,320 and 138,304 bytes. Browser images are `docs/flash/mothdeck-ttgo-t8-full.bin` (1,964,832 bytes, SHA-256 `261935d6d31a139274d059b09b77dd3f43c5a0b1b3f97823cc661cf478933400`) and `docs/flash/mothdeck-ttgo-t8-dac-full.bin` (1,958,848 bytes, SHA-256 `ac88ffb5a6b2a5f8fddce7e9f1239e618263599d6c6b081794535ed7f6236063`). Host tests passed. Nothing here was flashed or listened to. The Cardputer image is a separate branch.
+
 ## 1.8.0 (2026-10-11)
 
 The filter's wide multiply is MULL and MULSH. `MOTHDECK_DSP_C` keeps the portable 64-bit path. Host tests check that path against a 64-bit product, including negative numbers. The low-pass second pole sits a quarter below the first, and a cutoff change slews for about 6 ms. A new note still starts on the cutoff you set. The voice count is unchanged. Loops, BLE, drums, chords, the sampler, and the chain stay loaded.

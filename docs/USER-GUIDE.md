@@ -204,15 +204,28 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | CC 1 | Low pass |
 | CC 7 / CC 39 | Volume, mapped to 0–8 |
 | Pitch bend | Per channel |
-| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Tempo is averaged over one beat of those clocks |
-| Start `0xFA` | External sync, current pattern, bar 1 step 1 |
-| Continue `0xFB` | Resume, no jump |
-| Stop `0xFC` | Stop and leave external sync. Space returns to the internal clock |
-| Song position `0xF2` | Sixteenth-note index, modulo the pattern length |
+| Clock `0xF8` | 24 per quarter note. Six clocks are one 16th. Every clock in every packet counts, including several that share one timestamp. Tempo is the time between those clocks, smoothed over a beat, from 40 to 240. The audio block does not advance the step |
+| Start `0xFA` | From the top of the current pattern. The downbeat plays on Start. The next six clocks are the next 16th. Does not arm Rec |
+| Continue `0xFB` | Keeps playing. If a Song Position just arrived, Continue plays that 16th so the bar stays aligned. Does not arm Rec |
+| Stop `0xFC` | Stops the playhead and silences the voices. It does not fall back to the internal clock. Space does that |
+| Song position `0xF2` | The 16th the next Continue or the loop lines up on. A jump backward, or a return to 0 after a whole number of bars, sets the pattern length |
 
-The link asks for 7.5–15 ms a quarter of a second after connect. If the MPC accepts 15 ms, expect about 25 ms end to end. If it stays at 30 ms, expect about 40 ms. The page shows the number that was negotiated. These are estimates from the buffer sizes. BLE in 1.2.1 has not been tried on a Cardputer.
+The link asks for 7.5–15 ms a quarter of a second after connect. The MIDI page shows the interval the MPC actually accepted. A connected render is 128 samples, about 2.9 ms, which is shorter than one clock at 174 BPM (about 14 ms). Each BLE write is copied in the radio callback and parsed on the audio task, so several packets in one connection event are all kept. A build with `MOTHOS_DEV_LOG` prints every received packet as `BLE rx`, and once a second `BLE 1s` with the raw `0xF8` and `0xFC` counts, the parsed clock and stop counts, dropped packets, and the negotiated interval in 1.25 ms units.
 
-Auto-length watches for Start, or a Song Position of 0, after a whole number of bars of clocks, and rounds to 1–8 bars. The MPC Live II keeps the clock running through a sequence loop and does not send Start there. When nothing comes back to zero, the length stays as set on the device.
+Clock out is off. MothDeck does not send clock, start, continue, stop, or song position. Settings, Clock out, Fn+`/` turns that on. Fn+`,` turns it off. Notes and controllers still go out either way.
+
+What the clock can tell MothDeck:
+
+- Tempo, from the spacing of the clock bytes.
+- Where the step is. Six clocks, one 16th, 24 per quarter. Start is the top. Song Position plus Continue is that 16th.
+- Pattern length, 1–8 bars, when Song Position jumps backward or returns to 0 after a whole number of bars. The MPC sends Song Position and Continue when a sequence loops. Changing Bars locks the length until a new song.
+- Swing, only when the clock itself is uneven. The first 16th of a pair taking more of the time than the second is swing. The step already waits for the sixth clock, so it lands on that grid. Even clocks stay straight.
+
+What MIDI clock does not carry:
+
+- Time signature. The length is bars of 4/4, 16 steps each. A 3/4 or 5/4 loop is not a whole number of those bars, so the length stays put.
+- A swing amount. If the MPC swings its notes and leaves the clock even, there is nothing to follow.
+- The MPC pattern number or track count. The length is only the distance between song-position resets.
 
 ## Settings
 
@@ -220,7 +233,7 @@ Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change the selected row.
 
 ![Settings, BLE row](screenshots/screen-settings-ble-2x.png)
 
-Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.1 does not. That row says `off`, `adv`, or `conn`. The dev build still uses the row for a heap readout.
+Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars, Clock out. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.1 does not. That row says `off`, `adv`, or `conn`, and the version line says `v1.8.1`. The dev build still uses the row for a heap readout.
 
 | Row | Keys |
 | --- | --- |
@@ -228,7 +241,8 @@ Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE
 | BLE name | Enter starts typing. Glyphs are lowercased and appended, up to 16. Backspace deletes one. Enter applies the name and restarts advertising when the radio is on. `` ` `` cancels. Space does not play and is not typed |
 | BLE | Fn+`,` turns the radio off. Fn+`/` turns it on |
 | Unload / Load | Enter stores the choice |
-| Bars | Fn+`,` and Fn+`/` set the pattern length from 1 to 8 bars and leave the notes in place |
+| Bars | Fn+`,` and Fn+`/` set the pattern length from 1 to 8 bars and leave the notes in place. That length stays put when the MPC loops. A new song follows Song Position again |
+| Clock out | Off. Fn+`/` sends clock, start, continue, stop, and song position. Fn+`,` stops sending them. Notes and controllers are unchanged |
 
 ![Settings, Bars row](screenshots/screen-settings-bars-2x.png)
 

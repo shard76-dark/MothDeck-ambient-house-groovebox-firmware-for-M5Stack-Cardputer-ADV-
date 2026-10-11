@@ -135,6 +135,15 @@ void Voice::ReleaseShots() {
   memset(shots, 0, sizeof(shots));
 }
 
+void Voice::Silence() {
+  sounding = 0;
+  heldCount = 0;
+  heldPos = 0;
+  envelopeIndex = 0;
+  ReleaseShots();
+  memset(sampleHistory, 0, sizeof(sampleHistory));
+}
+
 static int pcmStep(int rate, bool native, int octave, int recOctave) {
   int step;
   if (native) {

@@ -49,9 +49,14 @@ public:
   int Poll(MidiEvent *out, int maxOut);
   int ConsumeConnectEdge();
   void Send(const MidiEvent &event);
+  // Real-time out (clock, start, continue, stop, song position). Default off.
+  // Notes and controllers are unaffected.
+  void SetClockOut(bool on);
+  bool ClockOut() const;
 
 private:
   bool started;
+  bool clockOut;
 };
 
 #endif
