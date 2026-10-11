@@ -1,3 +1,9 @@
+## 1.5.0 (2026-10-11)
+
+TTGO T8 images, not the Cardputer files below. `mothdeck-ttgo-t8-1.5.0-test.bin` is 1,896,768 bytes, magic `E9`, SHA-256 `390d35fb59e1732700a3df54116d16125931a636d1fc7772dfbc07b7f213022d`, static RAM 100648/327680, PCM5102A. `mothdeck-ttgo-t8-dac-1.5.0-test.bin` is 1,890,848 bytes, magic `E9`, SHA-256 `61b1f293af37d7c43ffa6833f8337896b7dd7f958524be952d950f21c8da0704`, static RAM 99784/327680, GPIO25 DAC. Host tests passed. Nothing here was flashed or listened to.
+
+The Song page records the master mix with `U` (8192 frames) into a fixed buffer. `O` plays that take. `Y` plays it an octave higher. Hold F4, then F2, then F2 again opens the same actions on the pad, and also stores or clears a scene, without taking a key away from File. Loops, BLE, drums, chords, and plugins stay loaded. The Cardputer 1.5.0 image is a different binary.
+
 ## 1.4.0 (2026-10-11)
 
 TTGO T8 images, not the Cardputer files below. `mothdeck-ttgo-t8-1.4.0-test.bin` is 1,895,392 bytes, magic `E9`, SHA-256 `8137d0bd4d73b3a80c00204d960bb3fd030becedaefa021fb098362f56b419db`, static RAM 84240/327680, PCM5102A. `mothdeck-ttgo-t8-dac-1.4.0-test.bin` is 1,889,456 bytes, magic `E9`, SHA-256 `04e875f77b1fdc75ca6b626f40ffc1dd814b52bd75d113e0bd3a398dd607a12e`, static RAM 83376/327680, GPIO25 DAC. Host tests passed. Nothing here was flashed or listened to.

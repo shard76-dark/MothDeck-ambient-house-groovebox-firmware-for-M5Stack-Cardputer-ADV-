@@ -2,7 +2,7 @@
 
 MothDeck on a LilyGO TTGO T8 V1.8. This is a classic ESP32-WROVER: dual core, 4MB flash, 4MB PSRAM, and a microSD slot. The board has no panel and no keyboard of its own. The display for this port is a confirmed ST7789 240×135, and the stock image drives it. The keys are a standard 4×4 membrane, mounted with the connector on top. The Cardputer ADV image is a different build, on `main`. Do not flash a TTGO binary onto a Cardputer, or the other way around.
 
-This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The version string is 1.4.0, so the Settings line and the boot log say `MothDeck 1.4.0 TTGO T8`. The 1.3.0 images stay and are superseded, as do `ttgo-t8-v1.2.2`, `ttgo-t8-v1.2.3`, and `ttgo-t8-v1.2.4`. From this version on, a build that reaches Chris with a change gets a new version number. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins match the Cardputer 1.2.4 clock and polyphony rules, plus chords (below) and the 4×4 keypad, which the Cardputer image does not have. On this board the loop windows, sample buffers, pattern grid, chord notes, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record. An external clock counts every tick in a BLE packet, and a track sounds up to four MIDI notes at once on top of a stored chord. BLE memory has been reserved at boot since 1.2.2.
+This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The version string is 1.5.0, so the Settings line and the boot log say `MothDeck 1.5.0 TTGO T8`. The 1.4.0 and 1.3.0 images stay and are superseded, as do `ttgo-t8-v1.2.2`, `ttgo-t8-v1.2.3`, and `ttgo-t8-v1.2.4`. From this version on, a build that reaches Chris with a change gets a new version number. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins match the Cardputer 1.2.4 clock and polyphony rules, plus chords (below) and the 4×4 keypad, which the Cardputer image does not have. On this board the loop windows, sample buffers, pattern grid, chord notes, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record. An external clock counts every tick in a BLE packet, and a track sounds up to four MIDI notes at once on top of a stored chord. BLE memory has been reserved at boot since 1.2.2.
 
 ## Samples
 
@@ -12,7 +12,9 @@ The factory app slot is 2,031,616 bytes, so the six long effects do not fit besi
 
 ## Scenes
 
-The Song page stores up to eight scenes. `J` saves the current pattern and the four track mutes as the next scene. `P` clears the chain. While a chain is stored, playback walks it at the end of each pattern and applies that scene's pattern and mutes. An empty chain leaves song mode alone. Loops, BLE, drums, chords, and plugins stay loaded. A song with a chain is version 5 (18 bytes after the version 4 block). An empty chain stays version 1 through 4, so older songs still load.
+The Song page stores up to eight scenes. `J` saves the current pattern and the four track mutes as the next scene. `P` clears the chain. While a chain is stored, playback walks it at the end of each pattern and applies that scene's pattern and mutes. An empty chain leaves song mode alone. Loops, BLE, drums, chords, and plugins stay loaded. A song with a chain is version 5 (18 bytes after the version 4 block). An empty chain stays version 1 through 4, so older songs still load. On the 4×4 pad those scene keys are Hold F4, F2, F2 again: B stores a scene and E clears the chain. The serial keyboard still uses `J` and `P`.
+
+The Song page can sample the master mix. `U` records the next 8192 frames (about 0.19 seconds). `O` plays that take. `Y` plays it an octave higher. The same three actions are G#, A, and A# on the Take page. The buffer is reserved with the firmware. Drums, loops, BLE, chords, plugins, and the chain stay loaded.
 
 ## Chords
 
@@ -38,7 +40,7 @@ pio run -e cardputer-adv
 
 The app image is `.pio/build/ttgo-t8/firmware.bin`. Flash it over the board's USB serial port (CP2104 or CH9102, 115200). This is a factory app at `0x10000` in `partitions/ttgo_t8_4MB.csv`. There is no Launcher on this board.
 
-The 1.4.0 images are `mothdeck-ttgo-t8-1.4.0-test.bin` (1,895,392 bytes, magic `E9`, SHA-256 `8137d0bd4d73b3a80c00204d960bb3fd030becedaefa021fb098362f56b419db`, static RAM 84240/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.4.0-test.bin` (1,889,456 bytes, magic `E9`, SHA-256 `04e875f77b1fdc75ca6b626f40ffc1dd814b52bd75d113e0bd3a398dd607a12e`, static RAM 83376/327680, GPIO25 DAC). They have not been flashed or listened to. The 1.3.0 images stay and are superseded: `mothdeck-ttgo-t8-1.3.0-test.bin` (1,894,608 bytes, magic `E9`, SHA-256 `cbbc7017ada1760708682b1b2fce0aa3b6cd645f1e75c4a274502d0bf9608b39`, static RAM 84184/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.3.0-test.bin` (1,888,656 bytes, magic `E9`, SHA-256 `72dc194cbbaaf180f88728910713f69b07fb5c860d69056a14ee6c48d433e221`, static RAM 83320/327680, GPIO25 DAC). They have not been flashed or listened to. The 1.2.4 pre-release stays up and is superseded: `mothdeck-ttgo-t8-1.2.4-test.bin` (1,636,256 bytes, magic `E9`, SHA-256 `0844c6b5b6715601e812b7328d6072b23e7479608d9cc4f0056d44e2b1103a96`, static RAM 82296/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.2.4-test.bin` (1,630,288 bytes, magic `E9`, SHA-256 `46d1bc56162f96589c97edb2b2289961bd57f5b2cf9e7131449fa6c865a8a4ee`, static RAM 81432/327680, GPIO25 DAC). They have not been flashed or listened to. The 1.2.3 pre-release stays up and is superseded: `mothdeck-ttgo-t8-1.2.3-test.bin` (1,634,448 bytes, magic `E9`, SHA-256 `2763b41df41099bda4726999d883b86071176c1ff1d277b2ee08857ad3db88ba`, static RAM 81336/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.2.3-test.bin` (1,628,448 bytes, magic `E9`, SHA-256 `ac5d73f8e8cdea928507cdab3326bcc503b7296a92d7273a8ece67135dc8a195`, static RAM 80472/327680, GPIO25 DAC). The 1.2.2 pre-release stays up as well.
+The 1.5.0 images are `mothdeck-ttgo-t8-1.5.0-test.bin` (1,896,768 bytes, magic `E9`, SHA-256 `390d35fb59e1732700a3df54116d16125931a636d1fc7772dfbc07b7f213022d`, static RAM 100648/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.5.0-test.bin` (1,890,848 bytes, magic `E9`, SHA-256 `61b1f293af37d7c43ffa6833f8337896b7dd7f958524be952d950f21c8da0704`, static RAM 99784/327680, GPIO25 DAC). They have not been flashed or listened to. The 1.4.0 images stay and are superseded: `mothdeck-ttgo-t8-1.4.0-test.bin` (1,895,392 bytes, magic `E9`, SHA-256 `8137d0bd4d73b3a80c00204d960bb3fd030becedaefa021fb098362f56b419db`, static RAM 84240/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.4.0-test.bin` (1,889,456 bytes, magic `E9`, SHA-256 `04e875f77b1fdc75ca6b626f40ffc1dd814b52bd75d113e0bd3a398dd607a12e`, static RAM 83376/327680, GPIO25 DAC). They have not been flashed or listened to. The 1.3.0 images stay and are superseded: `mothdeck-ttgo-t8-1.3.0-test.bin` (1,894,608 bytes, magic `E9`, SHA-256 `cbbc7017ada1760708682b1b2fce0aa3b6cd645f1e75c4a274502d0bf9608b39`, static RAM 84184/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.3.0-test.bin` (1,888,656 bytes, magic `E9`, SHA-256 `72dc194cbbaaf180f88728910713f69b07fb5c860d69056a14ee6c48d433e221`, static RAM 83320/327680, GPIO25 DAC). They have not been flashed or listened to. The 1.2.4 pre-release stays up and is superseded: `mothdeck-ttgo-t8-1.2.4-test.bin` (1,636,256 bytes, magic `E9`, SHA-256 `0844c6b5b6715601e812b7328d6072b23e7479608d9cc4f0056d44e2b1103a96`, static RAM 82296/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.2.4-test.bin` (1,630,288 bytes, magic `E9`, SHA-256 `46d1bc56162f96589c97edb2b2289961bd57f5b2cf9e7131449fa6c865a8a4ee`, static RAM 81432/327680, GPIO25 DAC). They have not been flashed or listened to. The 1.2.3 pre-release stays up and is superseded: `mothdeck-ttgo-t8-1.2.3-test.bin` (1,634,448 bytes, magic `E9`, SHA-256 `2763b41df41099bda4726999d883b86071176c1ff1d277b2ee08857ad3db88ba`, static RAM 81336/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.2.3-test.bin` (1,628,448 bytes, magic `E9`, SHA-256 `ac5d73f8e8cdea928507cdab3326bcc503b7296a92d7273a8ece67135dc8a195`, static RAM 80472/327680, GPIO25 DAC). The 1.2.2 pre-release stays up as well.
 
 ```bash
 pio run -e ttgo-t8 -t upload
@@ -60,7 +62,7 @@ Leave GPIO 6–11 alone. Those are the flash bus. Leave GPIO12 alone. It is a st
 
 ## Power and the USB port
 
-USB is a serial adapter, not native USB. The keyboard protocol below is bytes on that UART at 115200 8N1. The boot log is the same port: `MothDeck 1.4.0 TTGO T8`.
+USB is a serial adapter, not native USB. The keyboard protocol below is bytes on that UART at 115200 8N1. The boot log is the same port: `MothDeck 1.5.0 TTGO T8`.
 
 ## microSD
 
@@ -255,7 +257,7 @@ Hold F3. The Loops page is on screen. F3 leaves.
 
 #### Hold F4 — Pages, file, and settings
 
-Hold F4. F4 leaves. F1 is Pages, F2 is File, F3 is Settings.
+Hold F4. F4 leaves. F1 is Pages, F2 is File, and F2 again is Take. F3 is Settings. F2 from Take returns to File. The File keys stay where they were.
 
 Pages. One key opens that screen:
 
@@ -287,6 +289,19 @@ File. The Song page is on screen. Slots are `/moth` song slots 1–4.
 | C# | new song at the current length |
 | D | copy pattern |
 | D# | paste pattern |
+
+Take. Press F2 again while File is open. The Song page stays on screen. `U` on the serial keyboard records, `O` plays, and `Y` plays an octave higher. The same actions are on the pad:
+
+| Key | Action |
+| --- | --- |
+| G# | record the next 8192 frames of the master mix |
+| A | play that take |
+| A# | play it an octave higher |
+| B | store the current pattern and mutes as the next scene |
+| E | clear the chain |
+| F | song mode, all patterns |
+
+The take is a fixed buffer. It is not taken from the loop windows, a kit, or BLE. Recording hears the tracks and not the take.
 
 Settings.
 

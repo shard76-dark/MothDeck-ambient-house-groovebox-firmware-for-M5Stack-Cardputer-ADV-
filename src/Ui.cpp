@@ -1007,7 +1007,7 @@ static void drawSong() {
                  snap.chainLen, 2 - snap.masterVolume);
   canvas->setCursor(4, 104);
   canvas->print("S save L load X del T stat");
-  legend("N new  J scene  P clear  G all");
+  legend("N new J scn P clr U rec O ply");
 }
 
 static void drawLoops() {
@@ -1926,6 +1926,9 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     else if (c == 'g') audioCommand('*', 2);
     else if (c == 'j') audioCommand('q', 0);
     else if (c == 'p') audioCommand('q', 1);
+    else if (c == 'u') audioCommand('u', 0);
+    else if (c == 'o') audioCommand('u', 2);
+    else if (c == 'y') audioCommand('u', 1);
     else if (c == 'm') audioCommand('C', 0);
     else if (c == 'h') audioCommand('H', 0);
     else if (c == 'b') audioCommand('B', (snap.bpmSlot + 1) & 3);
@@ -2596,6 +2599,23 @@ static void padPagesKey(int key) {
   }
 }
 
+static void padTakeKey(int key) {
+  padGoto(kSongPage);
+  if (key == 4) {
+    audioCommand('u', 0);
+  } else if (key == 5) {
+    audioCommand('u', 2);
+  } else if (key == 6) {
+    audioCommand('u', 1);
+  } else if (key == 7) {
+    audioCommand('q', 0);
+  } else if (key == 8) {
+    audioCommand('q', 1);
+  } else if (key == 9) {
+    audioCommand('*', 2);
+  }
+}
+
 static void padSongKey(int key, BleMidi &ble) {
   if (key == 0) {
     padSub = 0;
@@ -2603,9 +2623,15 @@ static void padSongKey(int key, BleMidi &ble) {
     return;
   }
   if (key == 1) {
-    padSub = 1;
-    padGoto(kSongPage);
-    padLegendSet("File  F4 close  F1 pages");
+    if (padSub == 1) {
+      padSub = 3;
+      padGoto(kSongPage);
+      padLegendSet("Take  F2 file  U rec O play");
+    } else {
+      padSub = 1;
+      padGoto(kSongPage);
+      padLegendSet("File  F4 close  F2 take");
+    }
     return;
   }
   if (key == 2) {
@@ -2618,6 +2644,8 @@ static void padSongKey(int key, BleMidi &ble) {
     padFileKey(key);
   } else if (padSub == 2) {
     padSettingsKey(key, ble);
+  } else if (padSub == 3) {
+    padTakeKey(key);
   } else {
     padPagesKey(key);
   }

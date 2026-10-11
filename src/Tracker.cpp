@@ -1,4 +1,12 @@
 #include "Tracker.h"
+#include "MixCapture.h"
+
+// Host tests link the tracker without the capture file. The firmware
+// provides the real functions, which replace these.
+__attribute__((weak)) void mixCaptureArm() {}
+__attribute__((weak)) void mixCaptureFeed(int) {}
+__attribute__((weak)) void mixCapturePlay(int, int) {}
+__attribute__((weak)) int mixCaptureMix() { return 0; }
 #include "AudioEngine.h"
 #include "DspHot.h"
 #include "PcmHold.h"
@@ -940,6 +948,18 @@ void Tracker::SetCommand(char command, int val) {
     case 'H':
       masterVolume = masterVolume ? 0 : 1;
       SetHintF("Mstr Volume: %d", 2 - masterVolume);
+      break;
+    case 'u':
+      if (val == 1) {
+        mixCapturePlay(2, 1);
+        SetHint("Sample up");
+      } else if (val == 2) {
+        mixCapturePlay(1, 1);
+        SetHint("Sample play");
+      } else {
+        mixCaptureArm();
+        SetHint("Sampling");
+      }
       break;
     case 'q':
       if (val == 1) {
