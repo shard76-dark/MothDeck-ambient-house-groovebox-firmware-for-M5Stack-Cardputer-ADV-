@@ -9,7 +9,7 @@ Two images are produced by `./build.sh`:
 
 Checksums are in `SHA256SUMS` next to the images. The application image starts with the byte `E9`.
 
-This folder's application image is 1.2.2 (1,151,680 bytes, SHA-256 `db42620b1a79ca2c581ffc5df771400e3f5b2e7fb88eb7f2b3b9718e03121629`). BLE memory is reserved at boot, so turning it on always starts advertising and does not allocate. Unload BLE frees that memory for large loops on the next boot. Incoming MIDI notes only play while Rec is off; they are not written into the pattern. Space turns Rec on, and then they record. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is unchanged from 1.2.1.
+This folder's application image is 1.2.3. BLE memory is reserved at boot, so turning it on always starts advertising and does not allocate. Unload BLE frees that memory for large loops on the next boot. Incoming MIDI notes only play while Rec is off; they are not written into the pattern. Space turns Rec on, and then they record. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is unchanged from 1.2.1. The 1.2.2 release is superseded by this image.
 
 ## Listening
 

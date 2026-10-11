@@ -2,11 +2,17 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.2.3 (2026-10-11)
+
+Incoming MIDI notes play and are not written into the pattern while Rec is off. MIDI Start and Continue do not arm Rec. Space still arms it, and with Rec on those notes record on the playhead. A piano-roll key while the transport is running follows that same rule. Stopped, the roll still writes the cell under the cursor.
+
+The image to flash is `releases/mothdeck-cardputer-adv.bin`. Hashes are filled in when this image is built. The SD pack is unchanged from 1.2.1. Settings version line is `v1.2.3`. From this version on, a build that reaches Chris with a change gets a new version number.
+
 ## 1.2.2 (2026-10-10)
 
-BLE memory is reserved at boot, before the loop windows, so turning BLE on only starts advertising and does not fail for lack of a free block. Unload BLE skips the stack on the next boot and frees that block for a large loop library. The toast says `BLE unloads after restart`. Incoming MIDI notes play and are not written into the pattern while Rec is off. MIDI Start does not arm Rec. Space still arms it, and with Rec on those notes record on the playhead.
+BLE memory is reserved at boot, before the loop windows, so turning BLE on only starts advertising and does not fail for lack of a free block. Unload BLE skips the stack on the next boot and frees that block for a large loop library. The toast says `BLE unloads after restart`.
 
-The image to flash is `releases/mothdeck-cardputer-adv.bin` (1,151,680 bytes, magic `E9`, SHA-256 `db42620b1a79ca2c581ffc5df771400e3f5b2e7fb88eb7f2b3b9718e03121629`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,217,216 bytes, SHA-256 `b492f920d0eb2202fa4397fa3bbe1f3758285474724f9a92251f56530e973762`). The SD pack is unchanged (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Notes are in [releases/CHANGELOG.md](releases/CHANGELOG.md). Chris approved this image. Static RAM is 136004/327680. Host tests passed.
+The image published as 1.2.2 is `releases/mothdeck-cardputer-adv.bin` (1,151,680 bytes, magic `E9`, SHA-256 `db42620b1a79ca2c581ffc5df771400e3f5b2e7fb88eb7f2b3b9718e03121629`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,217,216 bytes, SHA-256 `b492f920d0eb2202fa4397fa3bbe1f3758285474724f9a92251f56530e973762`). The SD pack is unchanged (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Static RAM is 136004/327680. Superseded by 1.2.3.
 
 ## 1.2.1 (2026-10-09)
 

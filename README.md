@@ -8,10 +8,10 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.2.2
-- SHA-256: `db42620b1a79ca2c581ffc5df771400e3f5b2e7fb88eb7f2b3b9718e03121629`
-- Size: 1,151,680 bytes (app image, magic `E9`)
-- BLE memory is reserved at boot, so turning it on always starts advertising. Unload BLE frees that memory for large loops on the next boot. Incoming MIDI notes only play while Rec is off; they record when Rec is on. The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md). Chris approved this image.
+- Version 1.2.3
+- SHA-256: filled in with the built image
+- Size: filled in with the built image (app image, magic `E9`)
+- Incoming MIDI notes only play while Rec is off; they record when Rec is on. MIDI Start does not arm Rec. Space does. BLE memory is reserved at boot (that was 1.2.2), so turning it on always starts advertising. Unload BLE frees that memory for large loops on the next boot. The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
@@ -301,7 +301,7 @@ Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, radio, card, bars
 
 ![MIDI mode notice](docs/screenshots/screen-ble-loops-warning-2x.png)
 
-The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.2 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.2`.
+The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.3 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.3`.
 
 ![Settings, BLE row](docs/screenshots/screen-settings-ble-2x.png)
 

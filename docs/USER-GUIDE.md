@@ -1,10 +1,10 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.2. NimBLE is reserved at boot, and On and Off only start or stop advertising. Unload BLE frees that memory for large loops on the next boot. Incoming MIDI notes play and are not stored while Rec is off. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.3. Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does. NimBLE has been reserved at boot since 1.2.2, and On and Off only start or stop advertising. Unload BLE frees that memory for large loops on the next boot. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
-The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.2 still uses. On a 1.2.2 board the Settings version line says `v1.2.2`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`).
+The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.3 still uses. On a 1.2.3 board the Settings version line says `v1.2.3`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`).
 
 ## Moving around
 
@@ -213,7 +213,7 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | Stop `0xFC` | Stop and leave external sync. Space returns to the internal clock |
 | Song position `0xF2` | Sixteenth-note index, modulo the pattern length |
 
-The link asks for 7.5–15 ms a quarter of a second after connect. If the MPC accepts 15 ms, expect about 25 ms end to end. If it stays at 30 ms, expect about 40 ms. The page shows the number that was negotiated. These are estimates from the buffer sizes. Chris approved the 1.2.2 image.
+The link asks for 7.5–15 ms a quarter of a second after connect. If the MPC accepts 15 ms, expect about 25 ms end to end. If it stays at 30 ms, expect about 40 ms. The page shows the number that was negotiated. These are estimates from the buffer sizes. Chris approved the 1.2.2 image. 1.2.3 is the Rec-off rule as its own version.
 
 Auto-length watches for Start, or a Song Position of 0, after a whole number of bars of clocks, and rounds to 1–8 bars. The MPC Live II keeps the clock running through a sequence loop and does not send Start there. When nothing comes back to zero, the length stays as set on the device.
 
@@ -223,7 +223,7 @@ Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change the selected row.
 
 ![Settings, BLE row](screenshots/screen-settings-ble-2x.png)
 
-Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 does not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.2`. The dev build still uses the row for a heap readout.
+Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and 1.2.3 do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.3`. The dev build still uses the row for a heap readout.
 
 | Row | Keys |
 | --- | --- |
@@ -253,7 +253,7 @@ Exit has no screenshot in this set. It is a confirm, and it is in the page list 
 
 ## Notices
 
-1.2.2 keeps diagnostic kilobyte numbers on the MIDI page and in the dev build's serial log. Nothing else on the release screen names memory or RAM.
+1.2.3 keeps diagnostic kilobyte numbers on the MIDI page and in the dev build's serial log. Nothing else on the release screen names memory or RAM.
 
 | Situation | What the screen says |
 | --- | --- |
