@@ -1,3 +1,9 @@
+## 1.7.0 (2026-10-11)
+
+TTGO T8 images. `mothdeck-ttgo-t8-1.7.0-test.bin` is 1,896,768 bytes, magic `E9`, SHA-256 `987c6b48c24b49de28447b1de068af2c95bb4416a7c36c3de833a7281370b5dd`, static RAM 100648/327680, PCM5102A. `mothdeck-ttgo-t8-dac-1.7.0-test.bin` is 1,890,848 bytes, magic `E9`, SHA-256 `7ce885939f8fcbbe8d7940c285ea08f611687bffdbf7c44c8187ac6788f6a109`, static RAM 99784/327680, GPIO25 DAC. The browser installer writes `docs/flash/mothdeck-ttgo-t8-full.bin` (1,962,304 bytes, SHA-256 `586e660664e7137f9610045e322e2b5994a68c25ed0c4f94f62f0991dc76e405`) and `docs/flash/mothdeck-ttgo-t8-dac-full.bin` (1,956,384 bytes, SHA-256 `2d4b5a3d2709fb2388bf911ca738903b52cc2649a76ed11fa341de6561d6c923`). Host tests passed. Nothing here was flashed or listened to.
+
+The manual is `docs/MANUAL.md`. Playback matches 1.5.0. Wi-Fi is not in this image.
+
 ## 1.5.0 (2026-10-11)
 
 TTGO T8 images, not the Cardputer files below. `mothdeck-ttgo-t8-1.5.0-test.bin` is 1,896,768 bytes, magic `E9`, SHA-256 `390d35fb59e1732700a3df54116d16125931a636d1fc7772dfbc07b7f213022d`, static RAM 100648/327680, PCM5102A. `mothdeck-ttgo-t8-dac-1.5.0-test.bin` is 1,890,848 bytes, magic `E9`, SHA-256 `61b1f293af37d7c43ffa6833f8337896b7dd7f958524be952d950f21c8da0704`, static RAM 99784/327680, GPIO25 DAC. Host tests passed. Nothing here was flashed or listened to.

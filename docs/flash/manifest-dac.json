@@ -1,0 +1,13 @@
+{
+  "name": "MothDeck TTGO T8 GPIO25 DAC",
+  "version": "1.7.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        { "path": "mothdeck-ttgo-t8-dac-full.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

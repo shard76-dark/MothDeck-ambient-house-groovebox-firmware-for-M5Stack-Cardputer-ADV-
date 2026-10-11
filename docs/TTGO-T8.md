@@ -2,7 +2,7 @@
 
 MothDeck on a LilyGO TTGO T8 V1.8. This is a classic ESP32-WROVER: dual core, 4MB flash, 4MB PSRAM, and a microSD slot. The board has no panel and no keyboard of its own. The display for this port is a confirmed ST7789 240×135, and the stock image drives it. The keys are a standard 4×4 membrane, mounted with the connector on top. The Cardputer ADV image is a different build, on `main`. Do not flash a TTGO binary onto a Cardputer, or the other way around.
 
-This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The version string is 1.5.0, so the Settings line and the boot log say `MothDeck 1.5.0 TTGO T8`. The 1.4.0 and 1.3.0 images stay and are superseded, as do `ttgo-t8-v1.2.2`, `ttgo-t8-v1.2.3`, and `ttgo-t8-v1.2.4`. From this version on, a build that reaches Chris with a change gets a new version number. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins match the Cardputer 1.2.4 clock and polyphony rules, plus chords (below) and the 4×4 keypad, which the Cardputer image does not have. On this board the loop windows, sample buffers, pattern grid, chord notes, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record. An external clock counts every tick in a BLE packet, and a track sounds up to four MIDI notes at once on top of a stored chord. BLE memory has been reserved at boot since 1.2.2.
+This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The version string is 1.7.0, so the Settings line and the boot log say `MothDeck 1.7.0 TTGO T8`. The manual is [MANUAL.md](MANUAL.md). The browser installer is [flash.html](flash.html). The 1.4.0 and 1.3.0 images stay and are superseded, as do `ttgo-t8-v1.2.2`, `ttgo-t8-v1.2.3`, and `ttgo-t8-v1.2.4`. From this version on, a build that reaches Chris with a change gets a new version number. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins match the Cardputer 1.2.4 clock and polyphony rules, plus chords (below) and the 4×4 keypad, which the Cardputer image does not have. On this board the loop windows, sample buffers, pattern grid, chord notes, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record. An external clock counts every tick in a BLE packet, and a track sounds up to four MIDI notes at once on top of a stored chord. BLE memory has been reserved at boot since 1.2.2.
 
 ## Samples
 
@@ -62,7 +62,7 @@ Leave GPIO 6–11 alone. Those are the flash bus. Leave GPIO12 alone. It is a st
 
 ## Power and the USB port
 
-USB is a serial adapter, not native USB. The keyboard protocol below is bytes on that UART at 115200 8N1. The boot log is the same port: `MothDeck 1.5.0 TTGO T8`.
+USB is a serial adapter, not native USB. The keyboard protocol below is bytes on that UART at 115200 8N1. The boot log is the same port: `MothDeck 1.7.0 TTGO T8`.
 
 ## microSD
 

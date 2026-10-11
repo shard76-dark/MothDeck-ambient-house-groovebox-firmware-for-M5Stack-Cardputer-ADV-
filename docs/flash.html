@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flash MothDeck TTGO T8</title>
+  <style>
+    body { font: 16px/1.45 system-ui, sans-serif; background: #121416; color: #f3efe4; margin: 0; }
+    main { max-width: 38rem; margin: 0 auto; padding: 32px 20px 64px; }
+    a { color: #f5a624; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Flash MothDeck for the TTGO T8</h1>
+    <p>Plug in a LilyGO TTGO T8, not a Cardputer. Chrome or Edge. Each button writes a full factory image and replaces the application already on the flash. Pick the image that matches the audio wire.</p>
+    <p>
+      PCM5102A
+      <esp-web-install-button manifest="flash/manifest-pcm.json"></esp-web-install-button>
+    </p>
+    <p>
+      GPIO25 DAC
+      <esp-web-install-button manifest="flash/manifest-dac.json"></esp-web-install-button>
+    </p>
+    <p>The manual is <a href="MANUAL.md">MANUAL.md</a>. These images have not been flashed or listened to.</p>
+  </main>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</body>
+</html>
