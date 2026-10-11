@@ -20,7 +20,10 @@ static const char *kMidiServiceUuid = "03B80E5A-EDE8-4B33-A751-6CE34EC4C700";
 static const char *kMidiCharUuid = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
 // One slot stays empty so head == tail means empty. The producer is the
 // NimBLE host task and the consumer is the audio task.
-static const int kQueueLen = 128;
+// Clocks at 200 BPM are 80 per second. The last slots stay free so a chord
+// that arrives behind a burst of clocks is not the event that gets dropped.
+static const int kQueueLen = 256;
+static const int kNoteReserve = 24;
 
 // Legacy connectable advertising interval, units of 0.625 ms. 0x20..0x40 is
 // 20..40 ms, the range Apple scans for and hardware hosts still catch.
@@ -88,6 +91,11 @@ static bool pushEvent(const MidiEvent &event) {
   uint32_t tail = __atomic_load_n(&qTail, __ATOMIC_ACQUIRE);
   uint32_t next = (head + 1) % kQueueLen;
   if (next == tail) {
+    __atomic_fetch_add(&statOverflow, 1, __ATOMIC_RELAXED);
+    return false;
+  }
+  uint32_t used = (head + kQueueLen - tail) % kQueueLen;
+  if (event.type == MIDI_MSG_CLOCK && used >= (uint32_t)(kQueueLen - 1 - kNoteReserve)) {
     __atomic_fetch_add(&statOverflow, 1, __ATOMIC_RELAXED);
     return false;
   }

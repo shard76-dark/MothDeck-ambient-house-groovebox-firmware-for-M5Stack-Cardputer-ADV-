@@ -79,6 +79,7 @@ echo "Per-track instruments"
   "$ROOT/test/test_tracks.cpp" \
   "$ROOT/src/Tracker.cpp" \
   "$ROOT/src/Voice.cpp" \
+  "$ROOT/src/MidiProtocol.cpp" \
   "$ROOT/src/ToneSynth.cpp" \
   "$ROOT/src/PatchBlocks.cpp" \
   "$ROOT/src/SongFile.cpp" \

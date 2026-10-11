@@ -2,7 +2,7 @@
 
 MothDeck on a LilyGO TTGO T8 V1.8. This is a classic ESP32-WROVER: dual core, 4MB flash, 4MB PSRAM, and a microSD slot. The board has no panel and no keyboard of its own. The display for this port is a confirmed ST7789 240×135, and the stock image drives it. The keys are a standard 4×4 membrane, mounted with the connector on top. The Cardputer ADV image is a different build, on `main`. Do not flash a TTGO binary onto a Cardputer, or the other way around.
 
-This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The pre-release tag is `ttgo-t8-v1.2.3`. The earlier tag `ttgo-t8-v1.2.2` stays and is superseded. The version string is 1.2.3, so the Settings line and the boot log are not the 1.2.2 test. From this version on, a build that reaches Chris with a change gets a new version number. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins match the Cardputer 1.2.3 Rec rule, plus chords (below) and the 4×4 keypad, which the Cardputer image does not have. On this board the loop windows, sample buffers, pattern grid, chord notes, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record. BLE memory has been reserved at boot since 1.2.2.
+This port lives on the long-lived `ttgo-t8` branch. It is not merged into `main`. The pre-release tag is `ttgo-t8-v1.2.4`. The earlier tags `ttgo-t8-v1.2.2` and `ttgo-t8-v1.2.3` stay and are superseded. The version string is 1.2.4, so the Settings line and the boot log say `MothDeck 1.2.4 TTGO T8`. From this version on, a build that reaches Chris with a change gets a new version number. The sequencer, piano roll, BLE MIDI, loops, and SD patch plugins match the Cardputer 1.2.4 clock and polyphony rules, plus chords (below) and the 4×4 keypad, which the Cardputer image does not have. On this board the loop windows, sample buffers, pattern grid, chord notes, and the tracker object sit in PSRAM, so BLE and loops stay loaded together. There is no need to unload BLE to open loops. Incoming MIDI notes only play while Rec is off. Space turns Rec on, and then they record. An external clock counts every tick in a BLE packet, and a track sounds up to four MIDI notes at once on top of a stored chord. BLE memory has been reserved at boot since 1.2.2.
 
 ## Chords
 
@@ -28,7 +28,7 @@ pio run -e cardputer-adv
 
 The app image is `.pio/build/ttgo-t8/firmware.bin`. Flash it over the board's USB serial port (CP2104 or CH9102, 115200). This is a factory app at `0x10000` in `partitions/ttgo_t8_4MB.csv`. There is no Launcher on this board.
 
-The 1.2.3 pre-release images are `mothdeck-ttgo-t8-1.2.3-test.bin` (1,634,448 bytes, magic `E9`, SHA-256 `2763b41df41099bda4726999d883b86071176c1ff1d277b2ee08857ad3db88ba`, static RAM 81336/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.2.3-test.bin` (1,628,448 bytes, magic `E9`, SHA-256 `ac5d73f8e8cdea928507cdab3326bcc503b7296a92d7273a8ece67135dc8a195`, static RAM 80472/327680, GPIO25 DAC). They have not been flashed or listened to. The 1.2.2 pre-release stays up and is superseded.
+The 1.2.4 pre-release images are filled in when this image is built. They have not been flashed or listened to. The 1.2.3 pre-release stays up and is superseded: `mothdeck-ttgo-t8-1.2.3-test.bin` (1,634,448 bytes, magic `E9`, SHA-256 `2763b41df41099bda4726999d883b86071176c1ff1d277b2ee08857ad3db88ba`, static RAM 81336/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.2.3-test.bin` (1,628,448 bytes, magic `E9`, SHA-256 `ac5d73f8e8cdea928507cdab3326bcc503b7296a92d7273a8ece67135dc8a195`, static RAM 80472/327680, GPIO25 DAC). The 1.2.2 pre-release stays up as well.
 
 ```bash
 pio run -e ttgo-t8 -t upload
@@ -50,7 +50,7 @@ Leave GPIO 6–11 alone. Those are the flash bus. Leave GPIO12 alone. It is a st
 
 ## Power and the USB port
 
-USB is a serial adapter, not native USB. The keyboard protocol below is bytes on that UART at 115200 8N1. The boot log is the same port: `MothDeck 1.2.3 TTGO T8`.
+USB is a serial adapter, not native USB. The keyboard protocol below is bytes on that UART at 115200 8N1. The boot log is the same port: `MothDeck 1.2.4 TTGO T8`.
 
 ## microSD
 

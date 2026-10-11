@@ -205,6 +205,28 @@ static bool shotNewer(uint16_t a, uint16_t b) {
   return a != b && (uint16_t)(a - b) < 0x8000;
 }
 
+void Voice::ReleaseHit(int pitch) {
+  if (pitch < 0 || pitch > 11) {
+    return;
+  }
+  int slot = -1;
+  for (int i = 0; i < kShotCount; i++) {
+    if (!shots[i].active || shots[i].note != (uint8_t)pitch) {
+      continue;
+    }
+    if (slot < 0 || shotNewer(shots[slot].serial, shots[i].serial)) {
+      slot = i;
+    }
+  }
+  if (slot >= 0) {
+    shots[slot].active = 0;
+  }
+}
+
+int Voice::NoteFreq(int val, int oct) {
+  return GetBaseFreq(val, oct);
+}
+
 int Voice::MixShots() {
   int newest = -1;
   for (int i = 0; i < kShotCount; i++) {

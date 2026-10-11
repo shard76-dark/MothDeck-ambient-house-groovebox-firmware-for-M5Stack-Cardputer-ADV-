@@ -2,6 +2,12 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.2.4 (2026-10-11)
+
+External MIDI clock follows every `0xF8` in a BLE packet. Several clocks often share one timestamp, and the tempo is the span divided by that many ticks, smoothed over a beat. A step is still six ticks. The readout tracks 40–200 BPM. Notes on one track sound together, up to four, on top of a stored chord. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel. This image still has chords and the rotated 4×4 menu. The pre-release is `ttgo-t8-v1.2.4`. `ttgo-t8-v1.2.3` stays and is superseded. The Settings line and the boot log say `1.2.4`. The Cardputer image on `main` is also called 1.2.4 and is a different binary.
+
+Hashes are filled in when this image is built. Host tests passed. Nothing here was flashed or listened to.
+
 ## 1.2.3 (2026-10-11)
 
 Incoming MIDI notes play and are not written into the pattern while Rec is off. MIDI Start and Continue do not arm Rec. Space still arms it, and with Rec on those notes record on the playhead. A piano-roll key while the transport is running follows that same rule. Stopped, the roll still writes the cell under the cursor.
@@ -14,7 +20,7 @@ The keypad is a 4×4 membrane with the connector on top. Membrane rows are firmw
 
 A step holds up to four notes. The first stays in the pattern word, so a song file is unchanged and an older song still loads as single notes. The other three notes sit in PSRAM. With Rec on, MIDI notes that land in the same step stack, and a fifth is dropped. The piano roll shows each one as a block in that column. Playback sounds them together. Saving a song keeps the first note of each step.
 
-Images: `mothdeck-ttgo-t8-1.2.3-test.bin` (1,634,448 bytes, magic `E9`, SHA-256 `2763b41df41099bda4726999d883b86071176c1ff1d277b2ee08857ad3db88ba`, static RAM 81336/327680) and `mothdeck-ttgo-t8-dac-1.2.3-test.bin` (1,628,448 bytes, magic `E9`, SHA-256 `ac5d73f8e8cdea928507cdab3326bcc503b7296a92d7273a8ece67135dc8a195`, static RAM 80472/327680). Host tests passed. Nothing here was flashed or listened to.
+Images: `mothdeck-ttgo-t8-1.2.3-test.bin` (1,634,448 bytes, magic `E9`, SHA-256 `2763b41df41099bda4726999d883b86071176c1ff1d277b2ee08857ad3db88ba`, static RAM 81336/327680) and `mothdeck-ttgo-t8-dac-1.2.3-test.bin` (1,628,448 bytes, magic `E9`, SHA-256 `ac5d73f8e8cdea928507cdab3326bcc503b7296a92d7273a8ece67135dc8a195`, static RAM 80472/327680). Host tests passed. Nothing here was flashed or listened to. Superseded by `ttgo-t8-v1.2.4`.
 
 ## 1.2.2 (2026-10-10)
 

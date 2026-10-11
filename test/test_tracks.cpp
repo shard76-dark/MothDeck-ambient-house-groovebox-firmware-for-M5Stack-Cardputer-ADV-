@@ -1,6 +1,7 @@
 #include "Tracker.h"
 #include "InstrumentBank.h"
 #include "SongFile.h"
+#include "MidiProtocol.h"
 #include <cstdio>
 #include <cstring>
 
@@ -404,6 +405,208 @@ static void testMidiNotesRespectRec() {
   expect(gridEmpty(held), "held arp does not stamp steps when rec is on");
 }
 
+static uint16_t clockMillis(int index, int bpm) {
+  uint32_t ms = (uint32_t)index * 60000u / (uint32_t)(bpm * 24);
+  return (uint16_t)(ms & 0x1FFF);
+}
+
+static int pushClockByte(uint8_t *buf, int n, uint16_t ts) {
+  // A timestamp low byte of 0xF8..0xFF is a real-time status, so clamp it.
+  // The clock byte still follows, and the parser has to count that clock.
+  uint8_t bits = (uint8_t)(ts & 0x7F);
+  if (bits >= 0x78) {
+    bits = 0x77;
+  }
+  buf[n++] = (uint8_t)(0x80 | bits);
+  buf[n++] = 0xF8;
+  return n;
+}
+
+static bool feedClockPackets(Tracker &tracker, int bpm, int total, int perPacket, bool ownStamp) {
+  MidiRunningState state;
+  std::memset(&state, 0, sizeof(state));
+  int sent = 0;
+  bool kept = true;
+  while (sent < total) {
+    int batch = perPacket;
+    if (batch > total - sent) {
+      batch = total - sent;
+    }
+    uint8_t buf[96];
+    uint16_t ts0 = clockMillis(sent, bpm);
+    int n = 0;
+    buf[n++] = (uint8_t)(0x80 | ((ts0 >> 7) & 0x3F));
+    if (!ownStamp) {
+      uint8_t bits = (uint8_t)(ts0 & 0x7F);
+      if (bits >= 0x78) {
+        bits = 0x77;
+      }
+      buf[n++] = (uint8_t)(0x80 | bits);
+      for (int i = 0; i < batch; i++) {
+        buf[n++] = 0xF8;
+      }
+    } else {
+      for (int i = 0; i < batch; i++) {
+        n = pushClockByte(buf, n, clockMillis(sent + i, bpm));
+      }
+    }
+    MidiParseResult parsed;
+    int count = parseBleMidiPacket(buf, n, &state, &parsed);
+    int clocksFound = 0;
+    for (int i = 0; i < parsed.count; i++) {
+      if (parsed.events[i].type == MIDI_MSG_CLOCK) {
+        clocksFound++;
+      }
+      tracker.HandleMidi(parsed.events[i]);
+    }
+    if (count != clocksFound || clocksFound != batch || parsed.overflow != 0) {
+      kept = false;
+    }
+    sent += batch;
+  }
+  return kept;
+}
+
+static int renderEnergy(Tracker &tracker, int samples) {
+  int acc = 0;
+  for (int i = 0; i < samples; i++) {
+    int s = tracker.UpdateTracker();
+    if (s < 0) {
+      s = -s;
+    }
+    acc += s;
+  }
+  return acc;
+}
+
+static void noteOff(Tracker &tracker, int channel, int note) {
+  MidiEvent ev = {};
+  ev.type = MIDI_MSG_NOTE_OFF;
+  ev.channel = (uint8_t)channel;
+  ev.number = (uint8_t)note;
+  tracker.HandleMidi(ev);
+}
+
+static void testExternalClockPackets() {
+  const int rates[] = {60, 120, 174};
+  const int groups[] = {2, 3, 4};
+  for (int r = 0; r < 3; r++) {
+    int bpm = rates[r];
+    Tracker shared;
+    transport(shared, MIDI_MSG_START, 0);
+    int head = shared.trackIndex;
+    bool kept = feedClockPackets(shared, bpm, 30, groups[r], false);
+    expect(kept, "shared-timestamp clocks in one packet are all counted");
+    expect(shared.trackIndex == head + 5, "30 clocks move five 16ths");
+    int shown = shared.Bpm();
+    expect(shown >= bpm - 3 && shown <= bpm + 3, "shared-timestamp packet tempo stays on the clock");
+
+    Tracker stamped;
+    transport(stamped, MIDI_MSG_START, 0);
+    head = stamped.trackIndex;
+    kept = feedClockPackets(stamped, bpm, 30, groups[r], true);
+    expect(kept, "timestamped clocks in one packet are all counted");
+    expect(stamped.trackIndex == head + 5, "timestamped clocks move five 16ths");
+    shown = stamped.Bpm();
+    expect(shown >= bpm - 3 && shown <= bpm + 3, "timestamped packet tempo stays on the clock");
+  }
+}
+
+static void testMidiPolyphony() {
+  Tracker chord;
+  chord.SetCommand('I', 2);
+  MidiRunningState state;
+  std::memset(&state, 0, sizeof(state));
+  const uint8_t packet[] = {
+    0x80, 0x80, 0xF8, 0x81, 0xF8, 0x82, 0xF8, 0x83, 0xF8, 0x84, 0xF8, 0x85, 0xF8,
+    0x86, 0x90, 60, 100,
+    0x87, 0x90, 64, 110,
+    0x88, 0x90, 67, 90
+  };
+  MidiParseResult parsed;
+  int count = parseBleMidiPacket(packet, (int)sizeof(packet), &state, &parsed);
+  expect(count == 9 && parsed.overflow == 0, "a packet keeps six clocks and a three-note chord");
+  transport(chord, MIDI_MSG_START, 0);
+  int head = chord.trackIndex;
+  for (int i = 0; i < parsed.count; i++) {
+    chord.HandleMidi(parsed.events[i]);
+  }
+  expect(chord.trackIndex == head + 1, "six clocks in the chord packet advance one step");
+  expect(chord.LiveHeld(0) == 3, "three notes in one packet all sound");
+  expect(chord.LiveDown(0, 60) && chord.LiveDown(0, 64) && chord.LiveDown(0, 67), "the chord notes are the ones that were sent");
+  expect(gridEmpty(chord), "play-through chord does not write the pattern");
+  expect(renderEnergy(chord, 64) > 0, "the chord produces samples");
+  const uint8_t bare[] = {0x80, 0xF8, 0xF8, 0xF8};
+  MidiParseResult bareParsed;
+  std::memset(&state, 0, sizeof(state));
+  int bareCount = parseBleMidiPacket(bare, (int)sizeof(bare), &state, &bareParsed);
+  expect(bareCount == 3 && bareParsed.overflow == 0, "clocks with no extra timestamp byte are all counted");
+  noteOff(chord, 0, 64);
+  expect(!chord.LiveDown(0, 64) && chord.LiveDown(0, 60) && chord.LiveDown(0, 67), "note-off releases only that note");
+  expect(chord.LiveHeld(0) == 2, "the other two notes stay");
+  expect(renderEnergy(chord, 32) > 0, "the remaining notes still sound");
+
+  noteOn(chord, 0, 60);
+  noteOff(chord, 0, 60);
+  expect(!chord.LiveDown(0, 60) && chord.LiveDown(0, 67), "retrigger note-off does not clear a different note");
+
+  Tracker steal;
+  steal.SetCommand('I', 2);
+  const int chordNotes[] = {60, 64, 67, 70, 72};
+  for (int i = 0; i < 5; i++) {
+    noteOn(steal, 0, chordNotes[i]);
+  }
+  expect(steal.LiveHeld(0) == 4, "a fifth note steals the oldest voice");
+  expect(!steal.LiveDown(0, 60) && steal.LiveDown(0, 72), "the oldest note is the one replaced");
+  expect(steal.LiveDown(0, 64) && steal.LiveDown(0, 67) && steal.LiveDown(0, 70), "the newer notes stay");
+  noteOff(steal, 0, 60);
+  expect(steal.LiveHeld(0) == 4 && steal.LiveDown(0, 72), "note-off of a stolen note does not kill the new one");
+  noteOff(steal, 0, 64);
+  expect(!steal.LiveDown(0, 64) && steal.LiveHeld(0) == 3 && steal.LiveDown(0, 72), "note-off matches the note that is still sounding");
+
+  Tracker repeat;
+  repeat.SetCommand('I', 2);
+  uint8_t fast[64];
+  int n = 0;
+  fast[n++] = 0x80;
+  const int fastNotes[] = {60, 62, 64, 65, 67, 69};
+  for (int i = 0; i < 6; i++) {
+    fast[n++] = (uint8_t)(0x81 + i);
+    fast[n++] = 0x90;
+    fast[n++] = (uint8_t)fastNotes[i];
+    fast[n++] = 100;
+  }
+  std::memset(&state, 0, sizeof(state));
+  count = parseBleMidiPacket(fast, n, &state, &parsed);
+  expect(count == 6 && parsed.overflow == 0, "six note-ons in one packet are kept");
+  for (int i = 0; i < parsed.count; i++) {
+    repeat.HandleMidi(parsed.events[i]);
+  }
+  expect(repeat.LiveHeld(0) == 4, "notes in one audio packet layer up to the voice limit");
+  expect(!repeat.LiveDown(0, 60) && !repeat.LiveDown(0, 62), "the oldest repeats are the ones stolen");
+  expect(repeat.LiveDown(0, 65) && repeat.LiveDown(0, 67) && repeat.LiveDown(0, 69), "the latest repeats are sounding");
+
+  Tracker vel;
+  vel.SetCommand('I', 2);
+  const uint8_t vel0[] = {0x80, 0x80, 0x90, 60, 100, 0x81, 0x90, 60, 0, 0x82, 0x90, 64, 80};
+  std::memset(&state, 0, sizeof(state));
+  count = parseBleMidiPacket(vel0, (int)sizeof(vel0), &state, &parsed);
+  for (int i = 0; i < parsed.count; i++) {
+    vel.HandleMidi(parsed.events[i]);
+  }
+  expect(!vel.LiveDown(0, 60) && vel.LiveDown(0, 64), "velocity 0 is note-off and does not clear the other note");
+
+  Tracker drums;
+  noteOn(drums, 0, 36);
+  noteOn(drums, 0, 38);
+  noteOn(drums, 0, 42);
+  expect(drums.LiveHeld(0) == 3, "drum hits from one chord stay layered");
+  expect(renderEnergy(drums, 32) > 0, "layered drums produce samples");
+  noteOff(drums, 0, 38);
+  expect(!drums.LiveDown(0, 38) && drums.LiveHeld(0) == 2, "drum note-off stops only that hit");
+  expect(renderEnergy(drums, 16) > 0, "the other drum hits keep ringing");
+}
+
 int main() {
   testAssignStaysOnTrack();
   testMidiBankStaysOnChannel();
@@ -411,6 +614,8 @@ int main() {
   testBarsAndExternalLoop();
   testNoteHold();
   testMidiNotesRespectRec();
+  testExternalClockPackets();
+  testMidiPolyphony();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

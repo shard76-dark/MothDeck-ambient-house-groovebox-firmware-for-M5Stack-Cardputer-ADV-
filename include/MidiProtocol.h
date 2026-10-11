@@ -30,7 +30,9 @@ enum MidiMsgType : uint8_t {
 static const uint8_t kMidiPitchCc = 128;
 // One notification can carry a chord plus a run of clocks. The parser
 // keeps scanning after this fills so a long packet cannot desync the next.
-static const int kMidiMaxEvents = 48;
+// A notification can be a run of clocks with a chord after them. 48 clipped
+// the notes once the link packed more than a few ticks into one packet.
+static const int kMidiMaxEvents = 80;
 
 struct MidiEvent {
   MidiMsgType type;
