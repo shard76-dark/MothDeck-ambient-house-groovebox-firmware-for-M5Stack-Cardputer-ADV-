@@ -154,6 +154,8 @@ static int queueLimit() {
   return 2;
 }
 
+static uint32_t ditherState = 0xC0FFEEu;
+
 static void renderBlock(int16_t *dst, int count) {
   drainMidi();
   drainSide();
@@ -164,7 +166,8 @@ static void renderBlock(int16_t *dst, int count) {
     if ((i & 31) == 0) {
       drainMidi();
     }
-    dst[i] = (int16_t)dspSat16(tracker.UpdateTracker());
+    // The mix is a 32-bit sum. Dither is the last step down to the 16-bit DAC.
+    dst[i] = (int16_t)dspDither16(tracker.UpdateTracker(), &ditherState);
     for (int t = 0; t < 4; t++) {
       int a = dspAbs(tracker.lastSamples[t]);
       if (a > peak[t]) {

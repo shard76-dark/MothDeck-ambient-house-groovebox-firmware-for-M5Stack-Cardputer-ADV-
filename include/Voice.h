@@ -27,6 +27,8 @@ public:
   TrackFx fx;
   TrackBlock block;
   uint8_t sounding;
+  // 0..3 on a tracker voice. -1 in a bare Voice. Streamed kits use it.
+  int8_t trackId;
 
   Voice();
   int UpdateVoice();
@@ -135,7 +137,7 @@ private:
   int ReadDrumWaveform();
   int ReadSfxWaveform();
   int ReadExt();
-  int ReadOneShot(const uint8_t *const *tables, const int *lengths, const int *rates);
+  int ReadOneShot(const int16_t *const *tables, const int *lengths, const int *rates);
   int ReadPcmShot(const void *data, int length, int rate, bool native, bool eightBit);
 
   ToneVoice tone;
@@ -161,6 +163,8 @@ private:
   int MixOsc2(int sample, int freq);
   void ArmPcm(int instrument);
   void StartShot(const void *data, int length, int step, bool eightBit, uint8_t kind, bool fromKit, int instrument);
+  int ShotFrame(const Shot &shot, bool streamed, int frame) const;
+  int ShotHermite(const Shot &shot, bool streamed, int idx, int frac) const;
   int MixShots();
 };
 

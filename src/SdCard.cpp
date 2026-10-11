@@ -15,7 +15,25 @@
 #define CARD_FS SD
 static SPIClass sdSpi(HSPI);
 #endif
+#include <freertos/semphr.h>
 #include <string.h>
+
+static SemaphoreHandle_t sdMutex = nullptr;
+
+void sdBusLock() {
+  if (!sdMutex) {
+    sdMutex = xSemaphoreCreateRecursiveMutex();
+  }
+  if (sdMutex) {
+    xSemaphoreTakeRecursive(sdMutex, portMAX_DELAY);
+  }
+}
+
+void sdBusUnlock() {
+  if (sdMutex) {
+    xSemaphoreGiveRecursive(sdMutex);
+  }
+}
 
 SdCard sdCard;
 
@@ -49,6 +67,7 @@ void deckFree(void *p) {
 }
 
 bool SdCard::Mount() {
+  SdBusGuard guard;
 #if MOTHDECK_BOARD_TTGO
   // D3 held high keeps the card in SD mode. CLK/CMD/D0 are the slot pins.
   pinMode(PIN_SD_CS, INPUT_PULLUP);
@@ -80,6 +99,7 @@ bool SdCard::Mount() {
 }
 
 bool SdCard::Ensure() {
+  SdBusGuard guard;
   if (mounted) {
     return true;
   }
@@ -92,6 +112,7 @@ bool SdCard::Ensure() {
 }
 
 bool SdCard::Exists(const char *path) {
+  SdBusGuard guard;
   if (!Ensure() || !path) {
     return false;
   }
@@ -99,6 +120,7 @@ bool SdCard::Exists(const char *path) {
 }
 
 bool SdCard::Mkdir(const char *path) {
+  SdBusGuard guard;
   if (!Ensure() || !path) {
     return false;
   }
@@ -109,6 +131,7 @@ bool SdCard::Mkdir(const char *path) {
 }
 
 bool SdCard::Remove(const char *path) {
+  SdBusGuard guard;
   if (!Ensure() || !path) {
     return false;
   }
@@ -116,6 +139,7 @@ bool SdCard::Remove(const char *path) {
 }
 
 bool SdCard::ReadAll(const char *path, uint8_t *dst, int maxBytes, int *outLen) {
+  SdBusGuard guard;
   if (outLen) {
     *outLen = 0;
   }
@@ -143,6 +167,7 @@ bool SdCard::ReadAll(const char *path, uint8_t *dst, int maxBytes, int *outLen) 
 }
 
 bool SdCard::ReadPrefix(const char *path, uint8_t *dst, int maxBytes, int *outLen) {
+  SdBusGuard guard;
   if (outLen) {
     *outLen = 0;
   }
@@ -165,6 +190,7 @@ bool SdCard::ReadPrefix(const char *path, uint8_t *dst, int maxBytes, int *outLe
 }
 
 bool SdCard::ReadText(const char *path, char *dst, int maxBytes) {
+  SdBusGuard guard;
   if (!dst || maxBytes < 2) {
     return false;
   }
@@ -179,6 +205,7 @@ bool SdCard::ReadText(const char *path, char *dst, int maxBytes) {
 }
 
 bool SdCard::WriteAll(const char *path, const uint8_t *src, int len) {
+  SdBusGuard guard;
   if (!path || !src || len < 0 || !Ensure()) {
     return false;
   }
@@ -220,6 +247,7 @@ static int decodeChunk(const uint8_t *p, int frames, int channels, int bits, int
 }
 
 bool SdCard::LoadWavMono(const char *path, int16_t *dst, int dstFrames, int *got, int *rate, char *err, int errLen) {
+  SdBusGuard guard;
   if (got) {
     *got = 0;
   }
@@ -290,6 +318,7 @@ bool SdCard::LoadWavMono(const char *path, int16_t *dst, int dstFrames, int *got
 }
 
 int SdCard::List(const char *path, char names[][24], int maxNames, bool directories) {
+  SdBusGuard guard;
   if (!names || maxNames <= 0 || !path || !Ensure()) {
     return 0;
   }

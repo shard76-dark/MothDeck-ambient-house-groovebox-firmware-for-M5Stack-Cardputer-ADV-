@@ -59,6 +59,9 @@ Tracker::Tracker() {
 #if MOTHDECK_CHORDS
   memset(chordTone, 0, sizeof(chordTone));
 #endif
+  for (int i = 0; i < 4; i++) {
+    voices[i].trackId = (int8_t)i;
+  }
   memset(ccMsb, 0, sizeof(ccMsb));
   memset(ccLsb, 0, sizeof(ccLsb));
   midiOutCount = 0;
@@ -2229,14 +2232,19 @@ int Tracker::ReadLoop(LoopPlay *loop) {
   }
   uint32_t pos = loop->phase >> 16;
   uint32_t frac = loop->phase & 0xFFFF;
-  int i0 = (int)(pos % (uint32_t)loop->frames);
-  int i1 = i0 + 1;
-  if (i1 >= loop->frames) {
-    i1 = 0;
-  }
-  int s0 = loopSampleAt(loop, i0);
-  int s1 = loopSampleAt(loop, i1);
-  int s = s0 + (int)(((int64_t)(s1 - s0) * frac) >> 16);
+  int n = loop->frames;
+  int i0 = (int)(pos % (uint32_t)n);
+  auto at = [&](int frame) -> int {
+    if (n < 1) {
+      return 0;
+    }
+    if (frame < 0) {
+      frame += n;
+    }
+    frame %= n;
+    return loopSampleAt(loop, frame);
+  };
+  int s = dspHermite(at(i0 - 1), at(i0), at(i0 + 1), at(i0 + 2), (int)frac, 65536);
   loop->phase += loop->inc > 0 ? loop->inc : 1;
   uint32_t limit = (uint32_t)loop->frames << 16;
   if (limit > 0 && loop->phase >= limit) {

@@ -25,7 +25,7 @@ The public source and releases live in this repository. Flash the application im
 - Per-track FX (filter, delay, reverb, bitcrush, drive, chorus, tremolo) and a mixer with volume, mute, and solo
 - SD kits, plugin instruments, and loops. Loops stream from the card instead of filling RAM
 - BLE MIDI peripheral (notes, clock, transport, bank, volume, pitch bend), named Mothdeck in the advertising packet
-- Built-in sounds are unsigned 8-bit mono at 22050 Hz so they fit the 8MB flash and the internal SRAM
+- Built-in drums and sound effects are signed 16-bit mono at 44100 Hz. On this 4MB image the six long effects load from the card into PSRAM
 - One-second amber moth splash, then the Play page, with a checked exit back to Launcher
 
 This repository is the Cardputer ADV firmware. The PlatformIO target is `cardputer-adv`. `cardputer-adv-dev` is that same firmware with SD and speaker logs on USB serial. The board id in `platformio.ini` is `esp32-s3-devkitc-1` because PlatformIO has no Stamp-S3A entry; the pins in `include/BoardConfig.h` are the ADV. There is no second ADV build.
@@ -145,7 +145,7 @@ An allocation also leaves about 8KB of internal heap for the rest of the system.
 
 ## Sample format
 
-Built-in drums, built-in sound effects, the SD pack, and the default output of `tools/wav_to_instrument.py` and `tools/wav_to_loop.py` are unsigned 8-bit mono PCM at 22050 Hz. 128 is silence. That is about 22 KB/s. A 44.1 kHz stereo 16-bit file is about 176 KB/s. The mix stays 44100 Hz and stretches 22050 up to it. Prefer mono. A 16-bit WAV still loads, and stereo is folded to mono. `--raw` on the instrument converter writes little-endian int16 at the source rate.
+Built-in drums, the sound effects that fit flash, the SD pack, and the default output of `tools/wav_to_instrument.py` and `tools/wav_to_loop.py` are signed 16-bit mono PCM at 44100 Hz. That is about 88 KB/s. Prefer mono. An older unsigned 8-bit WAV still loads (128 is silence), and stereo is folded to mono. `--raw` on the instrument converter writes little-endian int16 at the source rate. Pitched playback uses 4-point Hermite interpolation. The speaker sample is dithered by one 16-bit LSB. On the TTGO image, riser, downlifter, sweep, impact, siren, and drop are `moth/sfx/` and load into PSRAM.
 
 Regenerate the flash tables with `python3 tools/gen_samples.py` and the card pack with `python3 tools/make_sd_pack.py`.
 
@@ -167,7 +167,8 @@ The pack in `releases/mothdeck-sd-pack.zip` contains:
 | --- | --- |
 | `moth/drums/808` | 808-style kit |
 | `moth/drums/dusty` | Ambient kit, dulled |
-| `moth/loops/house` | Four one-bar loops at 120 BPM (kick, hats, chord, sub), 44100 frames, about 44 KB each |
+| `moth/loops/house` | Four one-bar loops at 120 BPM (kick, hats, chord, sub), 88200 frames, signed 16-bit |
+| `moth/sfx` | Riser, downlifter, sweep, impact, siren, and drop. The TTGO image loads these into PSRAM |
 | `moth/instruments/ep` | Electric piano, one-shot |
 | `moth/instruments/reese` | Detuned saw bass, looping |
 | `moth/instruments/saw-lead` | Two detuned saws, looping |
@@ -181,7 +182,7 @@ The pack in `releases/mothdeck-sd-pack.zip` contains:
 | `moth/instruments/body` | Patch: short pluck sample |
 | `moth/instruments/room-drive` | Patch: sine, drive, delay, reverb, chorus |
 
-Kit pad order is kick, rim, snare, clap, hat, openhat, perc, tom, shaker, ride, snap, crash. `perc.wav` is the low tom. Each pad file is already inside the 1800-frame and 8000-frame cache. Plugin samples in the pack are 3600 frames at 22050 Hz, under the 4096-frame cap. A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines.
+Kit pad order is kick, rim, snare, clap, hat, openhat, perc, tom, shaker, ride, snap, crash. `perc.wav` is the low tom. A kit that fits is copied in. A larger kit streams through the 16 KB cache. Plugin samples in the pack are 4096 frames at 44100 Hz, under the cap that stays loaded while BLE is on. A kit folder is `mothdeck-kit 1`, a `name=`, and exactly twelve `pad=` lines.
 
 ```bash
 python3 tools/wav_to_instrument.py take.wav card/moth/instruments/take --name take --root 60
@@ -189,7 +190,7 @@ python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \
     card/moth/loops/house kick.wav hats.wav
 ```
 
-Those two commands resample to 22050 Hz and write 8-bit mono WAV. Song, instrument, loop, kit, and pattern bytes are specified in [docs/FORMATS.md](docs/FORMATS.md).
+Those two commands resample to 44100 Hz and write signed 16-bit mono WAV. Song, instrument, loop, kit, and pattern bytes are specified in [docs/FORMATS.md](docs/FORMATS.md).
 
 Plugins get ids 12–62. Id 63 is Loops. A song stores the folder name. If that folder is missing at load, the track falls back to the drum bank. A song that stays on the built-in instruments is a 3155-byte MothOS version 1 file. Plugins and loops make version 2. An insert effect makes version 3. Scale, a held arp, a second oscillator, or glide makes version 4.
 

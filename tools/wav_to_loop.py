@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn one or more WAV files into a MothDeck loop library folder.
 
-Each loop is rewritten as unsigned 8-bit mono PCM at 22050 Hz. Duration
-is kept. 128 is silence. The firmware streams these files.
+Each loop is rewritten as signed 16-bit mono PCM at 44100 Hz. Duration
+is kept. The firmware streams these files.
 
 Example:
   python3 tools/wav_to_loop.py --name house --bpm 120 --bars 1 --tags drums \\

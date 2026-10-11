@@ -1,0 +1,8 @@
+mothdeck-sfx 1
+rate=44100
+sfx=riser.wav
+sfx=downlifter.wav
+sfx=sweep.wav
+sfx=impact.wav
+sfx=siren.wav
+sfx=drop.wav

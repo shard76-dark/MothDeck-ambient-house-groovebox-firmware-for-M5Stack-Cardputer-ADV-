@@ -3,8 +3,8 @@
 #include "DevLog.h"
 #include "SdCard.h"
 #include "WavPcm.h"
+#include "CardFs.h"
 #include <Arduino.h>
-#include <SD.h>
 #include <esp_heap_caps.h>
 #include <string.h>
 #include <stdio.h>
@@ -166,6 +166,7 @@ int pcmHoldSlots() {
 }
 
 static bool fillWin(PcmSlot &slot, PcmWin &win, int start) {
+  SdBusGuard bus;
   if (!win.sample) {
     return false;
   }
@@ -214,6 +215,7 @@ static bool fillWin(PcmSlot &slot, PcmWin &win, int start) {
 }
 
 int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen) {
+  SdBusGuard bus;
   if (frames) {
     *frames = 0;
   }
@@ -270,7 +272,7 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
   slot.frames = 0;
   slot.open = 0;
   strncpy(slot.path, path, sizeof(slot.path) - 1);
-  slot.file = SD.open(path, FILE_READ);
+  slot.file = MOTH_FS.open(path, FILE_READ);
   if (!slot.file) {
     setErr(err, errLen, "Loop missing");
     return 0;
@@ -317,6 +319,7 @@ int pcmHoldOpen(const char *path, int *frames, int *rate, char *err, int errLen)
 }
 
 void pcmHoldClose(int id) {
+  SdBusGuard bus;
   if (id < 1 || id > kPcmHolds) {
     return;
   }
