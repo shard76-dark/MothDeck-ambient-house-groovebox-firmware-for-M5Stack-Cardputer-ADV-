@@ -135,6 +135,7 @@ private:
   int GetBaseFreq(int val, int ioctave);
   int filtLp;
   int filtLp2;
+  int filtCoef;
   int delayLp;
   int revDamp;
   int crushHold;

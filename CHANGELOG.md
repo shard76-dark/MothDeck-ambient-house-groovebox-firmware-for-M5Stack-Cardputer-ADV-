@@ -2,6 +2,12 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.8.0 (2026-10-11)
+
+The filter's wide multiply is MULL and MULSH on Xtensa. `MOTHDECK_DSP_C` keeps the portable 64-bit path. Host tests check that path against a 64-bit product, including negative numbers. The low-pass second pole sits a quarter below the first, so the slope is steeper, and a cutoff change slews for about 6 ms instead of stepping. A new note still starts on the cutoff you set. The voice count is unchanged.
+
+Image: `releases/mothdeck-cardputer-adv.bin` (2,281,616 bytes, magic `E9`, SHA-256 `942beb403d95091251e874075907e1c06bad7442ab4e338dc173940fd71736a9`, static RAM 176308/327680). `releases/mothdeck-cardputer-adv-full.bin` is 2,347,152 bytes, SHA-256 `3e5b88f8a285de98fe2d4411f50a80f8413a8c917d93f90e87b28f4dfba3e063`. Flash used is 2,246,715 of 3,932,160 bytes in one OTA slot. Host tests passed. Nothing here was flashed or listened to. The TTGO image is a separate branch.
+
 ## 1.7.0 (2026-10-11)
 
 The user manual is [docs/MANUAL.md](docs/MANUAL.md). The browser installer is [docs/flash.html](docs/flash.html). It writes the full-flash image with ESP Web Tools and replaces Launcher. The application image is still the file Launcher installs. Behavior matches 1.6.0. The Settings line says 1.7.0.
