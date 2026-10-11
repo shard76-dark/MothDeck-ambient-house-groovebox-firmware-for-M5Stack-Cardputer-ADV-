@@ -1,10 +1,10 @@
 ## 1.2.4 (2026-10-11)
 
-Flash `releases/mothdeck-cardputer-adv.bin`. Version on the Settings screen is 1.2.4. Host tests passed. Use earphones. This image has not been tried on a Cardputer.
+Flash `releases/mothdeck-cardputer-adv.bin` (1,153,504 bytes, magic `E9`, chip `0x0009`, SHA-256 `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`). Version on the Settings screen is 1.2.4. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 137812/327680.
 
 MIDI clock from an MPC follows every tick in the packet, including several `0xF8` bytes that share one timestamp. Six ticks advance one step. The BPM on screen is smoothed over a beat and tracks from 40 to 200. Notes on one channel sound together, up to four voices. A fifth replaces the oldest note. Note-off releases only that note. Velocity 0 is note-off.
 
-The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin`. It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
+The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,219,040 bytes, SHA-256 `0994efa5bfdf23d3fd5b662cb8db5016b2284c8a128c71b6e0efa112f433bd4d`). It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
 
 The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
 

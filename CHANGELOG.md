@@ -6,7 +6,7 @@ Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHAN
 
 External MIDI clock follows every `0xF8` in a BLE packet. Several clocks often share one timestamp, and the tempo is the span divided by that many ticks, smoothed over a beat. A step is still six ticks. The readout tracks 40–200 BPM. Notes on one track sound together, up to four. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel. A build that reaches Chris with a change gets a new version number.
 
-The image to flash is `releases/mothdeck-cardputer-adv.bin`. Hashes are filled in when this image is built. The SD pack is unchanged from 1.2.1. Settings version line is `v1.2.4`.
+The image to flash is `releases/mothdeck-cardputer-adv.bin` (1,153,504 bytes, magic `E9`, SHA-256 `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,219,040 bytes, SHA-256 `0994efa5bfdf23d3fd5b662cb8db5016b2284c8a128c71b6e0efa112f433bd4d`). The SD pack is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Static RAM is 137812/327680. Settings version line is `v1.2.4`.
 
 ## 1.2.3 (2026-10-11)
 

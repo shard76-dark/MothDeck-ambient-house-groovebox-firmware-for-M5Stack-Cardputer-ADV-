@@ -9,8 +9,8 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
 - Version 1.2.4
-- SHA-256: filled in with the built image
-- Size: filled in with the built image (app image, magic `E9`)
+- SHA-256: `014b2e089b5383d32a5628147f6571bff5c0c9f470a3f89b681a36508e21eea1`
+- Size: 1,153,504 bytes (app image, magic `E9`)
 - External MIDI clock follows every tick in a BLE packet, from 40 to 200 BPM. Notes on one track sound together, up to four, and note-off releases only that note. Incoming notes only play while Rec is off; they record when Rec is on. MIDI Start does not arm Rec. Space does. The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
