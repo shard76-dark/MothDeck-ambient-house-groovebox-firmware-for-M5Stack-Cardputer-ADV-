@@ -103,24 +103,37 @@
 #define PIN_BATT_ADC 35
 #endif
 
-// Optional 2x4 button matrix. All -1 means no matrix.
+// 4x4 membrane, mounted with the connector on top. Firmware rows are the
+// membrane's columns, and firmware columns are the membrane's rows. All -1
+// leaves the pad off. The defaults are free beside SD, I2S, and the ST7789.
+// The DAC image cannot use GPIO25, so that one row moves to GPIO22.
 #ifndef PIN_MX_R0
-#define PIN_MX_R0 -1
+#define PIN_MX_R0 4
 #endif
 #ifndef PIN_MX_R1
-#define PIN_MX_R1 -1
+#define PIN_MX_R1 33
+#endif
+#ifndef PIN_MX_R2
+#define PIN_MX_R2 0
+#endif
+#ifndef PIN_MX_R3
+#if MOTHDECK_INTERNAL_DAC
+#define PIN_MX_R3 22
+#else
+#define PIN_MX_R3 25
+#endif
 #endif
 #ifndef PIN_MX_C0
-#define PIN_MX_C0 -1
+#define PIN_MX_C0 34
 #endif
 #ifndef PIN_MX_C1
-#define PIN_MX_C1 -1
+#define PIN_MX_C1 36
 #endif
 #ifndef PIN_MX_C2
-#define PIN_MX_C2 -1
+#define PIN_MX_C2 39
 #endif
 #ifndef PIN_MX_C3
-#define PIN_MX_C3 -1
+#define PIN_MX_C3 35
 #endif
 
 #else

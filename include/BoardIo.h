@@ -3,7 +3,17 @@
 #include <stdint.h>
 
 // One key event. The Cardputer copies this out of the TCA8418. The TTGO
-// fills it from the serial port or the optional button matrix.
+// fills it from the serial port or the 4x4 pad.
+//
+// The pad is rotated so its connector is on top. A firmware row is a
+// membrane column, and a firmware column is a membrane row. Key 0 is the
+// top-left key as you look at it.
+inline int ttgoPadKey(int row, int col) {
+  if (row < 0 || row > 3 || col < 0 || col > 3) {
+    return -1;
+  }
+  return row * 4 + (3 - col);
+}
 struct DeckKeys {
   bool tab;
   bool fn;

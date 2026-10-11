@@ -55,6 +55,12 @@ echo "Per-track FX and mixer volume"
   -o /tmp/mothdeck_test_fx
 /tmp/mothdeck_test_fx
 
+echo "TTGO keypad index"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_pad.cpp" \
+  -o /tmp/mothdeck_test_pad
+/tmp/mothdeck_test_pad
+
 echo "TTGO chords"
 "$CXX" "${FLAGS[@]}" -DMOTHDECK_CHORDS=1 \
   "$ROOT/test/test_chords.cpp" \

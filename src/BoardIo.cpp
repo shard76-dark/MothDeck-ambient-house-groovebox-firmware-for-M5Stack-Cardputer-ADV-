@@ -82,55 +82,262 @@ void boardBringUpTtgo() {}
 #else
 
 static bool fnNext = false;
-static uint8_t mxLast = 0;
 
-static const char kMxKey[8] = {'z', 'x', 'c', 'v', ' ', '1', 'p', '/'};
+// kind: 0 none, 1 char, 2 space, 3 tab, 4 enter, 5 del.
+// flags: bit0 fn, bit1 shift, bit2 ctrl.
+struct PadAct {
+  uint8_t kind;
+  uint8_t flags;
+  char ch;
+};
+
+#define PA_NONE {0, 0, 0}
+#define PA_CH(c) {1, 0, (char)(c)}
+#define PA_FN(c) {1, 1, (char)(c)}
+#define PA_CTL(c) {1, 4, (char)(c)}
+#define PA_SP {2, 0, 0}
+#define PA_TAB {3, 0, 0}
+#define PA_TABS {3, 2, 0}
+#define PA_ENT {4, 0, 0}
+#define PA_DEL {5, 0, 0}
+
+// Layers: base, Shift, Fn, hold Oct, hold Play. Keys 12 and 13 are the
+// modifiers themselves and never emit. Play and Oct emit on release when
+// no other key was pressed while they were down.
+static const PadAct kPad[5][16] = {
+    {PA_CH('z'), PA_CH('s'), PA_CH('x'), PA_CH('d'), PA_CH('c'), PA_CH('v'), PA_CH('g'), PA_CH('b'),
+     PA_CH('h'), PA_CH('n'), PA_CH('j'), PA_CH('m'), PA_NONE, PA_NONE, PA_SP, PA_CH('\\')},
+    {PA_CH('1'), PA_CH('2'), PA_CH('3'), PA_CH('4'), PA_CH('5'), PA_CH('6'), PA_CH('7'), PA_CH('8'),
+     PA_TAB, PA_CH('`'), PA_DEL, PA_ENT, PA_NONE, PA_NONE, PA_CH('='), PA_CH('-')},
+    {PA_FN(';'), PA_FN('.'), PA_FN(','), PA_FN('/'), PA_TABS, PA_CH('9'), PA_CH('0'), PA_FN('-'),
+     PA_FN('='), PA_CH('a'), PA_CH('f'), PA_CH('k'), PA_NONE, PA_NONE, PA_CH('y'), PA_CH(';')},
+    {PA_CH('\''), PA_CH('.'), PA_CH('/'), PA_CH(','), PA_CH('q'), PA_CH('r'), PA_CH('e'), PA_CH('t'),
+     PA_CH('h'), PA_CH('i'), PA_CH('o'), PA_CH('u'), PA_NONE, PA_NONE, PA_CH('l'), PA_NONE},
+    {PA_CTL('1'), PA_CTL('2'), PA_CTL('3'), PA_CTL('4'), PA_CTL('5'), PA_CTL('6'), PA_CTL('7'), PA_CTL('8'),
+     PA_CTL('n'), PA_NONE, PA_NONE, PA_NONE, PA_NONE, PA_NONE, PA_NONE, PA_NONE},
+};
+
+#undef PA_NONE
+#undef PA_CH
+#undef PA_FN
+#undef PA_CTL
+#undef PA_SP
+#undef PA_TAB
+#undef PA_TABS
+#undef PA_ENT
+#undef PA_DEL
+
+static const int kPadShift = 12;
+static const int kPadFn = 13;
+static const int kPadPlay = 14;
+static const int kPadOct = 15;
+static const uint32_t kPadDebounceMs = 20;
+
+static bool padLive = false;
+static int padRows[4];
+static int padCols[4];
+static uint16_t padDown = 0;
+static uint16_t padCandidate = 0;
+static uint32_t padCandidateMs = 0;
+static bool playSwallow = false;
+static bool octSwallow = false;
 
 static bool matrixOn() {
-  return PIN_MX_R0 >= 0 && PIN_MX_R1 >= 0 && PIN_MX_C0 >= 0 && PIN_MX_C1 >= 0 && PIN_MX_C2 >= 0 && PIN_MX_C3 >= 0;
+  const int pins[8] = {PIN_MX_R0, PIN_MX_R1, PIN_MX_R2, PIN_MX_R3, PIN_MX_C0, PIN_MX_C1, PIN_MX_C2, PIN_MX_C3};
+  for (int i = 0; i < 8; i++) {
+    if (pins[i] < 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void colMode(int pin) {
+  pinMode(pin, pin >= 34 ? INPUT : INPUT_PULLUP);
+}
+
+static void padReleasePins() {
+  for (int i = 0; i < 4; i++) {
+    pinMode(padRows[i], INPUT);
+    pinMode(padCols[i], INPUT);
+  }
+}
+
+static uint16_t readMask() {
+  uint16_t now = 0;
+  for (int r = 0; r < 4; r++) {
+    digitalWrite(padRows[r], LOW);
+    delayMicroseconds(40);
+    for (int c = 0; c < 4; c++) {
+      if (digitalRead(padCols[c]) == LOW) {
+        int key = ttgoPadKey(r, c);
+        if (key >= 0) {
+          now |= (uint16_t)(1u << key);
+        }
+      }
+    }
+    digitalWrite(padRows[r], HIGH);
+  }
+  return now;
 }
 
 static void matrixBegin() {
+  padLive = false;
+  padDown = 0;
+  padCandidate = 0;
+  padCandidateMs = 0;
+  playSwallow = false;
+  octSwallow = false;
   if (!matrixOn()) {
     return;
   }
-  const int rows[2] = {PIN_MX_R0, PIN_MX_R1};
-  const int cols[4] = {PIN_MX_C0, PIN_MX_C1, PIN_MX_C2, PIN_MX_C3};
-  for (int i = 0; i < 2; i++) {
-    pinMode(rows[i], OUTPUT);
-    digitalWrite(rows[i], HIGH);
-  }
+  padRows[0] = PIN_MX_R0;
+  padRows[1] = PIN_MX_R1;
+  padRows[2] = PIN_MX_R2;
+  padRows[3] = PIN_MX_R3;
+  padCols[0] = PIN_MX_C0;
+  padCols[1] = PIN_MX_C1;
+  padCols[2] = PIN_MX_C2;
+  padCols[3] = PIN_MX_C3;
   for (int i = 0; i < 4; i++) {
-    pinMode(cols[i], INPUT_PULLUP);
+    pinMode(padRows[i], OUTPUT);
+    digitalWrite(padRows[i], HIGH);
+    colMode(padCols[i]);
+  }
+  delayMicroseconds(50);
+  bool stuck = false;
+  for (int i = 0; i < 4; i++) {
+    if (digitalRead(padCols[i]) == LOW) {
+      stuck = true;
+    }
+  }
+  if (!stuck && readMask() != 0) {
+    stuck = true;
+  }
+  if (stuck) {
+    padReleasePins();
+    Serial.println("UI: keypad off");
+    return;
+  }
+  padLive = true;
+  Serial.println("UI: keypad");
+}
+
+static bool emitAct(const PadAct &act, DeckKeys *keys) {
+  if (!keys || act.kind == 0) {
+    return false;
+  }
+  memset(keys, 0, sizeof(*keys));
+  keys->fn = (act.flags & 1) != 0;
+  keys->shift = (act.flags & 2) != 0;
+  keys->ctrl = (act.flags & 4) != 0;
+  if (act.kind == 2) {
+    keys->space = true;
+    return true;
+  }
+  if (act.kind == 3) {
+    keys->tab = true;
+    return true;
+  }
+  if (act.kind == 4) {
+    keys->enter = true;
+    return true;
+  }
+  if (act.kind == 5) {
+    keys->del = true;
+    return true;
+  }
+  keys->word[0] = act.ch;
+  keys->wordLen = 1;
+  return true;
+}
+
+static int layerFor(uint16_t held, int key) {
+  bool play = (held & (1u << kPadPlay)) != 0;
+  bool oct = (held & (1u << kPadOct)) != 0;
+  bool fn = (held & (1u << kPadFn)) != 0;
+  bool shift = (held & (1u << kPadShift)) != 0;
+  if (play && key != kPadPlay) {
+    return 4;
+  }
+  if (oct && key != kPadOct) {
+    return 3;
+  }
+  if (fn) {
+    return 2;
+  }
+  if (shift) {
+    return 1;
+  }
+  return 0;
+}
+
+static void noteModifiers(uint16_t now) {
+  const int mods[4] = {kPadShift, kPadFn, kPadPlay, kPadOct};
+  for (int i = 0; i < 4; i++) {
+    uint16_t bit = (uint16_t)(1u << mods[i]);
+    if ((now & bit) == 0 || (padDown & bit) != 0) {
+      continue;
+    }
+    padDown |= bit;
+    if (mods[i] == kPadPlay) {
+      playSwallow = false;
+    } else if (mods[i] == kPadOct) {
+      octSwallow = false;
+    }
   }
 }
 
-static int matrixScan(char *out) {
-  if (!matrixOn() || !out) {
-    return 0;
+static bool padPoll(DeckKeys *keys) {
+  if (!padLive || !keys) {
+    return false;
   }
-  const int rows[2] = {PIN_MX_R0, PIN_MX_R1};
-  const int cols[4] = {PIN_MX_C0, PIN_MX_C1, PIN_MX_C2, PIN_MX_C3};
-  uint8_t now = 0;
-  for (int r = 0; r < 2; r++) {
-    digitalWrite(rows[r], LOW);
-    delayMicroseconds(20);
-    for (int c = 0; c < 4; c++) {
-      if (digitalRead(cols[c]) == LOW) {
-        now |= (uint8_t)(1u << (r * 4 + c));
+  uint16_t raw = readMask();
+  uint32_t ms = millis();
+  if (raw != padCandidate) {
+    padCandidate = raw;
+    padCandidateMs = ms;
+    return false;
+  }
+  if ((uint32_t)(ms - padCandidateMs) < kPadDebounceMs) {
+    return false;
+  }
+  uint16_t now = padCandidate;
+  noteModifiers(now);
+  for (;;) {
+    uint16_t fresh = (uint16_t)(now & ~padDown);
+    if (!fresh) {
+      break;
+    }
+    int key = __builtin_ctz(fresh);
+    padDown |= (uint16_t)(1u << key);
+    if ((now & (1u << kPadPlay)) != 0) {
+      playSwallow = true;
+    }
+    if ((now & (1u << kPadOct)) != 0) {
+      octSwallow = true;
+    }
+    if (emitAct(kPad[layerFor(now, key)][key], keys)) {
+      return true;
+    }
+  }
+  uint16_t gone = (uint16_t)(padDown & ~now);
+  while (gone) {
+    int key = __builtin_ctz(gone);
+    uint16_t bit = (uint16_t)(1u << key);
+    padDown = (uint16_t)(padDown & ~bit);
+    gone = (uint16_t)(gone & ~bit);
+    if (key == kPadPlay && !playSwallow) {
+      if (emitAct(kPad[layerFor(now, key)][key], keys)) {
+        return true;
+      }
+    } else if (key == kPadOct && !octSwallow) {
+      if (emitAct(kPad[layerFor(now, key)][key], keys)) {
+        return true;
       }
     }
-    digitalWrite(rows[r], HIGH);
   }
-  uint8_t pressed = (uint8_t)(now & ~mxLast);
-  mxLast = now;
-  for (int i = 0; i < 8; i++) {
-    if (pressed & (1u << i)) {
-      *out = kMxKey[i];
-      return 1;
-    }
-  }
-  return 0;
+  return false;
 }
 
 static bool fillFromByte(int b, DeckKeys *keys) {
@@ -173,8 +380,7 @@ static bool fillFromByte(int b, DeckKeys *keys) {
 void boardUpdate() {}
 
 bool boardPollKeys(DeckKeys *keys) {
-  char mx = 0;
-  if (matrixScan(&mx) && fillFromByte((unsigned char)mx, keys)) {
+  if (padPoll(keys)) {
     return true;
   }
   while (Serial.available() > 0) {
@@ -324,6 +530,14 @@ bool boardHasDisplay() {
 int boardBatteryMv() {
   if (PIN_BATT_ADC < 0) {
     return 0;
+  }
+  // A keypad column on the battery pin needs a pull-up, which wrecks the
+  // divider. Leave the percent as n/a while that pin is a column.
+  const int cols[4] = {PIN_MX_C0, PIN_MX_C1, PIN_MX_C2, PIN_MX_C3};
+  for (int i = 0; i < 4; i++) {
+    if (cols[i] == PIN_BATT_ADC) {
+      return 0;
+    }
   }
   // T8 divider is about 2:1 into a 3.3V ADC. 12-bit.
   int raw = analogRead(PIN_BATT_ADC);
