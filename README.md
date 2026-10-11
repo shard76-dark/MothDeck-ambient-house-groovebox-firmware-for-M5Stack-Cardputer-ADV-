@@ -8,8 +8,8 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.7.0
-- SHA-256: `9092fa25716769d1402b2769f46f1cafe890f46a140e80613527710cb3b5e2e9`
+- Version 1.8.0
+- SHA-256: `942beb403d95091251e874075907e1c06bad7442ab4e338dc173940fd71736a9`
 - Size: 2,281,600 bytes (app image, magic `E9`)
 - 1.6.0 keeps the 16-bit samples, the chain, and the sampler. Settings has a WiFi row that serves `/moth` at `http://192.168.4.1/` (access point `Mothdeck`, password `mothdeck`) without turning BLE off. Details are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md). The air name is `Mothdeck`.
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)

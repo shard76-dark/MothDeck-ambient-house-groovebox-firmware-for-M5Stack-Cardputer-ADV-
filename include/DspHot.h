@@ -89,6 +89,30 @@ inline int dspMulQ(int a, int b, int sh) {
   return dspMul(a, b) >> sh;
 }
 
+// (a * b) >> sh for a full signed 64-bit product. sh is 0..31.
+// On Xtensa this is MULL plus MULSH. Define MOTHDECK_DSP_C to use the
+// portable path even on device. Both results are the same integer.
+inline int dspMulShift(int a, int b, int sh) {
+  if (sh < 0) {
+    sh = 0;
+  } else if (sh > 31) {
+    sh = 31;
+  }
+#if defined(__XTENSA__) && !defined(MOTHDECK_DSP_C)
+  int lo;
+  int hi;
+  __asm__ __volatile__("mull %0, %2, %3\n\tmulsh %1, %2, %3" : "=&a"(lo), "=&a"(hi) : "a"(a), "a"(b));
+  if (sh == 0) {
+    return lo;
+  }
+  unsigned uhi = (unsigned)hi;
+  unsigned ulo = (unsigned)lo;
+  return (int)((uhi << (32 - sh)) | (ulo >> sh));
+#else
+  return (int)(((int64_t)a * (int64_t)b) >> sh);
+#endif
+}
+
 // 4-point Hermite. frac is 0..den. frac 0 returns s0 and frac >= den returns s1.
 // The curve matches the float Hermite within one LSB. Products need 64 bits.
 inline int dspHermite(int sm1, int s0, int s1, int s2, int frac, int den) {

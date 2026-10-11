@@ -1,3 +1,9 @@
+## 1.8.0 (2026-10-11)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (2,281,616 bytes, magic `E9`, chip `0x0009`, SHA-256 `942beb403d95091251e874075907e1c06bad7442ab4e338dc173940fd71736a9`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (2,347,152 bytes, SHA-256 `3e5b88f8a285de98fe2d4411f50a80f8413a8c917d93f90e87b28f4dfba3e063`). Version on the Settings screen is 1.8.0. Static RAM is 176308/327680. Host tests passed. This image has not been tried on a Cardputer.
+
+The low-pass uses a wide multiply (MULL and MULSH on the ESP32-S3, portable 64-bit C otherwise, including when `MOTHDECK_DSP_C` is set). The second pole is a quarter darker. Cutoff changes slew for about 6 ms. The voice count is unchanged.
+
 ## 1.7.0 (2026-10-11)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (2,281,600 bytes, magic `E9`, chip `0x0009`, SHA-256 `9092fa25716769d1402b2769f46f1cafe890f46a140e80613527710cb3b5e2e9`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (2,347,136 bytes, SHA-256 `7f39ff6d32bf73bdde18eb090bee2c7a96d1322ef3f96dbbee3bf74ab8f77132`). The browser installer is `docs/flash.html` and writes that same full image. Version on the Settings screen is 1.7.0. Static RAM is 176292/327680. Host tests passed. This image has not been tried on a Cardputer.
