@@ -2,6 +2,14 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.4.0 (2026-10-11)
+
+The Song page stores up to eight scenes. `J` saves the current pattern and the four track mutes as the next scene. `P` clears the chain. While a chain is stored, playback walks it at the end of each pattern and applies that scene's pattern and mutes. Song mode is left as it was when the chain is empty. Loops, BLE, drums, and plugins are not unloaded.
+
+Image: `releases/mothdeck-cardputer-adv.bin` (1,747,920 bytes, magic `E9`, SHA-256 `88ebeca4ffc5f0b81d4b940774902f8f968cdc17c96ec11a718e9a276687d15d`, static RAM 139676/327680). `releases/mothdeck-cardputer-adv-full.bin` is 1,813,456 bytes, SHA-256 `d8e558662d1c28bb75d6d57c6ae3a3e0a9efec2016ab16318d850c77e0ec2295`. Host tests passed. Nothing here was flashed or listened to. The TTGO image is a separate branch.
+
+A song with a chain is version 5, 18 bytes after the version 4 block. An empty chain stays version 1 through 4, so older songs still load. The chain is in the song file, not a separate buffer, and it does not take the loop-window pool.
+
 ## 1.3.0 (2026-10-11)
 
 Built-in drums and the twelve sound effects are rendered again at signed 16-bit, 44100 Hz, from the synthesizers in `tools/voices.py`. They are not an expansion of the old 8-bit tables. All twenty-four tables stay in flash. The application image is 1,747,152 bytes and the OTA slot is 3,932,160 bytes, so the second slot stays.

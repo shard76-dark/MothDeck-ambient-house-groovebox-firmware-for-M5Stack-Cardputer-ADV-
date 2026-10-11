@@ -12,6 +12,8 @@ Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv
 
 The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.3.0 still uses. On a 1.3.0 board the Settings version line says `v1.3.0`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`).
 
+On the Song page, `J` stores the current pattern and the four track mutes as the next scene, up to eight. `P` clears that chain. While a chain is stored, playback walks it at the end of each pattern. An empty chain leaves song mode, loops, and BLE as they were. A song that has a chain is version 5. An older song still loads.
+
 ## Moving around
 
 Tab steps through Play, Instrument, FX, Mixer, Song, Loops, MIDI, Settings, and Exit. Exit is in the list only when a Launcher image is on the flash. Shift+Tab or Ctrl+Tab goes back one page.
