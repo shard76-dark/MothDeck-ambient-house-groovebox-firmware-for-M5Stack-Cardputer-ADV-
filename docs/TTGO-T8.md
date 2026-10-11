@@ -28,7 +28,7 @@ pio run -e cardputer-adv
 
 The app image is `.pio/build/ttgo-t8/firmware.bin`. Flash it over the board's USB serial port (CP2104 or CH9102, 115200). This is a factory app at `0x10000` in `partitions/ttgo_t8_4MB.csv`. There is no Launcher on this board.
 
-The 1.2.4 pre-release images are filled in when this image is built. They have not been flashed or listened to. The 1.2.3 pre-release stays up and is superseded: `mothdeck-ttgo-t8-1.2.3-test.bin` (1,634,448 bytes, magic `E9`, SHA-256 `2763b41df41099bda4726999d883b86071176c1ff1d277b2ee08857ad3db88ba`, static RAM 81336/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.2.3-test.bin` (1,628,448 bytes, magic `E9`, SHA-256 `ac5d73f8e8cdea928507cdab3326bcc503b7296a92d7273a8ece67135dc8a195`, static RAM 80472/327680, GPIO25 DAC). The 1.2.2 pre-release stays up as well.
+The 1.2.4 pre-release images are `mothdeck-ttgo-t8-1.2.4-test.bin` (1,636,256 bytes, magic `E9`, SHA-256 `0844c6b5b6715601e812b7328d6072b23e7479608d9cc4f0056d44e2b1103a96`, static RAM 82296/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.2.4-test.bin` (1,630,288 bytes, magic `E9`, SHA-256 `46d1bc56162f96589c97edb2b2289961bd57f5b2cf9e7131449fa6c865a8a4ee`, static RAM 81432/327680, GPIO25 DAC). They have not been flashed or listened to. The 1.2.3 pre-release stays up and is superseded: `mothdeck-ttgo-t8-1.2.3-test.bin` (1,634,448 bytes, magic `E9`, SHA-256 `2763b41df41099bda4726999d883b86071176c1ff1d277b2ee08857ad3db88ba`, static RAM 81336/327680, PCM5102A) and `mothdeck-ttgo-t8-dac-1.2.3-test.bin` (1,628,448 bytes, magic `E9`, SHA-256 `ac5d73f8e8cdea928507cdab3326bcc503b7296a92d7273a8ece67135dc8a195`, static RAM 80472/327680, GPIO25 DAC). The 1.2.2 pre-release stays up as well.
 
 ```bash
 pio run -e ttgo-t8 -t upload

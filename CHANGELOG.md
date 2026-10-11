@@ -6,7 +6,7 @@ Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHAN
 
 External MIDI clock follows every `0xF8` in a BLE packet. Several clocks often share one timestamp, and the tempo is the span divided by that many ticks, smoothed over a beat. A step is still six ticks. The readout tracks 40–200 BPM. Notes on one track sound together, up to four, on top of a stored chord. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel. This image still has chords and the rotated 4×4 menu. The pre-release is `ttgo-t8-v1.2.4`. `ttgo-t8-v1.2.3` stays and is superseded. The Settings line and the boot log say `1.2.4`. The Cardputer image on `main` is also called 1.2.4 and is a different binary.
 
-Hashes are filled in when this image is built. Host tests passed. Nothing here was flashed or listened to.
+Images: `mothdeck-ttgo-t8-1.2.4-test.bin` (1,636,256 bytes, magic `E9`, SHA-256 `0844c6b5b6715601e812b7328d6072b23e7479608d9cc4f0056d44e2b1103a96`, static RAM 82296/327680) and `mothdeck-ttgo-t8-dac-1.2.4-test.bin` (1,630,288 bytes, magic `E9`, SHA-256 `46d1bc56162f96589c97edb2b2289961bd57f5b2cf9e7131449fa6c865a8a4ee`, static RAM 81432/327680). Host tests passed. Nothing here was flashed or listened to.
 
 ## 1.2.3 (2026-10-11)
 
