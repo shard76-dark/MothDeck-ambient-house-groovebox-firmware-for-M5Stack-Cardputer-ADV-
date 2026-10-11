@@ -6,7 +6,7 @@ Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHAN
 
 Incoming MIDI notes play and are not written into the pattern while Rec is off. MIDI Start and Continue do not arm Rec. Space still arms it, and with Rec on those notes record on the playhead. A piano-roll key while the transport is running follows that same rule. Stopped, the roll still writes the cell under the cursor.
 
-The image to flash is `releases/mothdeck-cardputer-adv.bin`. Hashes are filled in when this image is built. The SD pack is unchanged from 1.2.1. Settings version line is `v1.2.3`. From this version on, a build that reaches Chris with a change gets a new version number.
+The image to flash is `releases/mothdeck-cardputer-adv.bin` (1,151,680 bytes, magic `E9`, SHA-256 `45837a975607b7933722ae37fa8492c1d06b53418b3837596f43b79820e8e8ec`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,217,216 bytes, SHA-256 `39a727811b019e9e1f1de4c9d16af38be31071df78266ed88c68ebe0e242d0f1`). The SD pack is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Static RAM is 136004/327680. Settings version line is `v1.2.3`. From this version on, a build that reaches Chris with a change gets a new version number.
 
 ## 1.2.2 (2026-10-10)
 

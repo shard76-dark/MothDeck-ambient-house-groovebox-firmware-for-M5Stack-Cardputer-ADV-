@@ -1,10 +1,10 @@
 ## 1.2.3 (2026-10-11)
 
-Flash `releases/mothdeck-cardputer-adv.bin`. Version on the Settings screen is 1.2.3. Host tests passed. Use earphones. This image has not been tried on a Cardputer.
+Flash `releases/mothdeck-cardputer-adv.bin` (1,151,680 bytes, magic `E9`, chip `0x0009`, SHA-256 `45837a975607b7933722ae37fa8492c1d06b53418b3837596f43b79820e8e8ec`). Version on the Settings screen is 1.2.3. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 136004/327680.
 
 Incoming MIDI notes play and are not stored while Rec is off. Start and Continue do not arm Rec. Space arms Rec, and then those notes are written at the playhead. A piano-roll key while the transport is running follows that same rule. Stopped, the roll still writes the cell under the cursor.
 
-The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin`. It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
+The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,217,216 bytes, SHA-256 `39a727811b019e9e1f1de4c9d16af38be31071df78266ed88c68ebe0e242d0f1`). It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
 
 The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
 

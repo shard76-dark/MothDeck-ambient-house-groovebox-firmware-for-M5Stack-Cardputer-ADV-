@@ -1,6 +1,6 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.3. Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does. NimBLE has been reserved at boot since 1.2.2, and On and Off only start or stop advertising. Unload BLE frees that memory for large loops on the next boot. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.3 (1,151,680 bytes, magic `E9`, SHA-256 `45837a975607b7933722ae37fa8492c1d06b53418b3837596f43b79820e8e8ec`). Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does. NimBLE has been reserved at boot since 1.2.2, and On and Off only start or stop advertising. Unload BLE frees that memory for large loops on the next boot. Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
