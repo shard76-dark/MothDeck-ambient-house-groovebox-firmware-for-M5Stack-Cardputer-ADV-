@@ -14,7 +14,7 @@ The keypad is a 4×4 membrane with the connector on top. Membrane rows are firmw
 
 A step holds up to four notes. The first stays in the pattern word, so a song file is unchanged and an older song still loads as single notes. The other three notes sit in PSRAM. With Rec on, MIDI notes that land in the same step stack, and a fifth is dropped. The piano roll shows each one as a block in that column. Playback sounds them together. Saving a song keeps the first note of each step.
 
-Hashes are filled in when these images are built. Nothing here was flashed or listened to.
+Images: `mothdeck-ttgo-t8-1.2.3-test.bin` (1,634,448 bytes, magic `E9`, SHA-256 `2763b41df41099bda4726999d883b86071176c1ff1d277b2ee08857ad3db88ba`, static RAM 81336/327680) and `mothdeck-ttgo-t8-dac-1.2.3-test.bin` (1,628,448 bytes, magic `E9`, SHA-256 `ac5d73f8e8cdea928507cdab3326bcc503b7296a92d7273a8ece67135dc8a195`, static RAM 80472/327680). Host tests passed. Nothing here was flashed or listened to.
 
 ## 1.2.2 (2026-10-10)
 
