@@ -2,6 +2,12 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.8.0 (2026-10-11)
+
+The filter's wide multiply is MULL and MULSH. `MOTHDECK_DSP_C` keeps the portable 64-bit path. Host tests check that path against a 64-bit product, including negative numbers. The low-pass second pole sits a quarter below the first, and a cutoff change slews for about 6 ms. A new note still starts on the cutoff you set. The voice count is unchanged. Loops, BLE, drums, chords, the sampler, and the chain stay loaded.
+
+Images: `mothdeck-ttgo-t8-1.8.0-test.bin` (1,896,816 bytes, magic `E9`, SHA-256 `32e5ae2d8c4f29597cf8f03169409637a0654e3b51a9165567f6ba50976ba8d4`, static RAM 100648/327680) and `mothdeck-ttgo-t8-dac-1.8.0-test.bin` (1,890,912 bytes, magic `E9`, SHA-256 `271bd50211c55e2d806d0374a3c968abb1754d8014051772ed6353300acff9b6`, static RAM 99784/327680). Factory slot margins are 134,800 and 140,704 bytes. Browser images are `docs/flash/mothdeck-ttgo-t8-full.bin` (1,962,352 bytes, SHA-256 `09e5bbcf7511dfa5ba30588415d5ebcb39bd6a8409cc0cb5f532886c969f324a`) and `docs/flash/mothdeck-ttgo-t8-dac-full.bin` (1,956,448 bytes, SHA-256 `6170d88c147289e6eab520795284b12f86129b098bc68d557dcbdecc16051c98`). Host tests passed. Nothing here was flashed or listened to.
+
 ## 1.7.0 (2026-10-11)
 
 The manual is [docs/MANUAL.md](docs/MANUAL.md). The browser installer is [docs/flash.html](docs/flash.html), with one button for the PCM5102A image and one for the GPIO25 DAC image. Each writes a full factory image. Playback matches 1.5.0. There is no 1.6.0 image on this board: the Wi-Fi file page overflowed internal instruction RAM by 892 bytes with BLE and the PSRAM cache workaround still linked, and the drum tables are in flash so removing them would not free that RAM.
