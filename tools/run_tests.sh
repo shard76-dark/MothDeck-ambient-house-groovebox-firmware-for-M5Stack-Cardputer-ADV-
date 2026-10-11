@@ -6,6 +6,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CXX="${CXX:-g++}"
 FLAGS=(-std=c++17 -Wall -Wextra -Werror -I"$ROOT/include")
 
+echo "DSP interpolation and dither"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_dsp.cpp" \
+  -o /tmp/mothdeck_test_dsp
+/tmp/mothdeck_test_dsp
+
 echo "BLE MIDI advertising payload"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_ble_advert.cpp" \
@@ -103,6 +109,25 @@ echo "Voices"
   "$ROOT/src/default_samples.cpp" \
   -o /tmp/mothdeck_test_voices
 /tmp/mothdeck_test_voices
+
+echo "Card effects are 16-bit 44100 Hz"
+python3 - "$ROOT" << 'PY'
+import os, sys, wave
+root = sys.argv[1]
+names = ("riser", "downlifter", "sweep", "impact", "siren", "drop")
+base = os.path.join(root, "sd-card-example", "moth", "sfx")
+for name in names:
+    path = os.path.join(base, name + ".wav")
+    with wave.open(path, "r") as handle:
+        assert handle.getnchannels() == 1, name
+        assert handle.getsampwidth() == 2, name
+        assert handle.getframerate() == 44100, name
+        assert handle.getnframes() > 4000, name
+        raw = handle.readframes(handle.getnframes())
+    low = sum(1 for i in range(0, min(len(raw), 4000), 2) if raw[i] != 0)
+    assert low > 100, name
+print("card sfx ok")
+PY
 
 echo "Plugins, loops, WAV, synth render"
 "$CXX" "${FLAGS[@]}" \

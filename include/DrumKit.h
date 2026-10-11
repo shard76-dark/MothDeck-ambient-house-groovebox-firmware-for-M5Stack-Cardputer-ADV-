@@ -8,7 +8,13 @@ struct DrumHitView {
   const int16_t *data;
   int length;
   int rate;
+  // 1 when the pad is read from the card through the kit window.
+  // data is null. The 16 KB cache is the window, not a copy of the kit.
+  uint8_t streamed;
 };
+
+// Audio-thread read of a streamed pad. The host build uses the weak stub.
+int drumStreamAt(int track, int pad, int frame);
 
 // True when an SD kit is selected and this pad has PCM. False uses the
 // built-in Ambient House tables.

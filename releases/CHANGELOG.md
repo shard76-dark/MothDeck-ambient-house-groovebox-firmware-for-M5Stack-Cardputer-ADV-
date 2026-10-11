@@ -1,3 +1,9 @@
+## 1.3.0 (2026-10-11)
+
+TTGO T8 images, not the Cardputer files below. `mothdeck-ttgo-t8-1.3.0-test.bin` is 1,894,608 bytes, magic `E9`, SHA-256 `cbbc7017ada1760708682b1b2fce0aa3b6cd645f1e75c4a274502d0bf9608b39`, static RAM 84184/327680, PCM5102A. `mothdeck-ttgo-t8-dac-1.3.0-test.bin` is 1,888,656 bytes, magic `E9`, SHA-256 `72dc194cbbaaf180f88728910713f69b07fb5c860d69056a14ee6c48d433e221`, static RAM 83320/327680, GPIO25 DAC. Host tests passed. Nothing here was flashed or listened to.
+
+Built-in drums and the shorter effects are signed 16-bit at 44100 Hz in flash. Riser, downlifter, sweep, impact, siren, and drop are in `mothdeck-sd-pack.zip` under `moth/sfx/` and load into PSRAM. Loops stream. A large kit streams through the 16 KB cache. The speaker sample is dithered by one 16-bit LSB. The Cardputer 1.3.0 image is a different binary on `main`.
+
 ## 1.2.1 (2026-10-09)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (1,152,112 bytes, magic `E9`, chip `0x0009`, SHA-256 `d01b62bd90a58c1345aa8c451771770db7e4ff6504a4d3669b88363176e7bafe`). Version on the Settings screen is 1.2.1. Host tests passed. Use earphones. This image has not been tried on a Cardputer. The piano roll Chris liked is unchanged. BLE is still untested on hardware.

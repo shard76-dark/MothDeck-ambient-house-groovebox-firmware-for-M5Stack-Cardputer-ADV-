@@ -2,6 +2,16 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.3.0 (2026-10-11)
+
+Built-in drums and sound effects are rendered again at signed 16-bit, 44100 Hz, from `tools/voices.py`. They are not a stretch of the old 8-bit tables. A drum at its recorded pitch plays one frame per output sample. Pitched reads use 4-point Hermite interpolation. The four tracks sum in 32-bit, and the speaker sample is that sum with triangular dither of one 16-bit LSB.
+
+The factory slot is 2,031,616 bytes. The twelve drums and the six shorter effects (zap, noise, blip, reverse, bubble, whoosh) stay in flash. The six long effects (riser, downlifter, sweep, impact, siren, drop) are `/moth/sfx/<name>.wav` in the SD pack. A scan copies each one into PSRAM. A missing card leaves those six silent and leaves drums, the short effects, loops, plugins, and BLE running. Loop windows stay in their own PSRAM pool. A kit that fits is copied into PSRAM. A larger kit streams through the 16 KB cache and does not take the loop windows. Plugin samples stay within 4096 frames. An older unsigned 8-bit WAV still loads.
+
+This image still has chords and the rotated 4×4 menu. The pre-release is `ttgo-t8-v1.3.0`. `ttgo-t8-v1.2.4` stays and is superseded. The Settings line and the boot log say `1.3.0`. The Cardputer image on `main` is also called 1.3.0 and is a different binary: that board's 8MB layout holds all twenty-four tables in flash.
+
+Images: `mothdeck-ttgo-t8-1.3.0-test.bin` (1,894,608 bytes, magic `E9`, SHA-256 `cbbc7017ada1760708682b1b2fce0aa3b6cd645f1e75c4a274502d0bf9608b39`, static RAM 84184/327680) and `mothdeck-ttgo-t8-dac-1.3.0-test.bin` (1,888,656 bytes, magic `E9`, SHA-256 `72dc194cbbaaf180f88728910713f69b07fb5c860d69056a14ee6c48d433e221`, static RAM 83320/327680). Host tests passed. Nothing here was flashed or listened to.
+
 ## 1.2.4 (2026-10-11)
 
 External MIDI clock follows every `0xF8` in a BLE packet. Several clocks often share one timestamp, and the tempo is the span divided by that many ticks, smoothed over a beat. A step is still six ticks. The readout tracks 40–200 BPM. Notes on one track sound together, up to four, on top of a stored chord. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel. This image still has chords and the rotated 4×4 menu. The pre-release is `ttgo-t8-v1.2.4`. `ttgo-t8-v1.2.3` stays and is superseded. The Settings line and the boot log say `1.2.4`. The Cardputer image on `main` is also called 1.2.4 and is a different binary.

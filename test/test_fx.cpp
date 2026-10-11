@@ -122,7 +122,7 @@ static void testDrumHitsOverlap() {
   Voice kick;
   kick.SetNote(0, false, -1, 0);
   int first = kick.UpdateVoice();
-  int want = (((int)kick1[0] - 128) << 8) * kick.volume / 3;
+  int want = (int)kick1[0] * kick.volume / 3;
   expect(first == want, "a single kick starts at the recorded level");
 
   Voice both;
@@ -145,7 +145,8 @@ static void testDrumHitsOverlap() {
   expect(diff > hatE / 8, "a hat does not replace the kick that is still ringing");
 
   Voice sfx;
-  sfx.SetNote(0, false, -1, 1);
+  // Note 6 is the blip, which stays in flash. The riser is a card file.
+  sfx.SetNote(6, false, -1, 1);
   int loud = 0;
   for (int i = 0; i < 400; i++) {
     int s = sfx.UpdateVoice();

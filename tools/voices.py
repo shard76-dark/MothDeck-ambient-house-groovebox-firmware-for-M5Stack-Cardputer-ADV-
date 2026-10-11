@@ -572,3 +572,8 @@ SFX_NAMES = (
     "riser", "downlifter", "zap", "sweep", "impact", "noise",
     "blip", "siren", "reverse", "drop", "bubble", "whoosh",
 )
+
+# Indexes into SFX_NAMES. These do not fit the TTGO 4MB factory slot
+# beside the 16-bit drum tables. They ship as /moth/sfx/<name>.wav and
+# load into PSRAM. The Cardputer image keeps every effect in flash.
+TTGO_CARD_SFX = (0, 1, 3, 4, 7, 9)

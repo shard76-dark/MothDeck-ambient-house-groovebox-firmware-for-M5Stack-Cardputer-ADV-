@@ -64,11 +64,7 @@ static long energy(const int16_t *s, int a, int b) {
   return acc;
 }
 
-static int expand8(uint8_t sample) {
-  return ((int)sample - 128) << 8;
-}
-
-static long spreadDiff(const uint8_t *a, int aLen, const uint8_t *b, int bLen) {
+static long spreadDiff(const int16_t *a, int aLen, const int16_t *b, int bLen) {
   int n = aLen < bLen ? aLen : bLen;
   if (n < 9) {
     return 0;
@@ -76,7 +72,7 @@ static long spreadDiff(const uint8_t *a, int aLen, const uint8_t *b, int bLen) {
   long acc = 0;
   for (int k = 1; k <= 8; k++) {
     int i = n * k / 9;
-    int d = expand8(a[i]) - expand8(b[i]);
+    int d = (int)a[i] - (int)b[i];
     if (d < 0) {
       d = -d;
     }
@@ -126,24 +122,60 @@ static void testTones() {
 }
 
 static void testDrumsAndSfx() {
-  expect(kick1Length > 8000 && special1Length > 1500 && kick2Length > 800, "kick, snare, and hat are longer than a click");
+  expect(kick1Length > 16000 && special1Length > 8000 && kick2Length > 1500, "kick, snare, and hat are 44100 Hz one-shots");
+  int peak = 0;
+  int odd = 0;
+  for (int i = 0; i < kick1Length; i++) {
+    int a = kick1[i] < 0 ? -kick1[i] : kick1[i];
+    if (a > peak) {
+      peak = a;
+    }
+    if ((kick1[i] & 0xFF) != 0) {
+      odd++;
+    }
+  }
+  expect(peak > 20000 && peak <= 32767, "kick uses the 16-bit range");
+  expect(odd > kick1Length / 4, "kick is not an expanded 8-bit table");
   expect(spreadDiff(kick1, kick1Length, special1, special1Length) > 20000, "kick and snare are different");
   expect(spreadDiff(hihat1, hihat1Length, kick2, kick2Length) > 8000, "clap and closed hat are different");
-  const uint8_t *sfx[] = {sfx1, sfx2, sfx3, sfx4, sfx5, sfx6, sfx7, sfx8, sfx9, sfx10, sfx11, sfx12};
+  const int16_t *sfx[] = {sfx1, sfx2, sfx3, sfx4, sfx5, sfx6, sfx7, sfx8, sfx9, sfx10, sfx11, sfx12};
   const int lens[] = {
       sfx1Length, sfx2Length, sfx3Length, sfx4Length, sfx5Length, sfx6Length,
       sfx7Length, sfx8Length, sfx9Length, sfx10Length, sfx11Length, sfx12Length};
+  // riser, downlifter, sweep, impact, siren, drop. Same indexes as TTGO_CARD_SFX.
+  const int onCard[] = {1, 1, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0};
   bool distinct = true;
-  for (int i = 1; i < 12; i++) {
-    if (spreadDiff(sfx[0], lens[0], sfx[i], lens[i]) < 4000) {
-      distinct = false;
+  const int16_t *first = nullptr;
+  int firstLen = 0;
+  for (int i = 0; i < 12; i++) {
+    if (onCard[i]) {
+      if (lens[i] != 0) {
+        distinct = false;
+      }
+      continue;
     }
     if (lens[i] < 400) {
       distinct = false;
     }
+    int low = 0;
+    int n = lens[i] < 2000 ? lens[i] : 2000;
+    for (int k = 0; k < n; k++) {
+      if ((sfx[i][k] & 0xFF) != 0) {
+        low++;
+      }
+    }
+    if (low < n / 8) {
+      distinct = false;
+    }
+    if (!first) {
+      first = sfx[i];
+      firstLen = lens[i];
+    } else if (spreadDiff(first, firstLen, sfx[i], lens[i]) < 4000) {
+      distinct = false;
+    }
   }
-  expect(distinct, "each sfx differs from the riser and is not a blip");
-  expect(sfx1Length > sfx7Length, "riser is longer than the blip");
+  expect(distinct, "flash effects differ, use 16-bit, and the long ones are on the card");
+  expect(sfx1Length == 0 && sfx7Length > 400, "the riser is on the card and the blip stays in flash");
 }
 
 int main() {

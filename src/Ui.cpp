@@ -5,6 +5,7 @@
 #include "LoopLibrary.h"
 #include "PcmHold.h"
 #include "DrumKit.h"
+#include "SfxCard.h"
 #include "SdStorage.h"
 #include "SdCard.h"
 #include "LauncherExit.h"
@@ -317,6 +318,7 @@ void uiMountStorage(bool withLoops) {
   instrumentBank.Scan();
   loopLibrary.Scan();
   drumKit.Scan();
+  sfxCardScan();
   if (!withLoops) {
     return;
   }
@@ -1887,6 +1889,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     if (c == 'r') {
       instrumentBank.Scan();
       drumKit.Scan();
+      sfxCardScan();
       loopLibrary.Scan();
       if (loopsBlocked) {
         toastSet("MIDI mode: loops off");
@@ -2276,6 +2279,7 @@ static void padEditKey(int key) {
     } else if (key == 7) {
       instrumentBank.Scan();
       drumKit.Scan();
+      sfxCardScan();
       loopLibrary.Scan();
       if (loopsBlocked) {
         toastSet("MIDI mode: loops off");
