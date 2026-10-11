@@ -431,6 +431,41 @@ bool DrumKit::Select(int index, char *err, int errLen) {
     }
     total += probed[p].frames;
   }
+  if (total > kKitFrames && psramFound()) {
+    int16_t *block = (int16_t *)deckAlloc((size_t)total * sizeof(int16_t));
+    if (block) {
+      int used = 0;
+      int off[kKitPads];
+      int len[kKitPads];
+      int rate[kKitPads];
+      bool ok = true;
+      for (int p = 0; p < kKitPads; p++) {
+        int got = 0;
+        int padRate = 22050;
+        if (!decodePad(probed[p].path, block + used, probed[p].frames, &got, &padRate, err, errLen)) {
+          ok = false;
+          break;
+        }
+        off[p] = used;
+        len[p] = got;
+        rate[p] = padRate;
+        used += got;
+      }
+      if (ok) {
+        unloadKit();
+        kitBlock = block;
+        memcpy(kitOffset, off, sizeof(kitOffset));
+        memcpy(kitLength, len, sizeof(kitLength));
+        memcpy(kitRate, rate, sizeof(kitRate));
+        streamMode = 0;
+        selected = index;
+        kitReady = 1;
+        setErr(err, errLen, "");
+        return true;
+      }
+      deckFree(block);
+    }
+  }
   if (total > kKitFrames) {
     int16_t *block = (int16_t *)deckAlloc((size_t)kKitFrames * sizeof(int16_t));
     if (!block) {

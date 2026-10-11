@@ -1,6 +1,6 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.3.0 (1,746,832 bytes, magic `E9`, SHA-256 `c6868ddb64fbb2c1c6dcca160173e489118ffde2552a1fa65df3da7559bf7d96`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.3.0 (1,747,152 bytes, magic `E9`, SHA-256 `41d81f307e98d707c24d484e4d22e981ed93002ac19aee4a0f877514e8949be0`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
 
 1.3.0 includes the releases before it. Built-in drums and sound effects are signed 16-bit at 44100 Hz, rendered from the original synthesizers and stored in flash. The SD pack matches. A card kit that is larger than the 16 KB cache streams through that cache. Loops stream. Plugin samples stay within 4096 frames so they still load while BLE is on. The speaker mix is dithered by one 16-bit LSB.
 
