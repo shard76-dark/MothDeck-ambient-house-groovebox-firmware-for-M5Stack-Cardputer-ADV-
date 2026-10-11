@@ -1,0 +1,13 @@
+{
+  "name": "MothDeck Cardputer ADV",
+  "version": "1.7.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "mothdeck-cardputer-adv-full.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

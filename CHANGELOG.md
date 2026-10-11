@@ -2,6 +2,12 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.7.0 (2026-10-11)
+
+The user manual is [docs/MANUAL.md](docs/MANUAL.md). The browser installer is [docs/flash.html](docs/flash.html). It writes the full-flash image with ESP Web Tools and replaces Launcher. The application image is still the file Launcher installs. Behavior matches 1.6.0. The Settings line says 1.7.0.
+
+Image: `releases/mothdeck-cardputer-adv.bin` (2,281,600 bytes, magic `E9`, SHA-256 `9092fa25716769d1402b2769f46f1cafe890f46a140e80613527710cb3b5e2e9`, static RAM 176292/327680). `releases/mothdeck-cardputer-adv-full.bin` is 2,347,136 bytes, SHA-256 `7f39ff6d32bf73bdde18eb090bee2c7a96d1322ef3f96dbbee3bf74ab8f77132`. The same full image is `docs/flash/mothdeck-cardputer-adv-full.bin` for the browser installer. Host tests passed. Nothing here was flashed or listened to. The TTGO manual and flasher are a separate branch.
+
 ## 1.6.0 (2026-10-11)
 
 Settings has a WiFi row. Enter starts a soft access point named `Mothdeck`, password `mothdeck`, at `192.168.4.1`. The page lists `/moth` and can download, upload, and delete files under that folder. A path that leaves `/moth` is rejected. An upload is written to `/moth/_upload.tmp` and takes the place of the old file only after the body arrives, so a short upload leaves the previous file. The transfer locks the card one chunk at a time, so a loop can still refill. Starting Wi-Fi does not stop BLE, free the loop windows, or unload a kit. If the largest internal block is under 48 KB, or the access point does not come up, the row stays off and the toast says `WiFi unchanged`.

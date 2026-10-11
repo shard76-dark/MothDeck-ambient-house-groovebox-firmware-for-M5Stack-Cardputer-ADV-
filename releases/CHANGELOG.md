@@ -1,3 +1,9 @@
+## 1.7.0 (2026-10-11)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (2,281,600 bytes, magic `E9`, chip `0x0009`, SHA-256 `9092fa25716769d1402b2769f46f1cafe890f46a140e80613527710cb3b5e2e9`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (2,347,136 bytes, SHA-256 `7f39ff6d32bf73bdde18eb090bee2c7a96d1322ef3f96dbbee3bf74ab8f77132`). The browser installer is `docs/flash.html` and writes that same full image. Version on the Settings screen is 1.7.0. Static RAM is 176292/327680. Host tests passed. This image has not been tried on a Cardputer.
+
+The manual is `docs/MANUAL.md`. Playback matches 1.6.0.
+
 ## 1.6.0 (2026-10-11)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (2,281,600 bytes, magic `E9`, chip `0x0009`, SHA-256 `affa6a910a3223c712083131aa92b0e425cce5b3dc51ae42369f13f094498325`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (2,347,136 bytes, SHA-256 `bf1eea39cb4e156c4f07db05302c8588a61c22daae051b8245915e38a18c4702`). Version on the Settings screen is 1.6.0. Static RAM is 176292/327680. Host tests passed. This image has not been tried on a Cardputer.

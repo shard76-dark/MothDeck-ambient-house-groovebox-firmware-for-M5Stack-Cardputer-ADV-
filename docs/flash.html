@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flash MothDeck</title>
+  <style>
+    body { font: 16px/1.45 system-ui, sans-serif; background: #121416; color: #f3efe4; margin: 0; }
+    main { max-width: 38rem; margin: 0 auto; padding: 32px 20px 64px; }
+    a { color: #f5a624; }
+    code { color: #f5a624; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Flash MothDeck</h1>
+    <p><strong>Use earphones.</strong> This firmware does not play through the Cardputer ADV internal speaker.</p>
+    <p>This button writes the full-flash image. It replaces whatever is on the chip, including Launcher. Use Chrome or Edge. Plug the Cardputer in over USB. The application image that Launcher installs is still <a href="../releases/mothdeck-cardputer-adv.bin">mothdeck-cardputer-adv.bin</a>. Do not point this button at a TTGO T8.</p>
+    <p>
+      <esp-web-install-button manifest="flash/manifest.json"></esp-web-install-button>
+    </p>
+    <p>After it boots, the Settings line says the version. The page list will not offer Exit, because this image replaces Launcher. Hold grave does nothing until a Launcher image is installed again.</p>
+    <p>The rest of the instrument is in the <a href="MANUAL.md">manual</a>. Nothing on this page has been tried on a Cardputer.</p>
+  </main>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</body>
+</html>
