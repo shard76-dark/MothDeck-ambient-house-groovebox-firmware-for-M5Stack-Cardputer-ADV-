@@ -13,6 +13,9 @@
 // Note, controller MSB (CC 0-31), controller LSB (CC 32-63), pitch bend,
 // clock, and transport are delivered. Pitch bend is an LSB byte then an
 // MSB byte on controller number kMidiPitchCc. Note On velocity 0 is Note Off.
+// Clock, start, continue, stop, and song position are real-time. They are
+// not written back out unless Clock out is on. buildBleMidiPacket refuses
+// them; the clock-out path has its own builder.
 
 enum MidiMsgType : uint8_t {
   MIDI_MSG_NONE = 0,
@@ -30,9 +33,9 @@ enum MidiMsgType : uint8_t {
 static const uint8_t kMidiPitchCc = 128;
 // One notification can carry a chord plus a run of clocks. The parser
 // keeps scanning after this fills so a long packet cannot desync the next.
-// A notification can be a run of clocks with a chord after them. 48 clipped
-// the notes once the link packed more than a few ticks into one packet.
-static const int kMidiMaxEvents = 80;
+// A full 244-byte notification of clocks, plus Stop at the end, has to fit.
+// 48 clipped the notes once the link packed more than a few ticks in.
+static const int kMidiMaxEvents = 192;
 
 struct MidiEvent {
   MidiMsgType type;
@@ -64,7 +67,17 @@ struct MidiRunningState {
 
 BleMidiTimestamp bleMidiTimestamp(uint16_t millis13);
 
+// Clock, start, continue, stop, and song position. Notes and controllers are not.
+inline bool midiIsRealtime(MidiMsgType type) {
+  return type == MIDI_MSG_CLOCK || type == MIDI_MSG_START || type == MIDI_MSG_CONTINUE || type == MIDI_MSG_STOP ||
+         type == MIDI_MSG_SONG_POS;
+}
+
+// Notes and controllers. Real-time types return 0 so a slaved clock cannot be echoed.
 int buildBleMidiPacket(uint8_t *buf, int bufLen, uint16_t millis13, MidiMsgType type, uint8_t channel, uint8_t number, uint8_t value);
+
+// Single real-time status, or song position, for the Clock out path only.
+int buildBleMidiRealtime(uint8_t *buf, int bufLen, uint16_t millis13, MidiMsgType type, uint16_t songPos);
 
 int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, MidiParseResult *out);
 

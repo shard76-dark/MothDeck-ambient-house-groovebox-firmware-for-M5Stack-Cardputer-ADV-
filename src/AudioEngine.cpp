@@ -127,9 +127,14 @@ static void drainMidi() {
   if (!midiIn) {
     return;
   }
-  MidiEvent ev[12];
-  for (int pass = 0; pass < 6; pass++) {
-    int n = midiIn->Poll(ev, 12);
+  // Empty the queue in this slice. Six passes of 12 left a Stop sitting
+  // behind a clock burst until the next block. A connected block is 128
+  // samples, about 2.9 ms at 44100 Hz. One clock at 174 BPM is about 14 ms,
+  // so the block size is not the tick rate. The cap below is only so a
+  // stuck queue cannot hold the audio task for a whole buffer.
+  MidiEvent ev[16];
+  for (int pass = 0; pass < 32; pass++) {
+    int n = midiIn->Poll(ev, 16);
     if (n <= 0) {
       return;
     }

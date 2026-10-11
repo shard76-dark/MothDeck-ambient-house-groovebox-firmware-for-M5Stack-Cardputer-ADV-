@@ -31,8 +31,30 @@ static int expectedDataBytes(uint8_t status) {
   return 0;
 }
 
+static bool transportEvent(MidiMsgType type) {
+  return type == MIDI_MSG_START || type == MIDI_MSG_CONTINUE || type == MIDI_MSG_STOP || type == MIDI_MSG_SONG_POS;
+}
+
 static void pushEvent(MidiParseResult *out, const MidiEvent &event) {
   if (out->count >= kMidiMaxEvents) {
+    // A long clock burst must not push Stop, Start, Continue, or song
+    // position off the end of the packet.
+    if (transportEvent(event.type)) {
+      int drop = -1;
+      for (int i = 0; i < out->count; i++) {
+        if (out->events[i].type == MIDI_MSG_CLOCK) {
+          drop = i;
+          break;
+        }
+      }
+      if (drop >= 0) {
+        for (int i = drop; i < out->count - 1; i++) {
+          out->events[i] = out->events[i + 1];
+        }
+        out->events[out->count - 1] = event;
+        return;
+      }
+    }
     out->overflow++;
     return;
   }
@@ -119,11 +141,46 @@ static void emitMessage(uint8_t status, const uint8_t *data, MidiRunningState *s
   }
 }
 
+int buildBleMidiRealtime(uint8_t *buf, int bufLen, uint16_t millis13, MidiMsgType type, uint16_t songPos) {
+  if (!buf || !midiIsRealtime(type)) {
+    return 0;
+  }
+  BleMidiTimestamp ts = bleMidiTimestamp(millis13);
+  if (type == MIDI_MSG_SONG_POS) {
+    if (bufLen < 5) {
+      return 0;
+    }
+    buf[0] = ts.headerMsb;
+    buf[1] = ts.timestampLsb;
+    buf[2] = 0xF2;
+    buf[3] = (uint8_t)(songPos & 0x7F);
+    buf[4] = (uint8_t)((songPos >> 7) & 0x7F);
+    return 5;
+  }
+  uint8_t status = 0;
+  switch (type) {
+    case MIDI_MSG_CLOCK: status = 0xF8; break;
+    case MIDI_MSG_START: status = 0xFA; break;
+    case MIDI_MSG_CONTINUE: status = 0xFB; break;
+    case MIDI_MSG_STOP: status = 0xFC; break;
+    default: return 0;
+  }
+  if (bufLen < 3) {
+    return 0;
+  }
+  buf[0] = ts.headerMsb;
+  buf[1] = ts.timestampLsb;
+  buf[2] = status;
+  return 3;
+}
+
 int buildBleMidiPacket(uint8_t *buf, int bufLen, uint16_t millis13, MidiMsgType type, uint8_t channel, uint8_t number, uint8_t value) {
   if (!buf || bufLen < 5) {
     return 0;
   }
-  if (number == kMidiPitchCc) {
+  // Real-time is not a note packet. Callers that echo a parsed clock hit this
+  // and send nothing. Clock out uses buildBleMidiRealtime.
+  if (midiIsRealtime(type) || number == kMidiPitchCc) {
     return 0;
   }
   uint8_t status = 0;

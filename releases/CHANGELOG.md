@@ -1,3 +1,7 @@
+## 1.8.1 (2026-10-11)
+
+TTGO T8 images. Stop silences the voices and holds the playhead. Start plays from the top. Song Position plus Continue plays that 16th and can set the pattern length to 1–8 bars when the position jumps backward or returns to zero after whole bars. Bars locks the length until a new song. Clock out is off, so clock, start, continue, stop, and song position are not sent. MIDI clock does not carry a time signature. The bar is assumed to be 4/4. Sizes and checksums follow the build. Host tests and the firmware build are recorded with those sizes. Nothing here was flashed or listened to.
+
 ## 1.8.0 (2026-10-11)
 
 TTGO T8 images. `mothdeck-ttgo-t8-1.8.0-test.bin` is 1,896,816 bytes, magic `E9`, SHA-256 `32e5ae2d8c4f29597cf8f03169409637a0654e3b51a9165567f6ba50976ba8d4`, static RAM 100648/327680, PCM5102A. `mothdeck-ttgo-t8-dac-1.8.0-test.bin` is 1,890,912 bytes, magic `E9`, SHA-256 `271bd50211c55e2d806d0374a3c968abb1754d8014051772ed6353300acff9b6`, static RAM 99784/327680, GPIO25 DAC. Host tests passed. Nothing here was flashed or listened to.

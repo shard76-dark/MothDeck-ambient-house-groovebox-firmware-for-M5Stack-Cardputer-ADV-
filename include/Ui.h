@@ -15,5 +15,7 @@ const char *uiBleName();
 // NVS key bleEn. Missing means off, including a 1.1.1 bleOn value.
 bool uiBleEnabled();
 bool uiBleWantLoad();
+// Clock, start, continue, stop, and song position out. Default off.
+bool uiClockOut();
 
 #endif

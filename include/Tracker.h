@@ -85,6 +85,11 @@ public:
   SongChain chain;
   int Bpm() const { return bpms[bpmSlot]; }
   uint8_t BpmSlot() const { return bpmSlot; }
+  // 50 is straight. Higher means the first 16th of each pair took more of
+  // the clock than the second. Even clocks stay at 50. MIDI does not send
+  // a swing parameter, so this only moves when the clock itself is uneven.
+  int Swing() const { return swingPct; }
+  bool LengthLocked() const { return lengthLock; }
   // Live MIDI notes sounding on a track. Four is the limit; a fifth replaces
   // the oldest. A note-off clears only the matching note and channel.
   static const int kLiveVoices = 4;
@@ -99,6 +104,9 @@ private:
   // Set by MIDI Start/Continue. Steps then move on clock (6 clocks = one
   // 16th), and the internal sample counter does not also advance them.
   bool extSync;
+  // The keyboard transport. MIDI Stop clears this so the pattern does not
+  // fall back to the sample counter and keep playing. Space sets it again.
+  bool internalRun;
   int clockCount;
   uint16_t lastClockTs;
   uint8_t haveClockTs;
@@ -127,6 +135,19 @@ private:
   int clocksSinceZero;
   bool blockLearn;
   bool autoLength;
+  // Bars on the Settings page. A locked length is not resized by Song Position.
+  bool lengthLock;
+  // Last Song Position, in 16ths, and the clocks since that message.
+  // A backward jump is a loop. The MPC sends Song Position then Continue.
+  int sppAt;
+  int clocksSinceSpp;
+  uint8_t sppValid;
+  uint8_t sppArm;
+  int swingPct;
+  uint16_t swingBoundary;
+  uint8_t swingHave;
+  int swingPair[2];
+  uint8_t swingFill;
   // Bar shown on the 16-step editor. Follows the playhead unless the user
   // pages with Fn+, and Fn+/.
   int editBar;
@@ -192,6 +213,11 @@ private:
   int AllocLive(int track, uint8_t channel, uint8_t midi);
   int MixLive(int track);
   void MidiSongPosition(int sixteenth);
+  void SeekSixteenth(int sixteenth);
+  void PlaySixteenth(int sixteenth);
+  bool TryAdoptSixteenths(int sixteenths);
+  void SilenceTransport();
+  void CloseSwing(uint16_t timestamp13);
   bool LearnLoopLength();
   void ApplyExternalBpm(int bpm);
   void SetBars(int bars);

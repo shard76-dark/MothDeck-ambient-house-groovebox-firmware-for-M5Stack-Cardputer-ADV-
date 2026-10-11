@@ -39,12 +39,22 @@ The serial keyboard at 115200 also takes `U`, `O`, `Y`, `J`, and `P` on the Song
 
 A step holds up to four notes. The first stays in the song file. The other three live in PSRAM until the next load.
 
+## MIDI clock
+
+An external clock counts every clock byte in a packet. Six clocks advance one 16th. Twenty-four clocks are one quarter note. The tempo readout follows those clocks. Start plays from the top. Song Position plus Continue plays that 16th, which is how a loop stays bar-aligned. Stop silences the voices, including stacked chord tones, and holds the playhead. Space returns to the internal clock.
+
+The pattern length follows a Song Position that jumps backward, or a return to zero after a whole number of bars, and lands on 1–8 bars. The MPC sends Song Position and Continue when a sequence loops. Bars on the Settings page keeps the length you set until a new song. Swing is followed only when the clock itself is uneven. The step waits for the sixth clock, so a late offbeat lands late. Even clocks stay straight.
+
+MIDI clock does not carry a time signature. The bar is 4/4, 16 steps. A 3/4 or 5/4 loop is not resized. It also does not carry a swing parameter, the MPC pattern number, or the track count.
+
+Clock out is off. Clock, start, continue, stop, and song position are not sent unless Settings, Clock out is on. Notes and controllers still go out. Settings rows are Speaker, Brightness, BLE name, BLE, Unload BLE, Battery, Radio, Card, Bars, and Clock out.
+
 ## Wi-Fi
 
 This image does not serve the card over Wi-Fi. The Cardputer 1.6.0 file page was linked on that board. On the T8, BLE and the PSRAM cache workaround already fill internal instruction RAM, and the Wi-Fi stack overflowed that RAM by 892 bytes. The drum tables are in flash, so removing them would not make the radio fit. BLE, loops, and the drums stay.
 
 ## Flash
 
-[flash.html](flash.html) has one button for the PCM5102A image and one for the GPIO25 DAC image. Each writes a full factory image at the start of flash. There is no Launcher on this board. The application files in `releases/` are the same bytes, named `mothdeck-ttgo-t8-1.7.0-test.bin` and `mothdeck-ttgo-t8-dac-1.7.0-test.bin`.
+[flash.html](flash.html) has one button for the PCM5102A image and one for the GPIO25 DAC image. Each writes a full factory image at the start of flash. There is no Launcher on this board. The application files in `releases/` are `mothdeck-ttgo-t8-1.8.1-test.bin` and `mothdeck-ttgo-t8-dac-1.8.1-test.bin`.
 
 Unzip the SD pack onto the card root so `/moth/sfx/` is present.
