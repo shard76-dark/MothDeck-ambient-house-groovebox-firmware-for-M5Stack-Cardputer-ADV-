@@ -1,4 +1,4 @@
-# MothDiag 0.1.3
+# MothDiag 0.1.4
 
 Standalone BLE MIDI diagnostics for the [M5Stack Cardputer ADV](https://docs.m5stack.com/en/core/Cardputer-Adv). It advertises as a BLE MIDI peripheral named **MothDiag**, using the same service, characteristic, advertising packet, and Just Works pairing as MothDeck. There is no synth, no audio, and no sequencer.
 
@@ -6,10 +6,10 @@ Plug the Cardputer into a Windows PC or a uConsole over USB. An assistant reads 
 
 The application image is [`releases/mothdiag-cardputer-adv.bin`](../../releases/mothdiag-cardputer-adv.bin).
 
-- Version 0.1.3
-- 821,200 bytes, magic `E9`, chip `0x0009`
-- SHA-256 `2bfb2859a237dbdf8815bf4c8602cddcaf0f819c6a45b36bd18ce197baf9eb4e`
-- Also at [`releases/mothdiag-0.1.3.bin`](../../releases/mothdiag-0.1.3.bin)
+- Version 0.1.4
+- 821,504 bytes, magic `E9`, chip `0x0009`
+- SHA-256 `624ab29ba751ee76b88546de237f799f9c2990799d36677eb9da342fcd458cdf`
+- Also at [`releases/mothdiag-0.1.4.bin`](../../releases/mothdiag-0.1.4.bin)
 - Also listed in [`releases/SHA256SUMS`](../../releases/SHA256SUMS)
 
 Installing this image replaces the app in the Cardputer's boot slot. Install `releases/mothdeck-cardputer-adv.bin` again to return to MothDeck. This tool does not play sound.
@@ -25,7 +25,7 @@ Launcher is [bmorcelli/Launcher](https://github.com/bmorcelli/Launcher). Use a C
 3. On the splash that says to press the button to enter Launcher, press Enter or the front button before the timeout.
 4. Open the SD browser, select `mothdiag-cardputer-adv.bin`, and choose Install.
 
-The screen then shows `MothDiag`, `0.1.3`, `Waiting` or `Connected`, the test name, MIDI BPM, arrival BPM, the clock rate, and the MTC rate. Each line redraws only when its text changes. The words stay plain.
+The screen then shows `MothDiag`, `0.1.4`, `Waiting` or `Connected`, the test name, MIDI BPM, arrival BPM, the clock rate, and the MTC rate. Each line redraws only when its text changes. The words stay plain.
 
 ### USB, from this repo
 
@@ -45,7 +45,7 @@ USB CDC, 115200, 8N1. Every line is one JSON object.
 
 | Line `t` | When |
 | --- | --- |
-| `hello` | Boot. `name` is `MothDiag`, `version` is `0.1.3`. |
+| `hello` | Boot. `name` is `MothDiag`, `version` is `0.1.4`. |
 | `test` | One step of `run`. `phase` is `wait`, `run`, or `done`. `go` starts the script when none is running. |
 | `interval` | A connection-parameter request. The negotiated interval is logged again when the central answers, including when it stays the same. |
 | `radio` | Advertising started, or the radio did not come up. |
@@ -88,7 +88,7 @@ python3 tools/blemidi-diag/diag.py --port COM5 -n 30 -o capture.log
 python3 tools/blemidi-diag/diag.py --port /dev/ttyACM0 -n 10
 ```
 
-`-n` is seconds (default 10). `-o` is the log path. The default log name is `mothdiag-YYYYMMDD-HHMMSS.log` in the current directory. Opening the port leaves DTR and RTS clear so a second capture does not restart the board, sends `status`, and does not reset the counters. Verbose lines are dropped when the USB buffer is full.
+`-n` is seconds (default 10). `-o` is the log path. The default log name is `mothdiag-YYYYMMDD-HHMMSS.log` in the current directory. Opening the port leaves DTR and RTS clear so a second capture does not restart the board, sends `status`, and does not reset the counters. The report banner is `MothDiag` plus the version from that log. `status`, `help`, `stats`, and command replies are always written. Verbose `pkt` and `midi` lines are dropped when the USB buffer is full.
 
 BPM stability is the standard deviation of the once-per-second `bpm_arrival` samples. The report also lists the max packet gap, mean jitter, note on/off totals, and any note that was still held at the end of the log.
 
@@ -101,6 +101,6 @@ bash tools/blemidi-diag/test_host.sh
 pio run -d tools/blemidi-diag -e mothdiag
 ```
 
-The MothDeck environments `cardputer-adv` and `cardputer-adv-dev` are unchanged. CI builds both.
+The MothDeck environments `cardputer-adv` and `cardputer-adv-dev` are separate from this one. CI builds `cardputer-adv` and `mothdiag`.
 
 Copy `.pio/build/mothdiag/firmware.bin` to `releases/mothdiag-cardputer-adv.bin` when cutting an image. The file starts with the byte `E9`.

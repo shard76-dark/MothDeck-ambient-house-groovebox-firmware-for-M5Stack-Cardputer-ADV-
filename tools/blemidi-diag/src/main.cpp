@@ -165,18 +165,59 @@ static Js jsMake() {
   return j;
 }
 
+static bool writeAll(const uint8_t *data, size_t n, uint32_t budgetMs) {
+  uint32_t start = millis();
+  size_t sent = 0;
+  while (sent < n) {
+    int space = Serial.availableForWrite();
+    if (space <= 0) {
+      if (budgetMs == 0 || (uint32_t)(millis() - start) >= budgetMs) {
+        return false;
+      }
+      delay(1);
+      continue;
+    }
+    size_t chunk = n - sent;
+    if (chunk > (size_t)space) {
+      chunk = (size_t)space;
+    }
+    if (chunk > 128) {
+      chunk = 128;
+    }
+    size_t wrote = Serial.write(data + sent, chunk);
+    if (wrote == 0) {
+      if (budgetMs == 0 || (uint32_t)(millis() - start) >= budgetMs) {
+        return false;
+      }
+      delay(1);
+      continue;
+    }
+    sent += wrote;
+  }
+  return true;
+}
+
 static void emitLine(Js *j, bool drop) {
   jsEnd(j);
   if (j->overflow || j->n < 3 || j->b[j->n - 1] != '}') {
     return;
   }
-  (void)drop;
-  // Leave the line out when the USB buffer is short. A stalled port must
-  // not sit inside println, and a partial line is not useful either.
-  if (Serial.availableForWrite() < (int)j->n + 2) {
+  if (j->n + 2 < j->cap) {
+    j->b[j->n++] = '\r';
+    j->b[j->n++] = '\n';
+    j->b[j->n] = 0;
+  }
+  // Packet and MIDI lines are optional. Status, help, stats, and command
+  // replies are not: a line longer than the USB buffer used to be thrown
+  // away, so status never answered.
+  if (drop) {
+    if (Serial.availableForWrite() < (int)j->n) {
+      return;
+    }
+    (void)writeAll((const uint8_t *)j->b, j->n, 0);
     return;
   }
-  Serial.println(j->b);
+  (void)writeAll((const uint8_t *)j->b, j->n, 800);
 }
 
 static void emitLine(Js *j) {
@@ -209,9 +250,11 @@ static void refreshScreen() {
 
 static void emitSelf(const char *line, void *ctx) {
   (void)ctx;
-  if (line) {
-    Serial.println(line);
+  if (!line || !line[0]) {
+    return;
   }
+  (void)writeAll((const uint8_t *)line, strlen(line), 800);
+  (void)writeAll((const uint8_t *)"\r\n", 2, 200);
 }
 
 static void emitLink(const DiagLinkEvent &ev, uint64_t us) {
@@ -879,6 +922,9 @@ static void pollSerial() {
 }
 
 void setup() {
+  // Status is about 420 characters. The default TX queue is 256, so the
+  // reply has to be able to sit, and then be written in pieces.
+  Serial.setTxBufferSize(2048);
   Serial.begin(115200);
   Serial.setTxTimeoutMs(0);
   mothBootGuard();

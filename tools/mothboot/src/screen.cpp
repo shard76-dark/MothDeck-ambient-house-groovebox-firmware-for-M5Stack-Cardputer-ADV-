@@ -3,6 +3,8 @@
 #include <M5Cardputer.h>
 #include <string.h>
 
+#include "version.h"
+
 static const uint16_t kBg = 0x1082;
 static const uint16_t kAmber = 0xFD20;
 static const uint16_t kInk = 0xFFFF;
@@ -122,7 +124,7 @@ void bootScreenBegin() {
   M5Cardputer.Display.setTextSize(1);
   M5Cardputer.Display.setTextColor(kMuted);
   M5Cardputer.Display.setCursor(176, 12);
-  M5Cardputer.Display.print("0.1.0");
+  M5Cardputer.Display.print(kMothBootVersion);
 
   gPhase = {8, 32, 224, 16, kInk, 1, "", false};
   gDetail = {8, 50, 224, 16, kInk, 1, "", false};

@@ -16,7 +16,9 @@
 
 SET_LOOP_TASK_STACK_SIZE(16384);
 
-static char gLine[8192];
+static const uint32_t kXferChunk = 4096;
+static uint8_t gXfer[kXferChunk];
+static char gLine[1024];
 
 static void emit(const char *line) {
   if (line) {
@@ -28,18 +30,47 @@ static int readExact(uint8_t *dst, int n) {
   int got = 0;
   uint32_t last = millis();
   while (got < n) {
-    int c = Serial.read();
-    if (c < 0) {
-      if ((uint32_t)(millis() - last) > 20000) {
-        return got;
+    int avail = Serial.available();
+    if (avail > 0) {
+      int want = n - got;
+      if (want > avail) {
+        want = avail;
       }
-      delay(1);
+      while (want > 0) {
+        int c = Serial.read();
+        if (c < 0) {
+          break;
+        }
+        dst[got++] = (uint8_t)c;
+        want--;
+        last = millis();
+      }
       continue;
     }
-    dst[got++] = (uint8_t)c;
-    last = millis();
+    if ((uint32_t)(millis() - last) > 20000) {
+      return got;
+    }
+    delay(1);
   }
   return got;
+}
+
+static void emitReady(const char *kind) {
+  snprintf(gLine, sizeof(gLine), "{\"t\":\"%s\",\"phase\":\"ready\",\"chunk\":%u}", kind, (unsigned)kXferChunk);
+  emit(gLine);
+  Serial.flush();
+}
+
+static void emitAck(const char *kind, uint32_t got, int pct) {
+  snprintf(
+    gLine,
+    sizeof(gLine),
+    "{\"t\":\"%s\",\"phase\":\"ack\",\"got\":%lu,\"pct\":%d}",
+    kind,
+    (unsigned long)got,
+    pct);
+  emit(gLine);
+  Serial.flush();
 }
 
 static const esp_partition_t *slotPart(int slot) {
@@ -118,32 +149,30 @@ static bool receiveImage(const esp_partition_t *part, uint32_t size, uint32_t ex
     emit("{\"t\":\"flash\",\"phase\":\"retry\"}");
     return false;
   }
-  emit("{\"t\":\"flash\",\"phase\":\"ready\"}");
-  Serial.flush();
-  uint8_t buf[4096];
+  emitReady("flash");
   uint32_t got = 0;
   uint32_t crc = 0;
   int lastPct = -1;
   bool ioOk = true;
   while (got < size) {
     uint32_t chunk = size - got;
-    if (chunk > sizeof(buf)) {
-      chunk = sizeof(buf);
+    if (chunk > kXferChunk) {
+      chunk = kXferChunk;
     }
-    int n = readExact(buf, (int)chunk);
+    int n = readExact(gXfer, (int)chunk);
     if (n != (int)chunk) {
       ioOk = false;
       break;
     }
-    if (got == 0 && buf[0] != 0xE9) {
+    if (got == 0 && gXfer[0] != 0xE9) {
       ioOk = false;
       break;
     }
-    if (esp_ota_write(handle, buf, (size_t)n) != ESP_OK) {
+    if (esp_ota_write(handle, gXfer, (size_t)n) != ESP_OK) {
       ioOk = false;
       break;
     }
-    crc = mothCrc32Update(crc, buf, (size_t)n);
+    crc = mothCrc32Update(crc, gXfer, (size_t)n);
     got += (uint32_t)n;
     int pct = (int)((uint64_t)got * 100ull / size);
     if (pct != lastPct) {
@@ -151,6 +180,9 @@ static bool receiveImage(const esp_partition_t *part, uint32_t size, uint32_t ex
       snprintf(detail, sizeof(detail), "%s to %s", from, toVer && toVer[0] ? toVer : "app");
       bootScreenShow("Updating", detail, "", pct);
       lastPct = pct;
+    }
+    if (got < size) {
+      emitAck("flash", got, pct);
     }
   }
   if (!ioOk || crc != expectCrc) {
@@ -287,29 +319,30 @@ static void cmdPut(uint32_t size, uint32_t expectCrc, const char *path) {
     bootScreenShow("Try again", path, "", -1);
     return;
   }
-  emit("{\"t\":\"sd\",\"phase\":\"ready\"}");
-  Serial.flush();
-  uint8_t buf[2048];
+  emitReady("sd");
   uint32_t got = 0;
   uint32_t crc = 0;
   int lastPct = -1;
   bool ok = true;
   while (got < size) {
     uint32_t chunk = size - got;
-    if (chunk > sizeof(buf)) {
-      chunk = sizeof(buf);
+    if (chunk > kXferChunk) {
+      chunk = kXferChunk;
     }
-    int n = readExact(buf, (int)chunk);
-    if (n != (int)chunk || file.write(buf, (size_t)n) != (size_t)n) {
+    int n = readExact(gXfer, (int)chunk);
+    if (n != (int)chunk || file.write(gXfer, (size_t)n) != (size_t)n) {
       ok = false;
       break;
     }
-    crc = mothCrc32Update(crc, buf, (size_t)n);
+    crc = mothCrc32Update(crc, gXfer, (size_t)n);
     got += (uint32_t)n;
     int pct = (int)((uint64_t)got * 100ull / size);
     if (pct != lastPct) {
       bootScreenShow("Copying", path, "", pct);
       lastPct = pct;
+    }
+    if (got < size) {
+      emitAck("sd", got, pct);
     }
   }
   file.close();
@@ -408,7 +441,12 @@ static void handleCommand(char *line) {
     }
   }
   if (strcmp(line, "help") == 0) {
-    emit("{\"t\":\"help\",\"name\":\"MothBoot\",\"version\":\"0.1.0\",\"commands\":[\"status\",\"flash\",\"sd-put\",\"sd-ls\",\"sd-rm\",\"sd-df\",\"sd-install\",\"sd-check\",\"sd-check full\",\"sd-format\",\"boot\"]}");
+    snprintf(
+      gLine,
+      sizeof(gLine),
+      "{\"t\":\"help\",\"name\":\"MothBoot\",\"version\":\"%s\",\"commands\":[\"status\",\"flash\",\"sd-put\",\"sd-ls\",\"sd-rm\",\"sd-df\",\"sd-install\",\"sd-check\",\"sd-check full\",\"sd-format\",\"boot\"]}",
+      kMothBootVersion);
+    emit(gLine);
     return;
   }
   if (strcmp(line, "status") == 0) {
@@ -594,6 +632,12 @@ static void pollKeys() {
 }
 
 void setup() {
+  // One chunk is 4096 bytes. The USB-Serial-JTAG FIFO is much smaller, so
+  // the software queue has to hold a chunk while the previous one is written.
+  if (Serial.setRxBufferSize(8192) == 0) {
+    Serial.setRxBufferSize(4608);
+  }
+  Serial.setTxBufferSize(1024);
   Serial.begin(115200);
   mothMarkAppValid();
   bootScreenBegin();

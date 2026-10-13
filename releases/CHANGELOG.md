@@ -1,12 +1,36 @@
+## MothBoot 0.1.1 (2026-10-13)
+
+Flash `releases/mothboot-0.1.1.bin` (564,448 bytes, magic `E9`, chip `0x0009`, SHA-256 `887a3fbad39cb7031741355b74466b49578189ddb64d2962ebe271b01af92e5d`) at `0x10000`. The merged image is `releases/mothboot-0.1.1-full.bin` (2,459,904 bytes, SHA-256 `da46ab981384a617e285ffee0adbdbc15a4944b62e4090a4f29b7143e2891f89`) at `0x0`. It contains this MothBoot and MothDiag 0.1.4 in slot A. Static RAM is 34788/327680. Host tests passed. This image has not been tried on a Cardputer.
+
+USB uploads are one chunk at a time. The receive queue holds a chunk, and the launcher sends `phase` `ack` with `got` and `pct` before it will take the next one. `diag.py --flash` and `--sd-put` wait for that ack and draw a progress bar. 0.1.0 dropped bytes at full speed and left a slot half-written. Replace 0.1.0 from the ROM bootloader. Hold the front button, tap reset, and write the factory image with esptool. `launcher` from MothDeck 1.2.10 or MothDiag 0.1.4 comes back on the USB-Serial-JTAG port.
+
+## MothDiag 0.1.4 (2026-10-13)
+
+Flash `releases/mothdiag-0.1.4.bin` (821,504 bytes, magic `E9`, chip `0x0009`, SHA-256 `624ab29ba751ee76b88546de237f799f9c2990799d36677eb9da342fcd458cdf`). The same bytes are `releases/mothdiag-cardputer-adv.bin`. Version on the screen is 0.1.4. Host tests passed. This image has not been tried on a Cardputer. Static RAM is 67380/327680.
+
+`status`, `help`, `stats`, and command replies are sent even when they are longer than the USB buffer. The firmware waits, then writes the whole line. Verbose `pkt` and `midi` lines are still dropped when the buffer is full, so a stalled port does not fill the MIDI queue. `launcher` uses the same reboot path as MothDeck and returns to MothBoot. The capture banner in `diag.py` prints the version from the log.
+
 ## MothDiag 0.1.3 (2026-10-13)
 
-Flash `releases/mothdiag-0.1.3.bin` (821,200 bytes, magic `E9`, chip `0x0009`, SHA-256 `2bfb2859a237dbdf8815bf4c8602cddcaf0f819c6a45b36bd18ce197baf9eb4e`). The same bytes are `releases/mothdiag-cardputer-adv.bin`. Version on the screen is 0.1.3. Host tests passed. This image has not been tried on a Cardputer. Static RAM is 67380/327680.
+Flash `releases/mothdiag-0.1.3.bin` (821,200 bytes, magic `E9`, chip `0x0009`, SHA-256 `2bfb2859a237dbdf8815bf4c8602cddcaf0f819c6a45b36bd18ce197baf9eb4e`). Published as `releases/mothdiag-0.1.3.bin`. Version on the screen is 0.1.3. Host tests passed. This image has not been tried on a Cardputer. Static RAM is 67380/327680. Superseded by 0.1.4.
 
 The screen shows MIDI BPM and arrival BPM in large type, plus the clock rate and the MTC quarter-frame rate. Each line redraws only when its text changes. The words on screen stay plain. `run` walks the interval steps and prints a `test` line for each one. `go` starts that walk when no run is active, and it releases a step that is waiting. An interval request is logged as `interval` even when the negotiated interval stays the same. Verbose `pkt` and `midi` lines are dropped when the USB buffer is full, so a stalled port does not fill the MIDI queue.
 
+## 1.2.10 (2026-10-13)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,234,096 bytes, magic `E9`, chip `0x0009`, SHA-256 `f7f72e51ec2c5ea37c947b32f52bfb5eb642bc148f2ed78afc8f813ac34b279d`). The same bytes are `releases/mothdeck-1.2.10.bin`. Version on the Settings screen is 1.2.10. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 172516/327680.
+
+`launcher` returns to MothBoot. The USB PHY is given back to USB-Serial-JTAG before the restart, so the board comes back on that port. 1.2.9 left the OTG controller selected and the board disappeared from USB. This image includes the 1.2.9 Sync setting.
+
+On a board that already has MothBoot 0.1.1, install this application image into an OTA slot. `mothdeck-cardputer-adv-full.bin` is the older layout (1,296,352 bytes, SHA-256 `a6ac1dba89fce77a2017f45a256b3fef5332c8e6b5d258c7a337bbce805fbc68`) and is not the 1.2.10 image. MothBoot 0.1.0 cannot receive this image at full speed. Flash `releases/mothboot-0.1.1.bin` at `0x10000` first.
+
+This image includes the 1.2.2 through 1.2.9 behavior. The LilyGO TTGO T8 port is a different binary, pre-release [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4) on the `ttgo-t8` branch. It is not in this folder.
+
+The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
+
 ## 1.2.9 (2026-10-13)
 
-Flash `releases/mothdeck-cardputer-adv.bin` (1,233,936 bytes, magic `E9`, chip `0x0009`, SHA-256 `f3542da19084462aeb2f7358f51c1c65adb28d67e2737c930346d6c01e16d509`). The same bytes are `releases/mothdeck-1.2.9.bin`. Version on the Settings screen is 1.2.9. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 172516/327680.
+Flash `releases/mothdeck-1.2.9.bin` (1,233,936 bytes, magic `E9`, chip `0x0009`, SHA-256 `f3542da19084462aeb2f7358f51c1c65adb28d67e2737c930346d6c01e16d509`). Published as `releases/mothdeck-1.2.9.bin`. Version on the Settings screen is 1.2.9. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 172516/327680. Superseded by 1.2.10.
 
 Settings adds Sync: Internal, External, or Transport. External follows MIDI start, stop, and song position and scales a thinned BLE clock against the current BPM. Transport follows start, stop, and position and keeps the deck BPM. Internal keeps the deck clock. Quarter-frame MTC can run the transport, and it seeks when the spacing matches the rate in the message.
 
