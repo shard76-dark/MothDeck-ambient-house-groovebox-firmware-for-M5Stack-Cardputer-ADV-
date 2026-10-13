@@ -183,6 +183,11 @@ private:
   void MidiContinue();
   void MidiStop();
   void MidiClock(uint16_t timestamp13);
+  // `ticks` clocks that share one timestamp. One call, not a loop per tick.
+  void MidiClocks(uint16_t timestamp13, int ticks);
+  // Move the playhead without sounding the steps. A catch-up burst uses this
+  // so a stalled packet cannot retrigger every skipped hit.
+  void SkipSteps(int steps);
   void ResetTempoWindow();
   void SilenceLive();
   void ReleaseMatching(uint8_t channel, uint8_t note);

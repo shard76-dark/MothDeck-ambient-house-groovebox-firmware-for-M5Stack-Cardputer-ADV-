@@ -495,7 +495,51 @@ void Tracker::AgeLive() {
   }
 }
 
+void Tracker::SkipSteps(int steps) {
+  if (steps < 1) {
+    return;
+  }
+  if (steps > 64) {
+    steps = 64;
+  }
+  for (int n = 0; n < steps; n++) {
+    barCount++;
+    if (barCount > 3) {
+      tempoBlink = 30;
+      barCount = 0;
+    }
+    ClampTransport();
+    int local = trackIndex - patternLength * currentPattern;
+    if (local < 0) {
+      local = 0;
+    }
+    LaunchPending(local);
+    trackIndex++;
+    int patternEnd = patternLength * (currentPattern + 1);
+    if (trackIndex >= patternEnd || trackIndex >= kMaxSteps) {
+      if (allPatternPlay) {
+        currentPattern++;
+        if (currentPattern >= PatternSlots()) {
+          currentPattern = 0;
+        }
+      }
+      trackIndex = patternLength * currentPattern;
+    }
+    AgeLive();
+  }
+  SyncEditBar();
+}
+
 void Tracker::MidiClock(uint16_t timestamp13) {
+  MidiClocks(timestamp13, 1);
+}
+
+void Tracker::MidiClocks(uint16_t timestamp13, int ticks) {
+  if (ticks < 1) {
+    ticks = 1;
+  } else if (ticks > 255) {
+    ticks = 255;
+  }
   uint16_t ts = (uint16_t)(timestamp13 & 0x1FFF);
   if (haveClockTs) {
     uint16_t delta = (uint16_t)((ts - lastClockTs) & 0x1FFF);
@@ -527,20 +571,25 @@ void Tracker::MidiClock(uint16_t timestamp13) {
   }
   lastClockTs = ts;
   haveClockTs = 1;
-  clocksInStamp++;
-  transportTick++;
+  clocksInStamp += ticks;
+  transportTick += (uint32_t)ticks;
   if (!extSync || !isPlaying) {
     return;
   }
-  clocksSinceZero++;
-  clockCount++;
-  // 24 clocks per quarter note, and a pattern step is a 16th, so 6 clocks.
-  // Every tick in the packet advances, not only the first.
-  if (clockCount >= 6) {
-    clockCount = 0;
-    stepSampleCount = 0;
-    AdvanceStep();
+  clocksSinceZero += ticks;
+  int sum = clockCount + ticks;
+  int steps = sum / 6;
+  clockCount = sum % 6;
+  if (steps <= 0) {
+    return;
   }
+  // One step sounds. A backlog moves the playhead and sounds only the
+  // step it lands on, so the audio task is not stuck retriggering.
+  if (steps > 1) {
+    SkipSteps(steps - 1);
+  }
+  stepSampleCount = 0;
+  AdvanceStep();
 }
 
 void Tracker::MidiSongPosition(int sixteenth) {
@@ -1767,12 +1816,10 @@ void Tracker::HandleMidi(const MidiEvent &event) {
   switch (event.type) {
     case MIDI_MSG_CLOCK: {
       // A queued clock can stand for several 0xF8 bytes that shared one
-      // timestamp. Zero still means a single tick, which is what the
-      // parser emits when the host calls HandleMidi directly.
+      // timestamp. Zero still means a single tick, which is what a direct
+      // HandleMidi call sends. The whole count is applied once.
       int ticks = event.value == 0 ? 1 : (int)event.value;
-      for (int i = 0; i < ticks; i++) {
-        MidiClock(event.value14);
-      }
+      MidiClocks(event.value14, ticks);
       return;
     }
     case MIDI_MSG_START:

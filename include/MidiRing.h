@@ -66,7 +66,7 @@ private:
 
   uint32_t mainUsed() const;
   uint32_t relUsed() const;
-  void addTick(uint16_t timestamp);
+  void addTicks(uint16_t timestamp, int count);
   void dropUnbound();
   bool emitClock(MidiEvent *out, uint32_t *budget);
   bool pushMain(const MidiEvent &event, uint32_t clocksBefore);

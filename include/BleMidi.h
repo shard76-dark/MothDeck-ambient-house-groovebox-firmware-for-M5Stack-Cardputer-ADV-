@@ -49,6 +49,8 @@ public:
   // One screen line: packets, messages, clocks, notes.
   const char *CounterLine();
   int Poll(MidiEvent *out, int maxOut);
+  // USB MIDI uses the same queue. Order matches the bytes that were read.
+  void Ingest(const MidiEvent *events, int count);
   // Drops anything still queued. Used when the link falls so a note-on
   // already in the ring cannot sound after the voices are released.
   void FlushIncoming();

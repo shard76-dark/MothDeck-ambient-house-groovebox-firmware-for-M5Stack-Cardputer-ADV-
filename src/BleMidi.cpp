@@ -71,11 +71,22 @@ static char diagBuf[44];
 static char counterBuf[44];
 static char linkBuf[20];
 
+static int clockTickCount(const MidiEvent &event) {
+  if (event.type != MIDI_MSG_CLOCK) {
+    return 0;
+  }
+  return event.value == 0 ? 1 : (int)event.value;
+}
+
 static void countParsed(const MidiEvent &event) {
+  int ticks = clockTickCount(event);
+  if (ticks > 0) {
+    __atomic_fetch_add(&statMessages, (uint32_t)ticks, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&statClocks, (uint32_t)ticks, __ATOMIC_RELAXED);
+    return;
+  }
   __atomic_fetch_add(&statMessages, 1, __ATOMIC_RELAXED);
-  if (event.type == MIDI_MSG_CLOCK) {
-    __atomic_fetch_add(&statClocks, 1, __ATOMIC_RELAXED);
-  } else if (event.type == MIDI_MSG_NOTE_ON || event.type == MIDI_MSG_NOTE_OFF) {
+  if (event.type == MIDI_MSG_NOTE_ON || event.type == MIDI_MSG_NOTE_OFF) {
     __atomic_fetch_add(&statNotes, 1, __ATOMIC_RELAXED);
   }
 }
@@ -114,7 +125,7 @@ static void requestShortInterval(BLEServer *server, uint16_t handle) {
     connParamsPending = false;
     return;
   }
-  if (connParamTries < 4) {
+  if (connParamTries < 8) {
     connParamsPending = true;
     connParamDue = millis() + 250;
   } else {
@@ -183,15 +194,23 @@ class MidiServerCallbacks : public BLEServerCallbacks {
       latency,
       timeout,
       status);
-    if (status == 0) {
+    // The first update is the central's own interval, often ~50 ms, and
+    // status 0. Treating that as success cancelled the 7.5-15 ms request,
+    // so one clock per event topped out near 43 BPM and notes never got a
+    // packet. A link at 15 ms or faster is the one we asked for.
+    bool fast = status == 0 && interval > 0 && interval <= 12;
+    if (fast || connParamTries >= 8) {
       connParamsPending = false;
+      (void)conn_handle;
       return;
     }
-    if (connParamTries < 4) {
+    if (!connParamsPending) {
       connParamsPending = true;
       connParamDue = millis() + 250;
     }
     (void)conn_handle;
+    (void)latency;
+    (void)timeout;
   }
 };
 
@@ -482,6 +501,7 @@ void BleMidi::SetUserEnabled(bool on) {
     return;
   }
   if (!on) {
+    midiRing.Flush();
     stopRadio();
     uint32_t freeAfter = 0;
     uint32_t largeAfter = 0;
@@ -781,11 +801,19 @@ int BleMidi::Poll(MidiEvent *out, int maxOut) {
   if (!out || maxOut <= 0) {
     return 0;
   }
-  if (!userEnabled) {
-    midiRing.Flush();
-    return 0;
-  }
+  // The ring also carries USB MIDI, including while the radio is off.
+  // Turning the radio off flushes once in SetUserEnabled.
   return midiRing.Poll(out, maxOut);
+}
+
+void BleMidi::Ingest(const MidiEvent *events, int count) {
+  if (!events || count <= 0) {
+    return;
+  }
+  for (int i = 0; i < count; i++) {
+    countParsed(events[i]);
+  }
+  midiRing.PushParsed(events, count);
 }
 
 void BleMidi::FlushIncoming() {

@@ -2,6 +2,7 @@
 #include <M5Cardputer.h>
 #include <esp_heap_caps.h>
 #include "AudioEngine.h"
+#include "UsbMidi.h"
 #include "BleMidi.h"
 #include "BoardConfig.h"
 #include "DevLog.h"
@@ -180,9 +181,12 @@ void loop() {
   ble.Maintain();
   uiPoll(ble);
 
+  usbMidiPoll(ble);
+
   MidiEvent outgoing;
   while (audioPopMidi(&outgoing)) {
     ble.Send(outgoing);
+    usbMidiSend(outgoing);
   }
 
   // The sprite blit shares core 1 with the audio task. Drawing every pass

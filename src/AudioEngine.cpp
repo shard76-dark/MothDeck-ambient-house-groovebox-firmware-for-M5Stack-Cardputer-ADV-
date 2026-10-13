@@ -1,4 +1,5 @@
 #include "AudioEngine.h"
+#include "UsbMidi.h"
 #include "DspHot.h"
 #include "Tracker.h"
 #include "BoardConfig.h"
@@ -112,7 +113,8 @@ static void drainMidi() {
     return;
   }
   int edge = midiIn->ConsumeConnectEdge();
-  if (edge < 0) {
+  int usbEdge = usbMidiConsumeEdge();
+  if (edge < 0 || usbEdge < 0) {
     midiIn->FlushIncoming();
     tracker.AllNotesOff();
   }
@@ -133,14 +135,14 @@ static void drainMidi() {
 static int renderCount() {
   // A connected link renders half a block and keeps one buffer queued.
   // Local playback stays at 256 samples and two buffers.
-  if (midiIn && midiIn->Connected()) {
+  if ((midiIn && midiIn->Connected()) || usbMidiConnected()) {
     return kBlock / 2;
   }
   return kBlock;
 }
 
 static int queueLimit() {
-  if (midiIn && midiIn->Connected()) {
+  if ((midiIn && midiIn->Connected()) || usbMidiConnected()) {
     return 1;
   }
   return 2;

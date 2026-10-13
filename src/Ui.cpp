@@ -10,6 +10,7 @@
 #include "LauncherExit.h"
 #include "BleAdvert.h"
 #include "BleMidi.h"
+#include "UsbMidi.h"
 #include "BoardConfig.h"
 #include "DevLog.h"
 #include <M5Cardputer.h>
@@ -1061,6 +1062,8 @@ static void drawMidi(BleMidi &ble) {
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(2, 54);
   canvas->print("Ch 1-4 = tracks");
+  canvas->setCursor(148, 54);
+  canvas->print(usbMidiLine());
   canvas->setCursor(2, 66);
   canvas->print("Notes 36-83  C2-B5");
   canvas->setCursor(2, 78);
@@ -1339,6 +1342,10 @@ static uint32_t screenStamp(BleMidi &ble) {
     h = mixHash(h, link, (int)strlen(link));
   }
   if (page == kMidiPage) {
+    const char *usb = usbMidiLine();
+    if (usb) {
+      h = mixHash(h, usb, (int)strlen(usb));
+    }
     MidiCounters ctr;
     ble.CopyCounters(&ctr);
     h = mixHash(h, &ctr, (int)sizeof(ctr));

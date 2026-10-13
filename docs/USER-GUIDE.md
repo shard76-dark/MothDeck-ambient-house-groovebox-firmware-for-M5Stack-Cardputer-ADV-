@@ -1,8 +1,8 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.7 (1,158,480 bytes, magic `E9`, SHA-256 `a27de5ad535ab37efe058298e70aac2f4cfa5d27e5128ee04ab0975fc29472d1`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.8 (1,230,816 bytes, magic `E9`, SHA-256 `4a95e55c2b194d3ab6f9db23dd3dc234c0578a4c92cd7a08b7e7c5b038ac9f71`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
 
-1.2.7 includes the releases before it:
+1.2.8 includes the releases before it:
 
 - **1.2.2.** NimBLE is reserved at boot, before the loop windows. On and Off only start or stop advertising. Unload BLE frees that block for large loops on the next boot. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does, and then those notes record at the playhead.
@@ -10,10 +10,11 @@ MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published imag
 - **1.2.5.** Stop and a dropped link release live notes. Loops, the pattern, and the sampler keep going. Note-off finds the track that sounded the note. Continue keeps the song-position phase. Fn+D on the MIDI page opens Status. An external clock clamps at 200.
 - **1.2.6.** Clocks are counted instead of queued, so a burst does not crowd out the notes behind them. Ticks before Start in the same packet are not counted. The production build does not print from the connect callbacks. Pairing and advertising are unchanged.
 - **1.2.7.** With Rec on, a MIDI note lands on the step that just played. Halfway through the step it rounds forward. The end of the pattern wraps to step 0 of that pattern. Note-off stores a hold of 1 to 4 steps. Rec off still only plays.
+- **1.2.8.** An external clock follows the master from 40 to 200 BPM, including clocks that share one timestamp. Note-ons that arrive with a dense clock still sound. The USB port is a MIDI device named Mothdeck, on the same cable as serial. Unplugging it releases live notes. The MIDI page shows `USB MIDI` or `USB off`.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
-The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.7 still uses. On a 1.2.7 board the Settings version line says `v1.2.7`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`). Settings does not print a counter line.
+The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.8 still uses. On a 1.2.8 board the Settings version line says `v1.2.8`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`). Settings does not print a counter line. The MIDI page also shows `USB MIDI` or `USB off`, which the 1.2.0 shot does not.
 
 ## Moving around
 
@@ -194,7 +195,7 @@ The MIDI page shows the radio state, the stored name, the channel map, and the c
 
 At boot the status is `BLE off`. It says `MIDI advertising` only while the controller is advertising, and `MIDI connected` while a host is connected. If the stack cannot start, the status says `restart` or `BLE off`.
 
-While a host is connected, the status row also shows the negotiated interval, for example `link 15.0ms`. Under the map it counts packets, messages, clocks, and notes (`pk`, `msg`, `clk`, `note`). `E` jumps to Settings and starts editing the BLE name. Enter does nothing on this page. Fn+D opens Status. Backspace closes it and stays on the MIDI page.
+While a host is connected, the status row also shows the negotiated interval, for example `link 15.0ms`. The channel-map line shows `USB MIDI` while a computer has enumerated the USB port, and `USB off` otherwise. USB notes and clock use the same queue as BLE. Unplugging the cable releases live notes. Under the map it counts packets, messages, clocks, and notes (`pk`, `msg`, `clk`, `note`). `E` jumps to Settings and starts editing the BLE name. Enter does nothing on this page. Fn+D opens Status. Backspace closes it and stays on the MIDI page.
 
 Status lists shed clocks, note-ons, and note-offs (`clk`, `on`, `off`), a full ring and parser misses (`ring`, `parse`), safety releases (`hold`), late speaker refills (`late`), play retries (`retry`), the longest MIDI drain, free memory, and the safety step length. Fn+`,` and Fn+`/` step that length through 32, 96, 192, and 384. 192 is the default. A tonal live note with no note-off releases after that many steps. Held arp is not timed. Stop and a dropped link release live notes immediately and do not wait for the step count.
 
@@ -225,7 +226,7 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | Stop `0xFC` | Stop, leave external sync, and release live notes. Loops and the pattern keep going. Space returns to the internal clock |
 | Song position `0xF2` | Sixteenth-note index, modulo the pattern length |
 
-The link asks for 7.5–15 ms a quarter of a second after connect. If the MPC accepts 15 ms, expect about 25 ms end to end. If it stays at 30 ms, expect about 40 ms. The page shows the number that was negotiated. These are estimates from the buffer sizes. Chris approved the 1.2.2 image. 1.2.3 is the Rec-off rule as its own version.
+The link asks for 7.5–15 ms a quarter of a second after connect, and it asks again while the interval is still slower than 15 ms. If the MPC accepts 15 ms, expect about 25 ms end to end. If it stays at 30 ms, expect about 40 ms. The page shows the number that was negotiated. These are estimates from the buffer sizes. Chris approved the 1.2.2 image. 1.2.3 is the Rec-off rule as its own version.
 
 Auto-length watches for Start, or a Song Position of 0, after a whole number of bars of clocks, and rounds to 1–8 bars. The MPC Live II keeps the clock running through a sequence loop and does not send Start there. When nothing comes back to zero, the length stays as set on the device.
 
@@ -235,7 +236,7 @@ Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change the selected row.
 
 ![Settings, BLE row](screenshots/screen-settings-ble-2x.png)
 
-Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.7`. There is no counter line under the rows. The dev build still uses the Radio row for a heap readout. The hidden MIDI status view is where the other counts live.
+Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.8`. There is no counter line under the rows. The dev build still uses the Radio row for a heap readout. The hidden MIDI status view is where the other counts live.
 
 | Row | Keys |
 | --- | --- |

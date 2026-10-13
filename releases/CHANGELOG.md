@@ -1,6 +1,18 @@
+## 1.2.8 (2026-10-13)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,230,816 bytes, magic `E9`, chip `0x0009`, SHA-256 `4a95e55c2b194d3ab6f9db23dd3dc234c0578a4c92cd7a08b7e7c5b038ac9f71`). Version on the Settings screen is 1.2.8. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 172468/327680.
+
+An external clock follows the master from 40 to 200 BPM, including when several clocks share one timestamp. The short-interval request stays pending until the link is 15 ms or faster. A status byte after a clock is the note. A note-on that arrives while note-offs are waiting is queued behind them. The USB port is a MIDI device named Mothdeck and still a serial port. USB notes and clock use the same queue as BLE. Unplugging USB releases live notes. The MIDI page shows `USB MIDI` or `USB off`.
+
+This image includes the 1.2.2 through 1.2.7 behavior. The LilyGO TTGO T8 port is a different binary, pre-release [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4) on the `ttgo-t8` branch. It is not in this folder.
+
+The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,296,352 bytes, SHA-256 `a6ac1dba89fce77a2017f45a256b3fef5332c8e6b5d258c7a337bbce805fbc68`). It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
+
+The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
+
 ## 1.2.7 (2026-10-13)
 
-Flash `releases/mothdeck-cardputer-adv.bin` (1,158,480 bytes, magic `E9`, chip `0x0009`, SHA-256 `a27de5ad535ab37efe058298e70aac2f4cfa5d27e5128ee04ab0975fc29472d1`). Version on the Settings screen is 1.2.7. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 139516/327680.
+Flash `releases/mothdeck-cardputer-adv.bin` (1,158,480 bytes, magic `E9`, chip `0x0009`, SHA-256 `a27de5ad535ab37efe058298e70aac2f4cfa5d27e5128ee04ab0975fc29472d1`). Version on the Settings screen is 1.2.7. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 139516/327680. Superseded by 1.2.8.
 
 With Rec on, a MIDI note records on the step that just played. Three or more clocks into the step round it forward. A late note at the end of the pattern wraps to step 0 of that pattern, including in song mode. Note-off stores a hold of 1 to 4 steps in the existing length bits. The song file does not change. Rec off still only plays.
 

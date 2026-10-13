@@ -8,33 +8,41 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.2.7
-- SHA-256: `a27de5ad535ab37efe058298e70aac2f4cfa5d27e5128ee04ab0975fc29472d1`
-- Size: 1,158,480 bytes (app image, magic `E9`)
-- 1.2.7 records the length of a MIDI note and rounds it to the nearest step, including the wrap at the end of the pattern. Details are in [What 1.2.7 includes](#what-127-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
+- Version 1.2.8
+- SHA-256: `4a95e55c2b194d3ab6f9db23dd3dc234c0578a4c92cd7a08b7e7c5b038ac9f71`
+- Size: 1,230,816 bytes (app image, magic `E9`)
+- 1.2.8 follows an external clock from 40 to 200 BPM, keeps note-ons that arrive with a dense clock, and enumerates as a USB MIDI device named Mothdeck. Details are in [What 1.2.8 includes](#what-128-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
 
 The public source and releases live in this repository. Flash the application image with [releases/INSTALL.md](releases/INSTALL.md). The same overview, with HTML meta tags for search and link previews, is [docs/index.html](docs/index.html).
 
+## What 1.2.8 includes
+
+1.2.8 is the Cardputer image to flash. It includes the 1.2.2 through 1.2.7 behavior. This image has not been tried on a Cardputer. Use earphones.
+
+- **Clock.** An external clock follows the master from 40 to 200 BPM, including when several clocks share one BLE timestamp. The short-interval request stays pending until the link is 15 ms or faster, and it is asked again while the link is still slow. A catch-up of more than one step moves the playhead and sounds the step it lands on.
+- **Notes.** A status byte after a clock is the note, unless another status follows it. A note-on that arrives while note-offs are waiting is queued behind them. A long run of clocks does not push the notes out of the packet.
+- **USB MIDI.** The USB port is a MIDI device named Mothdeck and still a serial port. USB notes and clock use the same queue as BLE. Unplugging USB releases live notes. The MIDI page shows `USB MIDI` while a host has enumerated the port, and `USB off` otherwise.
+
 ## What 1.2.7 includes
 
-1.2.7 is the Cardputer image to flash. It includes the 1.2.2 through 1.2.6 behavior. This image has not been tried on a Cardputer. Use earphones.
+1.2.7 is included in the 1.2.8 image. It has not been tried on a Cardputer on its own. Use earphones.
 
 - **Gate.** With Rec on, a MIDI note-off stores how long the note was held. The length is 1 to 4 steps, in the same two bits a piano-roll hold already uses. The song file does not change. Rec off still only plays.
 - **Quantize.** The note lands on the step that just played. Three or more of the six clocks in that step, or halfway through an internal step, move it to the next step. A late note at the end of the pattern wraps to step 0 of that same pattern, including while song mode is moving on to the next one.
 
 ## What 1.2.6 includes
 
-1.2.6 is included in the 1.2.7 image. It has not been tried on a Cardputer on its own. Use earphones.
+1.2.6 is included in the 1.2.8 image. It has not been tried on a Cardputer on its own. Use earphones.
 
 - **Clock counter.** MIDI clocks are counted instead of taking a queue slot each. A burst of ticks, including a 200 BPM run, still advances the pattern, and the notes in that packet stay behind the ticks that preceded them. Start, Continue, Stop, and Song Position stay in the queue in that order. Start clears ticks that have not been applied yet, and ticks that sit before Start in the same packet are not counted. Clocks between Song Position and Continue still count.
 - **Quiet connect.** The production build does not print from the connect and interval callbacks. Pairing, the advertising packet, and the 7.5–15 ms request are unchanged. The dev build still prints those lines.
 
 ## What 1.2.5 includes
 
-1.2.5 is included in the 1.2.7 image. It has not been tried on a Cardputer on its own. Use earphones.
+1.2.5 is included in the 1.2.8 image. It has not been tried on a Cardputer on its own. Use earphones.
 
 - **Stop and disconnect.** MIDI Stop, and a Bluetooth link that drops, release live MIDI notes. The pattern, loops, and sampler keep going. CC 120 and CC 123 do the same for the channel that sent them.
 - **Note-off.** A note-off releases the matching note and channel on whichever track sounded it, and it does not change the selected track. Controllers, then note-ons, give up queue slots first. A note-off or a transport message is kept while any of those can move.
@@ -43,7 +51,7 @@ The public source and releases live in this repository. Flash the application im
 
 ## What 1.2.4 includes
 
-1.2.4 is included in the 1.2.7 image. It has not been tried on a Cardputer on its own. Use earphones.
+1.2.4 is included in the 1.2.8 image. It has not been tried on a Cardputer on its own. Use earphones.
 
 - **1.2.2.** NimBLE is reserved at boot, before the loop windows. Turning BLE on starts advertising and does not allocate, so it does not fail for lack of a free block. Unload BLE skips the stack on the next boot and frees that block for a large loop library. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes only play while Rec is off. They are not written into the pattern. Space turns Rec on, and then they record at the playhead. MIDI Start and Continue do not arm Rec. A piano-roll key while the transport is running follows that same rule.
@@ -68,7 +76,7 @@ These TTGO images have not been flashed, and the keys have not been pressed on h
 - Groovebox session on the ESP32-S3: 4 tracks, patterns of 1–8 bars (16–128 steps of 16th notes)
 - Per-track FX (filter, delay, reverb, bitcrush, drive, chorus, tremolo) and a mixer with volume, mute, and solo
 - SD kits, plugin instruments, and loops. Loops stream from the card instead of filling RAM
-- BLE MIDI peripheral (notes, clock, transport, bank, volume, pitch bend), named Mothdeck in the advertising packet
+- BLE MIDI peripheral (notes, clock, transport, bank, volume, pitch bend), named Mothdeck in the advertising packet, and a USB MIDI device on the same port as serial
 - Built-in sounds are unsigned 8-bit mono at 22050 Hz so they fit the 8MB flash and the internal SRAM
 - One-second amber moth splash, then the Play page, with a checked exit back to Launcher
 
@@ -335,7 +343,7 @@ Described above. Fn+`;` and Fn+`.` move through every entry in the library. The 
 
 ### MIDI
 
-The page shows the real radio state, the stored name, and the channel map. It says "MIDI advertising" only while the controller is advertising. At boot it says `BLE off`. If the stack cannot start, the status says `restart` or `BLE off`. While a host is connected, the status row also shows the negotiated connection interval (`link 15.0ms`). Under the map it counts packets, messages, clocks, and notes (`pk`, `msg`, `clk`, `note`). Fn+D opens a status view and Backspace closes it. A stored name longer than 8 characters is shortened in the advertising packet, and the page shows that shorter name in parentheses. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
+The page shows the real radio state, the stored name, and the channel map. It says "MIDI advertising" only while the controller is advertising. At boot it says `BLE off`. If the stack cannot start, the status says `restart` or `BLE off`. While a host is connected, the status row also shows the negotiated connection interval (`link 15.0ms`). The channel-map line also shows `USB MIDI` while a computer has enumerated the port, and `USB off` otherwise. Under the map it counts packets, messages, clocks, and notes (`pk`, `msg`, `clk`, `note`). Fn+D opens a status view and Backspace closes it. A stored name longer than 8 characters is shortened in the advertising packet, and the page shows that shorter name in parentheses. `E` jumps to Settings and starts editing the BLE name. Enter does nothing here.
 
 ![MIDI page](docs/screenshots/screen-midi-2x.png)
 
@@ -345,7 +353,7 @@ Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, radio, card, bars
 
 ![MIDI mode notice](docs/screenshots/screen-ble-loops-warning-2x.png)
 
-The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.7 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.7`. There is no counter line under the rows.
+The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.8 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.8`. There is no counter line under the rows.
 
 ![Settings, BLE row](docs/screenshots/screen-settings-ble-2x.png)
 

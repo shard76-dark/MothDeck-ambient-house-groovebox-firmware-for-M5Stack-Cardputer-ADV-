@@ -68,33 +68,39 @@ uint32_t MidiRing::relUsed() const {
   return (relHead + (uint32_t)kRelease - relTail) % (uint32_t)kRelease;
 }
 
-void MidiRing::addTick(uint16_t timestamp) {
+void MidiRing::addTicks(uint16_t timestamp, int count) {
+  if (count < 1) {
+    return;
+  }
+  if (count > 255) {
+    count = 255;
+  }
   timestamp = (uint16_t)(timestamp & 0x1FFF);
   if (groupTail != groupHead) {
     uint32_t last = (groupHead + (uint32_t)kGroups - 1) % (uint32_t)kGroups;
-    if (groups[last].timestamp == timestamp && groups[last].count < 65535) {
-      groups[last].count++;
-      pendingTicks++;
+    if (groups[last].timestamp == timestamp && (int)groups[last].count <= 65535 - count) {
+      groups[last].count = (uint16_t)(groups[last].count + count);
+      pendingTicks += (uint32_t)count;
       return;
     }
   }
   uint32_t next = (groupHead + 1) % (uint32_t)kGroups;
   if (next != groupTail) {
     groups[groupHead].timestamp = timestamp;
-    groups[groupHead].count = 1;
+    groups[groupHead].count = (uint16_t)count;
     groupHead = next;
-    pendingTicks++;
+    pendingTicks += (uint32_t)count;
     return;
   }
-  // The group list is full. Keep the tick on the latest group so the step
-  // still moves. A later poll applies it with that group's timestamp.
+  // The group list is full. Keep the ticks on the latest group so the step
+  // still moves. A later poll applies them with that group's timestamp.
   uint32_t last = (groupHead + (uint32_t)kGroups - 1) % (uint32_t)kGroups;
-  if (groups[last].count < 65535) {
-    groups[last].count++;
-    pendingTicks++;
+  if ((int)groups[last].count <= 65535 - count) {
+    groups[last].count = (uint16_t)(groups[last].count + count);
+    pendingTicks += (uint32_t)count;
     return;
   }
-  dropClock++;
+  dropClock += (uint32_t)count;
 }
 
 void MidiRing::dropUnbound() {
@@ -238,18 +244,17 @@ bool MidiRing::shedOne(uint32_t *orphan) {
 
 bool MidiRing::enqueueLocked(const MidiEvent &event, uint32_t clocksBefore) {
   if (relUsed() > 0) {
-    if (!unshedable(event)) {
-      countDrop(event);
+    // The tail is already holding note-offs. A note-on has to follow them,
+    // not be discarded, or the note never sounds. Controllers give up the
+    // slot. A note-on is dropped only when the tail itself is full.
+    if (isController(event)) {
+      dropRing++;
       return false;
     }
     if (pushRelease(event, clocksBefore)) {
       return true;
     }
-    if (event.type == MIDI_MSG_NOTE_OFF) {
-      dropNoteOff++;
-    } else {
-      dropRing++;
-    }
+    countDrop(event);
     return false;
   }
 
@@ -280,9 +285,17 @@ bool MidiRing::enqueueLocked(const MidiEvent &event, uint32_t clocksBefore) {
   return false;
 }
 
+static int clockTicksOf(const MidiEvent &event) {
+  if (event.type != MIDI_MSG_CLOCK) {
+    return 0;
+  }
+  return event.value == 0 ? 1 : (int)event.value;
+}
+
 void MidiRing::ingestLocked(const MidiEvent &event) {
-  if (event.type == MIDI_MSG_CLOCK) {
-    addTick(event.value14);
+  int ticks = clockTicksOf(event);
+  if (ticks > 0) {
+    addTicks(event.value14, ticks);
     return;
   }
   if (event.type == MIDI_MSG_START) {
@@ -299,8 +312,9 @@ void MidiRing::ingestLocked(const MidiEvent &event) {
 
 bool MidiRing::Push(const MidiEvent &event) {
   RING_LOCK();
-  if (event.type == MIDI_MSG_CLOCK) {
-    addTick(event.value14);
+  int ticks = clockTicksOf(event);
+  if (ticks > 0) {
+    addTicks(event.value14, ticks);
     RING_UNLOCK();
     return true;
   }

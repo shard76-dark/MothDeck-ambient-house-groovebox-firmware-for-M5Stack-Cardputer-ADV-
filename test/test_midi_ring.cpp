@@ -18,7 +18,7 @@ static MidiEvent ev(MidiMsgType type, uint8_t note = 0) {
   std::memset(&event, 0, sizeof(event));
   event.type = type;
   event.number = note;
-  event.value = 100;
+  event.value = type == MIDI_MSG_CLOCK ? 0 : 100;
   return event;
 }
 
@@ -137,6 +137,43 @@ static void testStopKept() {
   expect(contains(ring, MIDI_MSG_STOP, 0), "the stop can be read back");
 }
 
+static void testNoteOnFollowsTail() {
+  MidiRing ring;
+  int offs = 0;
+  while (ring.Push(ev(MIDI_MSG_NOTE_OFF, (uint8_t)(offs & 0x7F)))) {
+    offs++;
+    if (offs == MidiRing::kLen) {
+      break;
+    }
+  }
+  expect(offs == MidiRing::kLen - 1 + 1, "note-offs reach the overflow tail");
+  expect(ring.Push(ev(MIDI_MSG_NOTE_ON, 72)), "a note-on is kept behind note-offs in the tail");
+  MidiDrops drops;
+  ring.CopyDrops(&drops);
+  expect(drops.noteOn == 0, "the note-on behind the tail is not shed");
+  bool sawOn = false;
+  bool onBeforeOff = false;
+  bool sawOff = false;
+  MidiEvent out[16];
+  for (int guard = 0; guard < 80 && !sawOn; guard++) {
+    int n = ring.Poll(out, 16);
+    if (n <= 0) {
+      break;
+    }
+    for (int i = 0; i < n; i++) {
+      if (out[i].type == MIDI_MSG_NOTE_OFF) {
+        sawOff = true;
+      } else if (out[i].type == MIDI_MSG_NOTE_ON && out[i].number == 72) {
+        sawOn = true;
+        if (!sawOff) {
+          onBeforeOff = true;
+        }
+      }
+    }
+  }
+  expect(sawOn && sawOff && !onBeforeOff, "the note-on stays behind the note-offs");
+}
+
 static void testBothRings() {
   MidiRing ring;
   int offs = 0;
@@ -158,6 +195,7 @@ int main() {
   testClockCounter();
   testControllerShed();
   testNoteOffKept();
+  testNoteOnFollowsTail();
   testStopKept();
   testBothRings();
   if (failures) {

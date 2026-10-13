@@ -1,4 +1,5 @@
 #include "MidiProtocol.h"
+#include <string.h>
 
 BleMidiTimestamp bleMidiTimestamp(uint16_t millis13) {
   uint16_t ts = (uint16_t)(millis13 & 0x1FFF);
@@ -7,6 +8,8 @@ BleMidiTimestamp bleMidiTimestamp(uint16_t millis13) {
   out.timestampLsb = (uint8_t)(0x80 | (ts & 0x7F));
   return out;
 }
+
+static uint16_t noteTimestamp(uint16_t *cursor, uint8_t timestampByte);
 
 static int expectedDataBytes(uint8_t status) {
   switch (status & 0xF0) {
@@ -31,6 +34,27 @@ static int expectedDataBytes(uint8_t status) {
   return 0;
 }
 
+// A timestamp low byte has the high bit set. It is followed by a status
+// byte, or by data when a running status is already in effect. A status
+// followed by data, with nothing running, is the message itself. Treating
+// that status as a timestamp drops the note.
+static bool takeTimestamp(const uint8_t *data, int len, int *i, uint16_t *timestamp, bool running) {
+  if (!data || !i || !timestamp || *i >= len) {
+    return false;
+  }
+  uint8_t b = data[*i];
+  if ((b & 0x80) == 0 || b >= 0xF8) {
+    return false;
+  }
+  bool nextIsStatus = *i + 1 >= len || (data[*i + 1] & 0x80) != 0;
+  if (!nextIsStatus && !running) {
+    return false;
+  }
+  noteTimestamp(timestamp, b);
+  (*i)++;
+  return true;
+}
+
 static void pushEvent(MidiParseResult *out, const MidiEvent &event) {
   if (out->count >= kMidiMaxEvents) {
     out->overflow++;
@@ -46,7 +70,22 @@ static void emitRealtime(uint8_t status, uint16_t timestamp, MidiParseResult *ou
   event.value = 0;
   event.value14 = timestamp;
   switch (status) {
-    case 0xF8: event.type = MIDI_MSG_CLOCK; break;
+    case 0xF8:
+      event.type = MIDI_MSG_CLOCK;
+      // Several 0xF8 bytes often share one timestamp. One event carries the
+      // count so the note after them still fits in the packet buffer.
+      if (out->count > 0) {
+        MidiEvent &prev = out->events[out->count - 1];
+        if (prev.type == MIDI_MSG_CLOCK && prev.value14 == timestamp && prev.value < 255) {
+          if (prev.value == 0) {
+            prev.value = 1;
+          }
+          prev.value++;
+          return;
+        }
+      }
+      event.value = 1;
+      break;
     case 0xFA: event.type = MIDI_MSG_START; break;
     case 0xFB: event.type = MIDI_MSG_CONTINUE; break;
     case 0xFC: event.type = MIDI_MSG_STOP; break;
@@ -219,12 +258,13 @@ int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, Mi
   } else if (data[i] >= 0xF8) {
     // Real-time status is never a timestamp. The header time stands, and
     // the loop below counts this clock instead of swallowing it.
-  } else if (data[i] & 0x80) {
-    noteTimestamp(&timestamp, data[i]);
-    i++;
-  } else {
+  } else if ((data[i] & 0x80) == 0) {
     state->sysex = 0;
     return 0;
+  } else {
+    // Nothing is running yet. A status followed by data is the message.
+    // A byte followed by another status is the timestamp low byte.
+    takeTimestamp(data, len, &i, &timestamp, false);
   }
 
   while (i < len) {
@@ -257,10 +297,7 @@ int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, Mi
       if (!ended && sysex) {
         break;
       }
-      if (i < len && (data[i] & 0x80) && data[i] < 0xF8) {
-        noteTimestamp(&timestamp, data[i]);
-        i++;
-      }
+      takeTimestamp(data, len, &i, &timestamp, running != 0);
       continue;
     }
 
@@ -269,10 +306,7 @@ int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, Mi
     if (b >= 0xF8) {
       emitRealtime(b, timestamp, out);
       i++;
-      if (i < len && (data[i] & 0x80) && data[i] < 0xF8) {
-        noteTimestamp(&timestamp, data[i]);
-        i++;
-      }
+      takeTimestamp(data, len, &i, &timestamp, running != 0);
       continue;
     }
     if ((b & 0x80) == 0) {
@@ -291,10 +325,7 @@ int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, Mi
       continue;
     }
     if ((b & 0xF0) == 0xF0 && b < 0xF8 && expectedDataBytes(b) == 0) {
-      if (i < len && (data[i] & 0x80) && data[i] < 0xF8) {
-        noteTimestamp(&timestamp, data[i]);
-        i++;
-      }
+      takeTimestamp(data, len, &i, &timestamp, running != 0);
       continue;
     }
 
@@ -335,12 +366,108 @@ int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, Mi
       emitMessage(b, raw, state, out);
     }
 
-    if (i < len && (data[i] & 0x80) && data[i] < 0xF8) {
-      noteTimestamp(&timestamp, data[i]);
-      i++;
-    }
+    takeTimestamp(data, len, &i, &timestamp, running != 0);
   }
 
   state->sysex = sysex ? 1 : 0;
+  return out->count;
+}
+
+static int clockTickCount(const MidiEvent &event) {
+  if (event.type != MIDI_MSG_CLOCK) {
+    return 0;
+  }
+  return event.value == 0 ? 1 : (int)event.value;
+}
+
+void spreadClockTimestamps(MidiEvent *events, int count, uint16_t fromTs, uint16_t toTs) {
+  if (!events || count <= 0) {
+    return;
+  }
+  int clocks = 0;
+  int ticks = 0;
+  for (int i = 0; i < count; i++) {
+    int n = clockTickCount(events[i]);
+    if (n > 0) {
+      clocks++;
+      ticks += n;
+    }
+  }
+  if (clocks == 0) {
+    return;
+  }
+  fromTs = (uint16_t)(fromTs & 0x1FFF);
+  toTs = (uint16_t)(toTs & 0x1FFF);
+  uint16_t span = (uint16_t)((toTs - fromTs) & 0x1FFF);
+  int index = 0;
+  for (int i = 0; i < count; i++) {
+    if (clockTickCount(events[i]) <= 0) {
+      continue;
+    }
+    uint16_t at = toTs;
+    if (clocks > 1 && span > 0) {
+      at = (uint16_t)((fromTs + (uint32_t)span * (uint32_t)index / (uint32_t)(clocks - 1)) & 0x1FFF);
+    }
+    events[i].value14 = at;
+    index++;
+  }
+  (void)ticks;
+}
+
+static void emitUsbChannel(uint8_t status, uint8_t data1, uint8_t data2, MidiParseResult *out) {
+  uint8_t raw[2] = {data1, data2};
+  MidiRunningState state;
+  memset(&state, 0, sizeof(state));
+  emitMessage(status, raw, &state, out);
+}
+
+int parseUsbMidiStream(const uint8_t *data, int len, uint16_t timestamp13, MidiParseResult *out) {
+  if (!out) {
+    return 0;
+  }
+  out->count = 0;
+  out->overflow = 0;
+  if (!data || len < 4) {
+    return 0;
+  }
+  timestamp13 = (uint16_t)(timestamp13 & 0x1FFF);
+  for (int i = 0; i + 3 < len; i += 4) {
+    uint8_t cin = (uint8_t)(data[i] & 0x0F);
+    uint8_t b0 = data[i + 1];
+    uint8_t b1 = data[i + 2];
+    uint8_t b2 = data[i + 3];
+    if (cin == 0x0F) {
+      emitRealtime(b0, timestamp13, out);
+      continue;
+    }
+    if (cin == 0x02 || cin == 0x03) {
+      if (b0 == 0xF2 && cin == 0x03) {
+        MidiEvent event;
+        event.type = MIDI_MSG_SONG_POS;
+        event.channel = 0;
+        event.number = (uint8_t)(b1 & 0x7F);
+        event.value = (uint8_t)(b2 & 0x7F);
+        event.value14 = (uint16_t)(event.number | ((uint16_t)event.value << 7));
+        pushEvent(out, event);
+      }
+      continue;
+    }
+    if (cin >= 0x04 && cin <= 0x07) {
+      continue;
+    }
+    if (cin >= 0x08 && cin <= 0x0E) {
+      if ((b0 & 0xF0) != (uint8_t)(cin << 4) && cin != (b0 >> 4)) {
+        // CIN is the message type. A mismatched status still uses the CIN.
+      }
+      uint8_t status = b0;
+      if ((status & 0xF0) != (uint8_t)(cin << 4)) {
+        status = (uint8_t)((cin << 4) | (b0 & 0x0F));
+      }
+      if (cin == 0x0C || cin == 0x0D) {
+        continue;
+      }
+      emitUsbChannel(status, b1, b2, out);
+    }
+  }
   return out->count;
 }

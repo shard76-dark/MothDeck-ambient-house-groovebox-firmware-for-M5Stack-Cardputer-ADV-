@@ -34,7 +34,10 @@ static const uint8_t kMidiPitchCc = 128;
 // keeps scanning after this fills so a long packet cannot desync the next.
 // A notification can be a run of clocks with a chord after them. 48 clipped
 // the notes once the link packed more than a few ticks into one packet.
-static const int kMidiMaxEvents = 80;
+// 160 covers one 256-byte MTU even when every clock has its own timestamp.
+// Clocks that share a timestamp are one event, so a bare 0xF8 run does not
+// fill this and push the notes out.
+static const int kMidiMaxEvents = 160;
 
 struct MidiEvent {
   MidiMsgType type;
@@ -69,5 +72,14 @@ BleMidiTimestamp bleMidiTimestamp(uint16_t millis13);
 int buildBleMidiPacket(uint8_t *buf, int bufLen, uint16_t millis13, MidiMsgType type, uint8_t channel, uint8_t number, uint8_t value);
 
 int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, MidiParseResult *out);
+
+// USB MIDI 1.0 event packets, 4 bytes each. Cable number is ignored.
+// `timestamp13` is the arrival time for every clock in this buffer; the
+// caller spreads a buffered run across the gap since the previous read.
+int parseUsbMidiStream(const uint8_t *data, int len, uint16_t timestamp13, MidiParseResult *out);
+
+// Give each clock in `events` its own timestamp from `fromTs` up to `toTs`.
+// One clock keeps `toTs`. Notes and transport are left alone.
+void spreadClockTimestamps(MidiEvent *events, int count, uint16_t fromTs, uint16_t toTs);
 
 #endif

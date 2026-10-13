@@ -455,15 +455,15 @@ static bool feedClockPackets(Tracker &tracker, int bpm, int total, int perPacket
       }
     }
     MidiParseResult parsed;
-    int count = parseBleMidiPacket(buf, n, &state, &parsed);
+    parseBleMidiPacket(buf, n, &state, &parsed);
     int clocksFound = 0;
     for (int i = 0; i < parsed.count; i++) {
       if (parsed.events[i].type == MIDI_MSG_CLOCK) {
-        clocksFound++;
+        clocksFound += parsed.events[i].value == 0 ? 1 : (int)parsed.events[i].value;
       }
       tracker.HandleMidi(parsed.events[i]);
     }
-    if (count != clocksFound || clocksFound != batch || parsed.overflow != 0) {
+    if (clocksFound != batch || parsed.overflow != 0) {
       kept = false;
     }
     sent += batch;
@@ -543,8 +543,14 @@ static void testMidiPolyphony() {
   const uint8_t bare[] = {0x80, 0xF8, 0xF8, 0xF8};
   MidiParseResult bareParsed;
   std::memset(&state, 0, sizeof(state));
-  int bareCount = parseBleMidiPacket(bare, (int)sizeof(bare), &state, &bareParsed);
-  expect(bareCount == 3 && bareParsed.overflow == 0, "clocks with no extra timestamp byte are all counted");
+  parseBleMidiPacket(bare, (int)sizeof(bare), &state, &bareParsed);
+  int bareTicks = 0;
+  for (int i = 0; i < bareParsed.count; i++) {
+    if (bareParsed.events[i].type == MIDI_MSG_CLOCK) {
+      bareTicks += bareParsed.events[i].value == 0 ? 1 : (int)bareParsed.events[i].value;
+    }
+  }
+  expect(bareTicks == 3 && bareParsed.overflow == 0, "clocks with no extra timestamp byte are all counted");
   noteOff(chord, 0, 64);
   expect(!chord.LiveDown(0, 64) && chord.LiveDown(0, 60) && chord.LiveDown(0, 67), "note-off releases only that note");
   expect(chord.LiveHeld(0) == 2, "the other two notes stay");
@@ -741,8 +747,14 @@ static bool feedClockPacketsRing(Tracker &tracker, int bpm, int total, int perPa
       }
     }
     MidiParseResult parsed;
-    int count = parseBleMidiPacket(buf, n, &state, &parsed);
-    if (count != batch || parsed.overflow != 0) {
+    parseBleMidiPacket(buf, n, &state, &parsed);
+    int clocksFound = 0;
+    for (int i = 0; i < parsed.count; i++) {
+      if (parsed.events[i].type == MIDI_MSG_CLOCK) {
+        clocksFound += parsed.events[i].value == 0 ? 1 : (int)parsed.events[i].value;
+      }
+    }
+    if (clocksFound != batch || parsed.overflow != 0) {
       kept = false;
     }
     ring.PushParsed(parsed.events, parsed.count);
@@ -932,6 +944,244 @@ static void testExternalBpmClamp() {
   expect(shown >= 177 && shown <= 183, "180 stays inside the clamp");
 }
 
+static int eventTicks(const MidiEvent &event) {
+  if (event.type != MIDI_MSG_CLOCK) {
+    return 0;
+  }
+  return event.value == 0 ? 1 : (int)event.value;
+}
+
+static void handlePolled(Tracker &tracker, MidiRing &ring, int maxOut, int *noteOns, int *noteOffs) {
+  MidiEvent out[16];
+  if (maxOut > 16) {
+    maxOut = 16;
+  }
+  int n = ring.Poll(out, maxOut);
+  for (int i = 0; i < n; i++) {
+    if (noteOns && out[i].type == MIDI_MSG_NOTE_ON) {
+      (*noteOns)++;
+    }
+    if (noteOffs && out[i].type == MIDI_MSG_NOTE_OFF) {
+      (*noteOffs)++;
+    }
+    tracker.HandleMidi(out[i]);
+  }
+}
+
+static void testTempoSweep() {
+  const int rates[] = {40, 120, 200};
+  const int gaps[] = {15, 60};
+  for (int r = 0; r < 3; r++) {
+    for (int g = 0; g < 2; g++) {
+      int bpm = rates[r];
+      int gap = gaps[g];
+      int per = (gap * bpm * 24 + 30000) / 60000;
+      if (per < 1) {
+        per = 1;
+      }
+      int total = bpm * 24 / 5;
+      if (total < 72) {
+        total = 72;
+      }
+      Tracker tracker;
+      transport(tracker, MIDI_MSG_START, 0);
+      MidiRunningState state;
+      std::memset(&state, 0, sizeof(state));
+      MidiRing ring;
+      int sent = 0;
+      bool kept = true;
+      while (sent < total) {
+        int batch = per;
+        if (batch > total - sent) {
+          batch = total - sent;
+        }
+        uint8_t buf[96];
+        uint16_t ts0 = clockMillis(sent, bpm);
+        int n = 0;
+        buf[n++] = (uint8_t)(0x80 | ((ts0 >> 7) & 0x3F));
+        uint8_t bits = (uint8_t)(ts0 & 0x7F);
+        if (bits >= 0x78) {
+          bits = 0x77;
+        }
+        buf[n++] = (uint8_t)(0x80 | bits);
+        for (int i = 0; i < batch; i++) {
+          buf[n++] = 0xF8;
+        }
+        MidiParseResult parsed;
+        parseBleMidiPacket(buf, n, &state, &parsed);
+        int found = 0;
+        for (int i = 0; i < parsed.count; i++) {
+          found += eventTicks(parsed.events[i]);
+        }
+        if (found != batch || parsed.overflow != 0) {
+          kept = false;
+        }
+        ring.PushParsed(parsed.events, parsed.count);
+        handlePolled(tracker, ring, 2, nullptr, nullptr);
+        sent += batch;
+      }
+      for (int guard = 0; guard < 80; guard++) {
+        MidiEvent out[16];
+        int n = ring.Poll(out, 16);
+        if (n <= 0) {
+          break;
+        }
+        for (int i = 0; i < n; i++) {
+          tracker.HandleMidi(out[i]);
+        }
+      }
+      int shown = tracker.Bpm();
+      int slack = 4;
+      expect(kept, "a BLE clock burst keeps every tick");
+      expect(shown >= bpm - slack && shown <= bpm + slack, "tempo tracks 40, 120, and 200 through BLE bursts");
+    }
+  }
+}
+
+static void testDenseNotes() {
+  Tracker tracker;
+  tracker.SetCommand('I', 2);
+  transport(tracker, MIDI_MSG_START, 0);
+  MidiRunningState state;
+  std::memset(&state, 0, sizeof(state));
+  MidiRing ring;
+  const int rounds = 24;
+  int sentOn = 0;
+  int sentOff = 0;
+  int gotOn = 0;
+  int gotOff = 0;
+  for (int round = 0; round < rounds; round++) {
+    uint8_t buf[128];
+    uint16_t ts = clockMillis(round * 4, 200);
+    int n = 0;
+    buf[n++] = (uint8_t)(0x80 | ((ts >> 7) & 0x3F));
+    for (int c = 0; c < 4; c++) {
+      n = pushClockByte(buf, n, clockMillis(round * 4 + c, 200));
+    }
+    for (int note = 0; note < 4; note++) {
+      int channel = note & 3;
+      int pitch = 60 + note;
+      uint8_t onBits = (uint8_t)((clockMillis(round * 4, 200) + 1 + note) & 0x7F);
+      uint8_t offBits = (uint8_t)((clockMillis(round * 4, 200) + 8 + note) & 0x7F);
+      if (onBits >= 0x78) {
+        onBits = 0x70;
+      }
+      if (offBits >= 0x78) {
+        offBits = 0x70;
+      }
+      buf[n++] = (uint8_t)(0x80 | onBits);
+      buf[n++] = (uint8_t)(0x90 | channel);
+      buf[n++] = (uint8_t)pitch;
+      buf[n++] = 100;
+      sentOn++;
+      buf[n++] = (uint8_t)(0x80 | offBits);
+      buf[n++] = (uint8_t)(0x80 | channel);
+      buf[n++] = (uint8_t)pitch;
+      buf[n++] = 0;
+      sentOff++;
+    }
+    MidiParseResult parsed;
+    parseBleMidiPacket(buf, n, &state, &parsed);
+    expect(parsed.overflow == 0, "a dense packet does not overflow the parser");
+    ring.PushParsed(parsed.events, parsed.count);
+    handlePolled(tracker, ring, 3, &gotOn, &gotOff);
+  }
+  for (int guard = 0; guard < 200; guard++) {
+    MidiEvent out[16];
+    int n = ring.Poll(out, 16);
+    if (n <= 0) {
+      break;
+    }
+    for (int i = 0; i < n; i++) {
+      if (out[i].type == MIDI_MSG_NOTE_ON) {
+        gotOn++;
+      } else if (out[i].type == MIDI_MSG_NOTE_OFF) {
+        gotOff++;
+      }
+      tracker.HandleMidi(out[i]);
+    }
+  }
+  MidiDrops drops;
+  ring.CopyDrops(&drops);
+  expect(gotOn == sentOn && gotOff == sentOff, "dense note bursts are not dropped");
+  expect(drops.noteOn == 0 && drops.noteOff == 0 && drops.clock == 0 && drops.parser == 0, "the dense burst sheds nothing");
+  expect(tracker.LiveHeld(0) == 0 && tracker.LiveHeld(1) == 0, "every dense note-off releases its note");
+  int shown = tracker.Bpm();
+  expect(shown >= 190 && shown <= 200, "the dense burst keeps the 200 BPM clock");
+
+  uint8_t wide[320];
+  int n = 0;
+  wide[n++] = 0x82;
+  for (int i = 0; i < 100; i++) {
+    wide[n++] = 0xF8;
+  }
+  for (int i = 0; i < 4; i++) {
+    wide[n++] = (uint8_t)(0x90 + i);
+    wide[n++] = (uint8_t)(60 + i);
+    wide[n++] = 110;
+  }
+  MidiParseResult wideParsed;
+  std::memset(&state, 0, sizeof(state));
+  parseBleMidiPacket(wide, n, &state, &wideParsed);
+  int wideTicks = 0;
+  int wideOns = 0;
+  for (int i = 0; i < wideParsed.count; i++) {
+    wideTicks += eventTicks(wideParsed.events[i]);
+    if (wideParsed.events[i].type == MIDI_MSG_NOTE_ON) {
+      wideOns++;
+    }
+  }
+  expect(wideTicks == 100 && wideOns == 4 && wideParsed.overflow == 0, "a long clock run does not push the notes out");
+}
+
+static void testUsbClockAndNotes() {
+  const int rates[] = {40, 120, 200};
+  for (int r = 0; r < 3; r++) {
+    int bpm = rates[r];
+    Tracker tracker;
+    transport(tracker, MIDI_MSG_START, 0);
+    MidiRing ring;
+    int total = 96;
+    int gotOn = 0;
+    int gotOff = 0;
+    for (int i = 0; i < total; i++) {
+      uint8_t raw[4] = {0x0F, 0xF8, 0, 0};
+      MidiParseResult parsed;
+      parseUsbMidiStream(raw, 4, clockMillis(i, bpm), &parsed);
+      ring.PushParsed(parsed.events, parsed.count);
+      if ((i % 6) == 0) {
+        uint8_t note[8] = {
+          0x09, 0x90, (uint8_t)(60 + (i & 3)), 100,
+          0x08, 0x80, (uint8_t)(60 + (i & 3)), 0
+        };
+        parseUsbMidiStream(note, 8, clockMillis(i, bpm), &parsed);
+        ring.PushParsed(parsed.events, parsed.count);
+      }
+      handlePolled(tracker, ring, 2, &gotOn, &gotOff);
+    }
+    for (int guard = 0; guard < 80; guard++) {
+      MidiEvent out[16];
+      int n = ring.Poll(out, 16);
+      if (n <= 0) {
+        break;
+      }
+      for (int i = 0; i < n; i++) {
+        if (out[i].type == MIDI_MSG_NOTE_ON) {
+          gotOn++;
+        } else if (out[i].type == MIDI_MSG_NOTE_OFF) {
+          gotOff++;
+        }
+        tracker.HandleMidi(out[i]);
+      }
+    }
+    int shown = tracker.Bpm();
+    int slack = 4;
+    expect(shown >= bpm - slack && shown <= bpm + slack, "USB MIDI clock tracks 40, 120, and 200");
+    expect(gotOn == 16 && gotOff == 16, "USB note-on and note-off pairs are kept");
+    expect(tracker.LiveHeld(0) == 0, "USB note-offs release the note");
+  }
+}
+
 int main() {
   testAssignStaysOnTrack();
   testMidiBankStaysOnChannel();
@@ -948,6 +1198,9 @@ int main() {
   testRingClockTempo();
   testQuantizeAndGate();
   testExternalBpmClamp();
+  testTempoSweep();
+  testDenseNotes();
+  testUsbClockAndNotes();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

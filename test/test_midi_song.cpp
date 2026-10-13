@@ -535,7 +535,13 @@ static void testClockQueue() {
   }
   zeroState(&state);
   count = parseBleMidiPacket(burst, bytes, &state, &parsed);
-  expect(countType(parsed, MIDI_MSG_CLOCK) == burstClocks && countType(parsed, MIDI_MSG_NOTE_ON) == 3, "a 200 BPM burst keeps the clocks and the chord");
+  int burstTicks = 0;
+  for (int i = 0; i < parsed.count; i++) {
+    if (parsed.events[i].type == MIDI_MSG_CLOCK) {
+      burstTicks += parsed.events[i].value == 0 ? 1 : (int)parsed.events[i].value;
+    }
+  }
+  expect(burstTicks == burstClocks && countType(parsed, MIDI_MSG_NOTE_ON) == 3, "a 200 BPM burst keeps the clocks and the chord");
   expect(parsed.overflow == 0, "the burst fits in the parser");
   ring.PushParsed(parsed.events, parsed.count);
   ring.CopyDrops(&drops);
