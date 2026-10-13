@@ -48,7 +48,7 @@ static void testSelf() {
   int lines = 0;
   int failed = diagSelfTest(onSelf, &lines);
   expect(failed == 0, "parser self-test");
-  expect(lines == 6, "self-test prints five cases and a summary");
+  expect(lines == 8, "self-test prints seven cases and a summary");
 }
 
 static void testNotes() {

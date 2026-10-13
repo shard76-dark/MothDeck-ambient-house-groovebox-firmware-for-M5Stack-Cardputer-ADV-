@@ -15,5 +15,7 @@ const char *uiBleName();
 // NVS key bleEn. Missing means off, including a 1.1.1 bleOn value.
 bool uiBleEnabled();
 bool uiBleWantLoad();
+// 0 internal, 1 external, 2 transport only. Missing means external.
+int uiSyncMode();
 
 #endif

@@ -1,0 +1,11 @@
+# MothBoot layout for an 8MB Cardputer ADV.
+# factory is the launcher and is not overwritten by app updates.
+# ota_0 and ota_1 hold MothDiag, MothDeck, and later images.
+# App partitions are 64KB aligned. Each OTA slot is 3.1875MB.
+# Name,     Type, SubType, Offset,   Size,     Flags
+nvs,        data, nvs,     0x9000,   0x5000,
+otadata,    data, ota,     0xe000,   0x2000,
+factory,    app,  factory, 0x10000,  0x180000,
+ota_0,      app,  ota_0,   0x190000, 0x330000,
+ota_1,      app,  ota_1,   0x4C0000, 0x330000,
+coredump,   data, coredump,0x7F0000, 0x10000,

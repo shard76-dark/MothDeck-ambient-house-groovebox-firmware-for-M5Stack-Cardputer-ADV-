@@ -6,6 +6,15 @@
 #include "Snap.h"
 #include "PluginFormat.h"
 
+// Internal keeps the deck clock. External follows MIDI transport and reads
+// tempo from the BLE timestamps, including a clock the MPC has thinned.
+// Transport follows start, stop, and position and keeps the deck BPM.
+enum SyncMode : uint8_t {
+  SYNC_INTERNAL = 0,
+  SYNC_EXTERNAL = 1,
+  SYNC_TRANSPORT = 2
+};
+
 class Tracker {
 public:
   static const int kMaxSteps = 256;
@@ -73,6 +82,8 @@ public:
   void SetHintF(const char *fmt, int val);
   void PlayPitch(int pitch, int octave);
   void NudgeBpm(int delta);
+  void SetSync(int mode);
+  int Sync() const { return syncMode; }
   void ArmLoop(int track, const LoopArm &arm);
   void StopLoop(int track);
   void StartAudition(const LoopArm &arm);
@@ -102,6 +113,7 @@ private:
   // Set by MIDI Start/Continue. Steps then move on clock (6 clocks = one
   // 16th), and the internal sample counter does not also advance them.
   bool extSync;
+  uint8_t syncMode;
   int clockCount;
   // The step AdvanceStep last played, and which pattern it belonged to.
   // Recording quantizes from that step. A late note wraps inside it.
@@ -128,6 +140,13 @@ private:
   // arrive in one packet with one timestamp, and the span covers all of them.
   int clocksInStamp;
   int bpmSmooth;
+  uint8_t mtcNib[8];
+  uint8_t mtcGot;
+  uint8_t mtcRun;
+  uint8_t mtcHaveTs;
+  uint16_t mtcLastTs;
+  uint32_t mtcQuietSamples;
+  void MidiMtc(uint8_t data, uint16_t timestamp);
   struct LiveVoice {
     uint8_t on;
     uint8_t midi;

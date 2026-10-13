@@ -1,6 +1,7 @@
 #include "diag_ble.h"
 
 #include <Arduino.h>
+#include <Preferences.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -21,7 +22,7 @@ static const char *kMidiCharUuid = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
 static const uint16_t kAdvIntervalMin = 0x20;
 static const uint16_t kAdvIntervalMax = 0x40;
 static const uint32_t kBleMinLargest = 36 * 1024;
-static const int kPktSlots = 24;
+static const int kPktSlots = 48;
 static const int kPktCap = 256;
 static const int kLinkSlots = 8;
 
@@ -44,6 +45,16 @@ static uint8_t connParamTries = 0;
 static volatile bool restartAdvert = false;
 static char failReason[24] = "not started";
 static DiagLinkInfo linkInfo;
+static bool askEnabled = true;
+static uint16_t askMin = 6;
+static uint16_t askMax = 12;
+static uint16_t askLatency = 0;
+static uint16_t askTimeout = 500;
+static uint32_t askDelayMs = 250;
+static char profileName[16] = "deck";
+static bool forceGap = false;
+static uint32_t charProps = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR | BLECharacteristic::PROPERTY_NOTIFY;
+static uint16_t localMtu = 256;
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
 static PktSlot pktSlots[kPktSlots];
@@ -124,7 +135,15 @@ static bool radioStart() {
   return linkInfo.advertising;
 }
 
+static void noteAsk() {
+  linkInfo.askedMin = askMin;
+  linkInfo.askedMax = askMax;
+  linkInfo.askedTimeout = askTimeout;
+  linkInfo.hasAsk = askEnabled;
+}
+
 static void pushLink(DiagLinkKind kind) {
+  noteAsk();
   portENTER_CRITICAL(&mux);
   uint16_t next = (uint16_t)((linkHead + 1) % kLinkSlots);
   if (next == linkTail) {
@@ -149,7 +168,10 @@ static void requestShortInterval(uint16_t handle) {
     return;
   }
   // 6..12 is 7.5..15 ms. Timeout is in 10 ms units.
-  bool ok = midiServer->requestConnParams(handle, 6, 12, 0, 500);
+  bool ok = midiServer->requestConnParams(handle, askMin, askMax, askLatency, askTimeout);
+  strncpy(linkInfo.source, "ask", sizeof(linkInfo.source) - 1);
+  linkInfo.hasStatus = false;
+  pushLink(DIAG_LINK_UPDATE);
   if (ok) {
     connParamsPending = false;
     return;
@@ -184,8 +206,9 @@ class DiagServerCallbacks : public BLEServerCallbacks {
         }
       }
       connParamTries = 0;
-      connParamsPending = true;
-      connParamDue = millis() + 250;
+      connParamsPending = askEnabled;
+      connParamDue = millis() + askDelayMs;
+      strncpy(linkInfo.source, "connect", sizeof(linkInfo.source) - 1);
     }
     pushLink(DIAG_LINK_CONNECT);
   }
@@ -218,24 +241,27 @@ class DiagServerCallbacks : public BLEServerCallbacks {
       changed = changed || intervalChanged;
     }
     if (changed && connected) {
+      strncpy(linkInfo.source, "mtu", sizeof(linkInfo.source) - 1);
       pushLink(DIAG_LINK_UPDATE);
     }
   }
 
   void onConnParamsUpdate(uint16_t conn_handle, uint16_t interval, uint16_t latency, uint16_t timeout, uint8_t status) override {
     (void)conn_handle;
-    bool changed = interval != 0 && (!linkInfo.hasInterval || linkInfo.interval != interval || linkInfo.latency != latency || linkInfo.timeout != timeout);
     if (interval != 0) {
       rememberInterval(interval, latency, timeout);
     }
-    if (changed && connected) {
+    linkInfo.updateStatus = status;
+    linkInfo.hasStatus = true;
+    strncpy(linkInfo.source, "update", sizeof(linkInfo.source) - 1);
+    if (connected) {
       pushLink(DIAG_LINK_UPDATE);
     }
     // The first update is often the central's own interval, with status 0.
     // That is not the 7.5-15 ms request. Keep asking until the link is 15 ms
     // or faster, which is interval units of 12 or below.
-    bool fast = status == 0 && interval > 0 && interval <= 12;
-    if (fast || connParamTries >= 8) {
+    bool matched = status == 0 && interval > 0 && interval >= askMin && interval <= askMax;
+    if (!askEnabled || matched || connParamTries >= 8) {
       connParamsPending = false;
       return;
     }
@@ -276,8 +302,40 @@ class DiagCharCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
+static void loadProfile() {
+  Preferences prefs;
+  charProps = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR | BLECharacteristic::PROPERTY_NOTIFY;
+  localMtu = 256;
+  askEnabled = true;
+  askMin = 6;
+  askMax = 12;
+  askDelayMs = 250;
+  profileName[0] = 0;
+  if (prefs.begin("mothdiag", true)) {
+    if (prefs.getString("profile", profileName, sizeof(profileName)) == 0) {
+      profileName[0] = 0;
+    }
+    prefs.end();
+  }
+  if (strcmp(profileName, "apple") == 0) {
+    charProps = BLECharacteristic::PROPERTY_WRITE_NR | BLECharacteristic::PROPERTY_NOTIFY;
+  } else if (strcmp(profileName, "read") == 0) {
+    charProps = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE_NR | BLECharacteristic::PROPERTY_NOTIFY;
+  } else if (strcmp(profileName, "mtu64") == 0) {
+    localMtu = 64;
+  } else if (strcmp(profileName, "mtu128") == 0) {
+    localMtu = 128;
+  } else if (strcmp(profileName, "noreq") == 0) {
+    askEnabled = false;
+  } else {
+    strncpy(profileName, "deck", sizeof(profileName) - 1);
+    profileName[sizeof(profileName) - 1] = 0;
+  }
+}
+
 bool diagBleBegin() {
   memset(&linkInfo, 0, sizeof(linkInfo));
+  loadProfile();
   buildBleMidiAdvert(kMothDiagName, kMothDiagName, &pkts);
   uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   if (largest < kBleMinLargest) {
@@ -293,7 +351,7 @@ bool diagBleBegin() {
     return false;
   }
   initOk = true;
-  BLEDevice::setMTU(256);
+  BLEDevice::setMTU(localMtu);
   BLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
   BLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_ADV);
   configureSecurity();
@@ -309,9 +367,7 @@ bool diagBleBegin() {
     strncpy(failReason, "no server", sizeof(failReason) - 1);
     return false;
   }
-  midiChar = service->createCharacteristic(
-    kMidiCharUuid,
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR | BLECharacteristic::PROPERTY_NOTIFY);
+  midiChar = service->createCharacteristic(kMidiCharUuid, charProps);
   if (!midiChar) {
     strncpy(failReason, "no server", sizeof(failReason) - 1);
     return false;
@@ -330,9 +386,25 @@ void diagBleMaintain(uint32_t nowMs) {
     restartAdvert = false;
     radioStart();
   }
-  if (initOk && connected && connParamsPending && connParamDue != 0 && (int32_t)(nowMs - connParamDue) >= 0) {
+  if (initOk && connected && connParamsPending && askEnabled && connParamDue != 0 && (int32_t)(nowMs - connParamDue) >= 0) {
     connParamTries++;
     requestShortInterval(connHandle);
+  }
+  if (initOk && connected && connHandle != 0xFFFF) {
+    static uint32_t lastGap = 0;
+    if (forceGap || lastGap == 0 || (uint32_t)(nowMs - lastGap) >= 1000) {
+      lastGap = nowMs;
+      struct ble_gap_conn_desc desc;
+      if (ble_gap_conn_find(connHandle, &desc) == 0 && desc.conn_itvl != 0) {
+        bool changed = !linkInfo.hasInterval || linkInfo.interval != desc.conn_itvl || linkInfo.latency != desc.conn_latency || linkInfo.timeout != desc.supervision_timeout;
+        if (changed || forceGap) {
+          rememberInterval(desc.conn_itvl, desc.conn_latency, desc.supervision_timeout);
+          strncpy(linkInfo.source, "gap", sizeof(linkInfo.source) - 1);
+          pushLink(DIAG_LINK_UPDATE);
+        }
+      }
+      forceGap = false;
+    }
   }
   if (!initOk || !serverOk || connected) {
     return;
@@ -412,4 +484,55 @@ const DiagLinkInfo *diagBleInfo() {
 
 const char *diagBleFailReason() {
   return failReason[0] ? failReason : "";
+}
+
+void diagBleSetInterval(uint16_t minU, uint16_t maxU, uint32_t delayMs, bool sendNow) {
+  if (minU < 6) {
+    minU = 6;
+  }
+  if (maxU < minU) {
+    maxU = minU;
+  }
+  if (maxU > 320) {
+    maxU = 320;
+  }
+  askEnabled = true;
+  askMin = minU;
+  askMax = maxU;
+  askDelayMs = delayMs;
+  noteAsk();
+  if (!sendNow || !connected || connHandle == 0xFFFF) {
+    return;
+  }
+  connParamTries = 0;
+  connParamsPending = true;
+  connParamDue = millis();
+  requestShortInterval(connHandle);
+}
+
+void diagBleIntervalOff() {
+  askEnabled = false;
+  connParamsPending = false;
+  noteAsk();
+}
+
+void diagBleRequestGap() {
+  forceGap = true;
+}
+
+const char *diagBleProfileName() {
+  return profileName;
+}
+
+bool diagBleStoreProfile(const char *name) {
+  if (!name || !name[0]) {
+    return false;
+  }
+  Preferences prefs;
+  if (!prefs.begin("mothdiag", false)) {
+    return false;
+  }
+  prefs.putString("profile", name);
+  prefs.end();
+  return true;
 }

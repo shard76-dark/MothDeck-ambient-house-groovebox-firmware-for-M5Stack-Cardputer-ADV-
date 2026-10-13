@@ -361,6 +361,14 @@ int parseBleMidiPacket(const uint8_t *data, int len, MidiRunningState *state, Mi
       event.value = (uint8_t)(raw[1] & 0x7F);
       event.value14 = (uint16_t)((event.number) | ((uint16_t)event.value << 7));
       pushEvent(out, event);
+    } else if (b == 0xF1) {
+      MidiEvent event;
+      event.type = MIDI_MSG_MTC;
+      event.channel = 0;
+      event.number = 0;
+      event.value = (uint8_t)(raw[0] & 0x7F);
+      event.value14 = timestamp;
+      pushEvent(out, event);
     } else if (b < 0xF0) {
       running = b;
       emitMessage(b, raw, state, out);
@@ -441,6 +449,15 @@ int parseUsbMidiStream(const uint8_t *data, int len, uint16_t timestamp13, MidiP
       continue;
     }
     if (cin == 0x02 || cin == 0x03) {
+      if (b0 == 0xF1 && cin == 0x02) {
+        MidiEvent event;
+        event.type = MIDI_MSG_MTC;
+        event.channel = 0;
+        event.number = 0;
+        event.value = (uint8_t)(b1 & 0x7F);
+        event.value14 = timestamp13;
+        pushEvent(out, event);
+      }
       if (b0 == 0xF2 && cin == 0x03) {
         MidiEvent event;
         event.type = MIDI_MSG_SONG_POS;

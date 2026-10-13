@@ -1,4 +1,5 @@
 #include "SdCard.h"
+#include "SdLimit.h"
 #include "DspHot.h"
 #include "BoardConfig.h"
 #include "DevLog.h"
@@ -158,8 +159,15 @@ bool SdCard::ReadText(const char *path, char *dst, int maxBytes) {
   return true;
 }
 
+bool SdCard::WritesOk() {
+  if (!Ensure()) {
+    return false;
+  }
+  return mothSdVolumeOk(SD.totalBytes());
+}
+
 bool SdCard::WriteAll(const char *path, const uint8_t *src, int len) {
-  if (!path || !src || len < 0 || !Ensure()) {
+  if (!path || !src || len < 0 || !Ensure() || !WritesOk()) {
     return false;
   }
   SD.remove(path);

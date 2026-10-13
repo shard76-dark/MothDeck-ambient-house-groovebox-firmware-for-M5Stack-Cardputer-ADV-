@@ -35,6 +35,7 @@ Tracker::Tracker() {
   memset(&audition, 0, sizeof(audition));
   bpmSlot = 0;
   extSync = false;
+  syncMode = SYNC_EXTERNAL;
   clockCount = 0;
   soundedPattern = 0;
   soundedLocal = 0;
@@ -48,6 +49,12 @@ Tracker::Tracker() {
   tempoClocks = 0;
   clocksInStamp = 0;
   bpmSmooth = 0;
+  memset(mtcNib, 0, sizeof(mtcNib));
+  mtcGot = 0;
+  mtcRun = 0;
+  mtcHaveTs = 0;
+  mtcLastTs = 0;
+  mtcQuietSamples = 0;
   liveAge = 0;
   memset(live, 0, sizeof(live));
   safetyHold = 192;
@@ -327,6 +334,48 @@ void Tracker::AdvanceStep() {
   AgeLive();
 }
 
+void Tracker::SetSync(int mode) {
+  if (mode < SYNC_INTERNAL) {
+    mode = SYNC_INTERNAL;
+  } else if (mode > SYNC_TRANSPORT) {
+    mode = SYNC_TRANSPORT;
+  }
+  syncMode = (uint8_t)mode;
+  if (syncMode != SYNC_EXTERNAL) {
+    extSync = false;
+    ResetTempoWindow();
+  }
+  if (syncMode == SYNC_INTERNAL) {
+    SetHint("Internal");
+  } else if (syncMode == SYNC_TRANSPORT) {
+    SetHint("Transport");
+  } else {
+    SetHint("External");
+  }
+}
+
+static int spanClocks(uint16_t deltaMs, int bpm, int wire) {
+  if (wire < 1) {
+    wire = 1;
+  }
+  if (bpm < 1) {
+    bpm = 1;
+  }
+  // Nearest number of ticks at the current BPM. A thinned MPC clock is one
+  // 0xF8 about every four ticks, so the span is that multiple, not one tick.
+  uint32_t num = (uint32_t)deltaMs * (uint32_t)bpm + 1250u;
+  int estimate = (int)(num / 2500u);
+  if (estimate < 1) {
+    estimate = 1;
+  } else if (estimate > 8) {
+    estimate = 8;
+  }
+  if (wire > estimate) {
+    return wire;
+  }
+  return estimate;
+}
+
 void Tracker::ApplyExternalBpm(int bpm) {
   if (bpm < 40) {
     bpm = 40;
@@ -342,8 +391,12 @@ void Tracker::ApplyExternalBpm(int bpm) {
 }
 
 void Tracker::MidiStart() {
+  if (syncMode == SYNC_INTERNAL) {
+    return;
+  }
   bool learned = LearnLoopLength();
-  extSync = true;
+  extSync = syncMode == SYNC_EXTERNAL;
+  mtcRun = 0;
   isPlaying = true;
   pressedOnce = true;
   // Rec stays wherever Space left it. Start is transport, not record.
@@ -364,7 +417,11 @@ void Tracker::MidiStart() {
 }
 
 void Tracker::MidiContinue() {
-  extSync = true;
+  if (syncMode == SYNC_INTERNAL) {
+    return;
+  }
+  extSync = syncMode == SYNC_EXTERNAL;
+  mtcRun = 0;
   isPlaying = true;
   pressedOnce = true;
   // Song position is a sixteenth, so it already left clockCount on a
@@ -375,6 +432,10 @@ void Tracker::MidiContinue() {
 }
 
 void Tracker::MidiStop() {
+  if (syncMode == SYNC_INTERNAL) {
+    return;
+  }
+  mtcRun = 0;
   isPlaying = false;
   extSync = false;
   clockCount = 0;
@@ -534,23 +595,93 @@ void Tracker::MidiClock(uint16_t timestamp13) {
   MidiClocks(timestamp13, 1);
 }
 
+void Tracker::MidiMtc(uint8_t data, uint16_t timestamp) {
+  if (syncMode == SYNC_INTERNAL) {
+    return;
+  }
+  mtcQuietSamples = 0;
+  uint16_t ts = (uint16_t)(timestamp & 0x1FFF);
+  int gap = -1;
+  if (mtcHaveTs) {
+    gap = (int)((ts - mtcLastTs) & 0x1FFF);
+  }
+  mtcLastTs = ts;
+  mtcHaveTs = 1;
+  int piece = (data >> 4) & 0x07;
+  int nibble = data & 0x0F;
+  if (piece == 0) {
+    mtcGot = 0;
+  }
+  mtcNib[piece] = (uint8_t)nibble;
+  mtcGot = (uint8_t)(mtcGot | (1u << piece));
+  if (!isPlaying) {
+    isPlaying = true;
+    pressedOnce = true;
+    mtcRun = 1;
+    extSync = false;
+    clockCount = 0;
+    stepSampleCount = 0;
+    SetHint("MTC");
+  } else if (!extSync) {
+    mtcRun = 1;
+  }
+  if (piece != 7 || mtcGot != 0xFF || extSync) {
+    return;
+  }
+  int frames = (int)(((mtcNib[1] & 0x01) << 4) | (mtcNib[0] & 0x0F));
+  int seconds = (int)(((mtcNib[3] & 0x03) << 4) | (mtcNib[2] & 0x0F));
+  int minutes = (int)(((mtcNib[5] & 0x03) << 4) | (mtcNib[4] & 0x0F));
+  int hours = (int)(((mtcNib[7] & 0x01) << 4) | (mtcNib[6] & 0x0F));
+  int rate = (int)((mtcNib[7] >> 1) & 0x03);
+  mtcGot = 0;
+  int fps = rate == 0 ? 24 : (rate == 1 ? 25 : 30);
+  int expected = 1000 / (fps * 4);
+  if (expected < 1) {
+    expected = 1;
+  }
+  if (gap < 0) {
+    return;
+  }
+  int err = gap - expected;
+  if (err < 0) {
+    err = -err;
+  }
+  // This MPC labels 29.97 and advances at about half that rate. A gap that
+  // far from the label is transport only; seeking would play the loop slowly.
+  if (err * 100 > expected * 30) {
+    return;
+  }
+  int bpm = Bpm();
+  if (bpm < 1) {
+    bpm = 120;
+  }
+  int sec = hours * 3600 + minutes * 60 + seconds;
+  int six = sec * bpm * 4 / 60;
+  six += frames * bpm * 4 / (60 * fps);
+  MidiSongPosition(six);
+}
+
 void Tracker::MidiClocks(uint16_t timestamp13, int ticks) {
+  if (syncMode != SYNC_EXTERNAL) {
+    return;
+  }
   if (ticks < 1) {
     ticks = 1;
   } else if (ticks > 255) {
     ticks = 255;
   }
   uint16_t ts = (uint16_t)(timestamp13 & 0x1FFF);
+  int catchup = 0;
   if (haveClockTs) {
     uint16_t delta = (uint16_t)((ts - lastClockTs) & 0x1FFF);
     if (delta > 0 && delta < 2000) {
-      // clocksInStamp is every tick since the previous timestamp, including
-      // the ones that shared it. The delta is their combined span, not the
-      // period of a single tick. One packet at a 50 ms link holds about
-      // two and a half clocks at 120 BPM; counting the packet as one tick
-      // is what pinned the readout near 47.
+      int wire = clocksInStamp > 0 ? clocksInStamp : 1;
+      int musical = spanClocks(delta, Bpm(), wire);
       tempoMs += delta;
-      tempoClocks += clocksInStamp > 0 ? clocksInStamp : 1;
+      tempoClocks += musical;
+      if (musical > wire) {
+        catchup = musical - wire;
+      }
       clocksInStamp = 0;
       if (tempoClocks >= 24 && tempoMs > 0) {
         int raw = (int)((60000.0f * (float)tempoClocks) / (24.0f * (float)tempoMs) + 0.5f);
@@ -572,12 +703,17 @@ void Tracker::MidiClocks(uint16_t timestamp13, int ticks) {
   lastClockTs = ts;
   haveClockTs = 1;
   clocksInStamp += ticks;
-  transportTick += (uint32_t)ticks;
+  if (isPlaying && !extSync) {
+    extSync = true;
+    mtcRun = 0;
+  }
+  int advance = ticks + catchup;
+  transportTick += (uint32_t)advance;
   if (!extSync || !isPlaying) {
     return;
   }
-  clocksSinceZero += ticks;
-  int sum = clockCount + ticks;
+  clocksSinceZero += advance;
+  int sum = clockCount + advance;
   int steps = sum / 6;
   clockCount = sum % 6;
   if (steps <= 0) {
@@ -593,6 +729,9 @@ void Tracker::MidiClocks(uint16_t timestamp13, int ticks) {
 }
 
 void Tracker::MidiSongPosition(int sixteenth) {
+  if (syncMode == SYNC_INTERNAL) {
+    return;
+  }
   if (sixteenth < 0) {
     sixteenth = 0;
   }
@@ -624,6 +763,17 @@ void Tracker::MidiSongPosition(int sixteenth) {
 
 int Tracker::UpdateTracker() {
   tempoBlink = 0;
+  if (mtcRun) {
+    if (mtcQuietSamples < 1000000u) {
+      mtcQuietSamples++;
+    }
+    if (!extSync && mtcQuietSamples > 22050u) {
+      mtcRun = 0;
+      isPlaying = false;
+      AllNotesOff();
+      SetHint("MTC end");
+    }
+  }
 
   if (extSync) {
     // Keep loop phase moving inside the current step, but do not start the
@@ -631,6 +781,8 @@ int Tracker::UpdateTracker() {
     if (samplesPerStep > 1 && stepSampleCount + 1 < samplesPerStep) {
       stepSampleCount++;
     }
+  } else if (syncMode == SYNC_TRANSPORT && !isPlaying) {
+    // Start and MTC run the deck clock. Stop holds the playhead.
   } else {
     transportSample++;
     if (++stepSampleCount >= samplesPerStep) {
@@ -682,6 +834,9 @@ void Tracker::SetCommand(char command, int val) {
     case 'B':
       SetBPM(val);
       SetHintF("BPM: %d", bpms[val]);
+      break;
+    case 'S':
+      SetSync(val);
       break;
     case 'N':
       ArmTransport();
@@ -1833,6 +1988,9 @@ void Tracker::HandleMidi(const MidiEvent &event) {
       return;
     case MIDI_MSG_SONG_POS:
       MidiSongPosition((int)event.value14);
+      return;
+    case MIDI_MSG_MTC:
+      MidiMtc(event.value, event.value14);
       return;
     case MIDI_MSG_NOTE_OFF: {
       // The track is the one that sounded the note. A note-off does not

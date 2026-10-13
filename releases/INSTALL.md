@@ -9,9 +9,11 @@ Two images are produced by `./build.sh`:
 
 Checksums are in `SHA256SUMS` next to the images. The application image starts with the byte `E9`.
 
-This folder's application image is 1.2.8 (1,230,816 bytes, magic `E9`, SHA-256 `4a95e55c2b194d3ab6f9db23dd3dc234c0578a4c92cd7a08b7e7c5b038ac9f71`). The full-flash image is 1,296,352 bytes, SHA-256 `a6ac1dba89fce77a2017f45a256b3fef5332c8e6b5d258c7a337bbce805fbc68`. It has not been tried on a Cardputer. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). The 1.2.2 through 1.2.7 releases stay published and are superseded by this image.
+This folder's application image is 1.2.9 (1,233,936 bytes, magic `E9`, SHA-256 `f3542da19084462aeb2f7358f51c1c65adb28d67e2737c930346d6c01e16d509`). The same bytes are `mothdeck-1.2.9.bin`. It has not been tried on a Cardputer. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). The 1.2.2 through 1.2.8 releases stay published and are superseded by this image.
 
-1.2.8 includes the behavior from 1.2.2 through 1.2.7:
+On a board that already has MothBoot, install `mothdeck-cardputer-adv.bin` into an OTA slot from MothBoot (USB `flash`, or copy it to the card and `sd-install`). `mothdeck-cardputer-adv-full.bin` is the older layout (1,296,352 bytes, SHA-256 `a6ac1dba89fce77a2017f45a256b3fef5332c8e6b5d258c7a337bbce805fbc68`) and is not the 1.2.9 image. MothDiag 0.1.3 is `mothdiag-0.1.3.bin` (821,200 bytes, SHA-256 `2bfb2859a237dbdf8815bf4c8602cddcaf0f819c6a45b36bd18ce197baf9eb4e`).
+
+1.2.9 includes the behavior from 1.2.2 through 1.2.8:
 
 - **1.2.2.** BLE memory is reserved at boot, so turning it on always starts advertising and does not allocate. Unload BLE frees that memory for large loops on the next boot. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes only play while Rec is off. They are not written into the pattern. Space turns Rec on, and then they record. MIDI Start does not arm Rec.
@@ -20,6 +22,7 @@ This folder's application image is 1.2.8 (1,230,816 bytes, magic `E9`, SHA-256 `
 - **1.2.6.** Clocks are counted instead of queued, so a burst does not crowd out notes. Start clears pending ticks, and ticks before Start in the same packet are not counted. The production build does not print from the connect callbacks. Pairing and advertising are unchanged.
 - **1.2.7.** With Rec on, a note lands on the step that just played and rounds forward halfway through the step. The end of the pattern wraps to its own step 0. Note-off stores a hold of 1 to 4 steps. The song file does not change.
 - **1.2.8.** An external clock follows the master from 40 to 200 BPM, including clocks that share one timestamp. Note-ons that arrive with a dense clock still sound. The USB port is a MIDI device named Mothdeck and still a serial port. Unplugging it releases live notes. The MIDI page shows `USB MIDI` or `USB off`.
+- **1.2.9.** Settings has Sync: Internal, External, or Transport. External scales a thinned BLE clock against the current BPM. Transport follows start, stop, and position and keeps the deck BPM. Internal keeps the deck clock. Quarter-frame MTC can run the transport.
 
 The LilyGO TTGO T8 is a different board and a different download. Its pre-release is [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4), on the [`ttgo-t8` branch](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/tree/ttgo-t8). Those images are not in this folder. Do not flash one onto a Cardputer.
 

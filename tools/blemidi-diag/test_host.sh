@@ -9,6 +9,7 @@ CXX="${CXX:-g++}"
   -I"$ROOT/tools/blemidi-diag/src" \
   -I"$ROOT/include" \
   "$ROOT/tools/blemidi-diag/test/test_main.cpp" \
+  "$ROOT/tools/blemidi-diag/src/diag_mtc.cpp" \
   "$ROOT/tools/blemidi-diag/src/diag_parse.cpp" \
   "$ROOT/tools/blemidi-diag/src/diag_stats.cpp" \
   "$ROOT/tools/blemidi-diag/src/diag_selftest.cpp" \

@@ -254,7 +254,13 @@ bool DiagMeter::takeWindow(uint64_t nowUs, DiagWindow *out) {
   out->packets = winPackets_;
   out->pps = (double)winPackets_ * 1000.0 / (double)out->elapsedMs;
   out->maxGapUs = maxGapUs_;
-  out->jitterUs = (uint32_t)(sqrtApprox(stddev(gapM2_, gapCount_)) + 0.5);
+  double jitter = sqrtApprox(stddev(gapM2_, gapCount_));
+  if (jitter < 0) {
+    jitter = 0;
+  } else if (jitter > 100000000.0) {
+    jitter = 100000000.0;
+  }
+  out->jitterUs = (uint32_t)(jitter + 0.5);
 
   if (winClocks_ >= 2 && winMidiSpanMs_ > 0) {
     out->hasBpmMidi = true;

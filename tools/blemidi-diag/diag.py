@@ -12,6 +12,7 @@ import json
 import statistics
 import sys
 import time
+import zlib
 from typing import Any, Iterable, Optional
 
 
@@ -246,12 +247,14 @@ def _port_score(port: Any) -> int:
 
 
 def _looks_like_diag(text: str) -> bool:
-    if "MothDiag" in text:
+    if "MothDiag" in text or "MothBoot" in text:
         return True
     try:
         item = json.loads(text)
     except json.JSONDecodeError:
         return False
+    if isinstance(item, dict) and item.get("name") in ("MothDiag", "MothBoot"):
+        return True
     return isinstance(item, dict) and item.get("t") in ("hello", "status", "radio", "stats", "help")
 
 
@@ -274,7 +277,16 @@ def find_port(explicit: Optional[str], baud: int):
     errors = []
     for device in candidates:
         try:
-            handle = serial.Serial(device, baud, timeout=0.2, write_timeout=1)
+            handle = serial.Serial()
+            handle.port = device
+            handle.baudrate = baud
+            handle.timeout = 0.2
+            handle.write_timeout = 1
+            handle.dtr = False
+            handle.rts = False
+            handle.open()
+            handle.dtr = False
+            handle.rts = False
         except serial.SerialException as exc:
             errors.append(f"{device}: {exc}")
             continue
@@ -348,19 +360,101 @@ def capture(handle, seconds: float, log_path: str, prefix: Optional[list[str]] =
     return lines
 
 
+def image_version(blob: bytes) -> str:
+    key = b"MOTHIMG:"
+    start = 0
+    while True:
+        at = blob.find(key, start)
+        if at < 0:
+            return "app"
+        chars = []
+        for b in blob[at + len(key) : at + len(key) + 16]:
+            if b <= 32 or b > 126:
+                break
+            chars.append(chr(b))
+        if chars:
+            return "".join(chars)
+        start = at + len(key)
+
+
+def _read_objects(handle, timeout: float, predicate) -> tuple[list[str], Optional[dict[str, Any]]]:
+    deadline = time.time() + timeout
+    buf = b""
+    lines: list[str] = []
+    while time.time() < deadline:
+        chunk = handle.read(handle.in_waiting or 1)
+        if not chunk:
+            continue
+        buf += chunk
+        while b"\n" in buf:
+            raw, buf = buf.split(b"\n", 1)
+            text = raw.decode("utf-8", "replace").strip()
+            if not text:
+                continue
+            lines.append(text)
+            print(text)
+            try:
+                item = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(item, dict) and predicate(item):
+                return lines, item
+    return lines, None
+
+
+def _send_line(handle, line: str) -> None:
+    handle.write((line + "\n").encode("utf-8"))
+    handle.flush()
+
+
+def transfer_bytes(handle, command: str, blob: bytes, ready_type: str) -> int:
+    _send_line(handle, command)
+    _lines, ready = _read_objects(
+        handle,
+        20.0,
+        lambda item: item.get("t") in (ready_type, "flash", "sd") and item.get("phase") in ("ready", "retry"),
+    )
+    if not ready or ready.get("phase") != "ready":
+        sys.stderr.write("the Cardputer did not accept the transfer\n")
+        return 1
+    view = memoryview(blob)
+    sent = 0
+    while sent < len(blob):
+        chunk = view[sent : sent + 4096]
+        handle.write(chunk)
+        sent += len(chunk)
+    handle.flush()
+    _done_lines, done = _read_objects(
+        handle,
+        max(60.0, len(blob) / 20000.0 + 30.0),
+        lambda item: item.get("phase") in ("restarting", "done", "retry", "formatted"),
+    )
+    if not done or done.get("phase") == "retry":
+        sys.stderr.write("the transfer did not finish\n")
+        return 1
+    return 0
+
+
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Capture MothDiag BLE MIDI diagnostics over USB serial.")
+    parser = argparse.ArgumentParser(description="Talk to MothDiag or MothBoot over USB serial.")
     parser.add_argument("-n", "--seconds", type=float, default=10.0, help="how long to record (default 10)")
-    parser.add_argument("--port", help="serial port, for example COM5 or /dev/ttyACM0")
+    parser.add_argument("--port", help="serial port, for example COM6 or /dev/ttyACM0")
     parser.add_argument("-o", "--output", help="raw JSON log path")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--self-check", action="store_true", help="check the report against a built-in sample")
+    parser.add_argument("--send", help="one command, such as run or go, then record --seconds")
+    parser.add_argument("--flash", help="app .bin to write into an OTA slot through MothBoot")
+    parser.add_argument("--slot", type=int, choices=(0, 1), default=0, help="OTA slot for --flash or --sd-install")
+    parser.add_argument("--sd-put", nargs=2, metavar=("LOCAL", "REMOTE"), help="copy a file onto the SD card")
+    parser.add_argument("--sd-ls", nargs="?", const="/apps", help="list an SD directory (default /apps)")
+    parser.add_argument("--sd-rm", help="delete an SD path")
+    parser.add_argument("--sd-df", action="store_true", help="print SD free space")
+    parser.add_argument("--sd-install", help="install an SD .bin into an OTA slot and boot it")
+    parser.add_argument("--sd-check-full", action="store_true", help="destructive capacity check of the whole card")
+    parser.add_argument("--sd-format", nargs="?", const="0", help="FAT32 format to the checked size, or a byte size")
     args = parser.parse_args(argv)
     if args.self_check:
         return self_check()
-    if args.seconds <= 0:
-        sys.stderr.write("seconds must be greater than zero\n")
-        return 1
     try:
         import serial  # noqa: F401
     except ImportError:
@@ -370,9 +464,65 @@ def main(argv: Optional[list[str]] = None) -> int:
     if handle is None:
         sys.stderr.write(f"MothDiag: {found}. Plug in the Cardputer, or pass --port.\n")
         return 1
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    log_path = args.output or f"mothdiag-{stamp}.log"
+    for text in prefix:
+        if text:
+            print(text)
     try:
+        if args.flash:
+            blob = open(args.flash, "rb").read()
+            ver = image_version(blob)
+            crc = zlib.crc32(blob) & 0xFFFFFFFF
+            return transfer_bytes(handle, f"flash {len(blob)} {crc} {ver} {args.slot}", blob, "flash")
+        if args.sd_put:
+            local, remote = args.sd_put
+            blob = open(local, "rb").read()
+            crc = zlib.crc32(blob) & 0xFFFFFFFF
+            return transfer_bytes(handle, f"sd-put {len(blob)} {crc} {remote}", blob, "sd")
+        if args.sd_ls is not None:
+            _send_line(handle, f"sd-ls {args.sd_ls}")
+            _read_objects(handle, 8.0, lambda item: item.get("t") == "sd")
+            return 0
+        if args.sd_rm:
+            _send_line(handle, f"sd-rm {args.sd_rm}")
+            _read_objects(handle, 8.0, lambda item: item.get("t") == "sd")
+            return 0
+        if args.sd_df:
+            _send_line(handle, "sd-df")
+            _read_objects(handle, 8.0, lambda item: item.get("phase") == "space")
+            return 0
+        if args.sd_install:
+            _send_line(handle, f"sd-install {args.sd_install} {args.slot}")
+            _lines, done = _read_objects(
+                handle,
+                180.0,
+                lambda item: item.get("phase") in ("restarting", "retry"),
+            )
+            return 0 if done and done.get("phase") == "restarting" else 1
+        if args.sd_check_full:
+            _send_line(handle, "sd-check full")
+            _lines, done = _read_objects(
+                handle,
+                8 * 3600.0,
+                lambda item: item.get("phase") in ("done", "retry") and "bytes" in item and item.get("phase") != "check",
+            )
+            if not done:
+                sys.stderr.write("the card check did not finish\n")
+                return 1
+            print(f"verified bytes: {done.get('bytes')}  reported: {done.get('reported')}")
+            return 0 if done.get("phase") == "done" else 1
+        if args.sd_format is not None:
+            size = args.sd_format
+            command = "sd-format" if size in ("", "0") else f"sd-format {size}"
+            _send_line(handle, command)
+            _lines, done = _read_objects(handle, 600.0, lambda item: item.get("phase") in ("formatted", "retry"))
+            return 0 if done and done.get("phase") == "formatted" else 1
+        if args.send:
+            _send_line(handle, args.send)
+        if args.seconds <= 0:
+            sys.stderr.write("seconds must be greater than zero\n")
+            return 1
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        log_path = args.output or f"mothdiag-{stamp}.log"
         lines = capture(handle, args.seconds, log_path, prefix)
     finally:
         handle.close()

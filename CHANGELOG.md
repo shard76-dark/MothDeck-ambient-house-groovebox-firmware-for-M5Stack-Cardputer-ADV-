@@ -2,6 +2,16 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.2.9 (2026-10-13)
+
+Settings adds a Sync row. Internal keeps the deck clock and leaves MIDI clock, start, stop, and song position alone. External follows that transport and reads the tempo from the BLE timestamps. A thinned clock is one `0xF8` every few ticks of the current BPM; the span is counted as that many ticks, so an MPC at 180 BPM stays near 180 when the deck is already near 180. A dense clock still tracks 40–200 and still clamps at 200. Transport follows start, stop, and position and keeps the deck BPM. Quarter-frame MTC can run the transport. When the spacing matches the rate in the message, the playhead seeks. A half-rate MTC stream runs and stops the transport and leaves the tempo on the deck, or on the scaled clock when clocks are also arriving.
+
+MothDiag 0.1.3 draws MIDI BPM, arrival BPM, the clock rate, and the MTC rate. Each of those lines redraws only when the text changes. The screen stays on plain words. The test script prints a line for every step, `go` starts the script when none is running, and a connection-parameter request is logged even when the interval does not move. Verbose packet lines are dropped when the USB buffer is full, so the MIDI queue keeps draining.
+
+1.2.9 is the image to flash, and it includes the 1.2.2 through 1.2.8 behavior below. On a board that already has MothBoot, install the application image into an OTA slot. The older full-flash file in `releases/` is the pre-MothBoot layout. The LilyGO TTGO T8 port is unchanged on the [`ttgo-t8` branch](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/tree/ttgo-t8). That port is not merged here.
+
+The image to flash is `releases/mothdeck-cardputer-adv.bin` (1,233,936 bytes, magic `E9`, SHA-256 `f3542da19084462aeb2f7358f51c1c65adb28d67e2737c930346d6c01e16d509`). The same bytes are `releases/mothdeck-1.2.9.bin`. MothDiag 0.1.3 is `releases/mothdiag-0.1.3.bin` (821,200 bytes, SHA-256 `2bfb2859a237dbdf8815bf4c8602cddcaf0f819c6a45b36bd18ce197baf9eb4e`). The SD pack is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Static RAM is 172516/327680. Settings version line is `v1.2.9`.
+
 ## 1.2.8 (2026-10-13)
 
 External MIDI clock follows the master from 40 to 200 BPM, including when several clocks share one BLE timestamp. On 1.2.7 the first connection update was the central's own interval, often about 60 ms, and that was treated as success, so the 7.5–15 ms request never went out. One clock per event at that interval reads about 43 BPM, and the events stay full of clocks, so notes never get a packet. The short-interval request now stays pending until the link is 15 ms or faster, and it is asked again when the link is still slow.
@@ -10,9 +20,9 @@ Clocks that share a timestamp are one event. The step and the tempo use the whol
 
 The USB port is a MIDI device named Mothdeck and still a serial port. USB notes and clock use the same queue as BLE. Unplugging USB releases live notes the same way a dropped Bluetooth link does. The MIDI page shows `USB MIDI` while a host has enumerated the port, and `USB off` otherwise. Stop, gate length, quantize, and the 1.2.5 through 1.2.7 behavior are unchanged.
 
-1.2.8 is the image to flash, and it includes the 1.2.2 through 1.2.7 behavior below. The LilyGO TTGO T8 port is unchanged on the [`ttgo-t8` branch](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/tree/ttgo-t8). That port is not merged here.
+1.2.8 is included in the 1.2.9 image. It includes the 1.2.2 through 1.2.7 behavior below. Superseded by 1.2.9. The LilyGO TTGO T8 port is unchanged on the [`ttgo-t8` branch](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/tree/ttgo-t8). That port is not merged here.
 
-The image to flash is `releases/mothdeck-cardputer-adv.bin` (1,230,816 bytes, magic `E9`, SHA-256 `4a95e55c2b194d3ab6f9db23dd3dc234c0578a4c92cd7a08b7e7c5b038ac9f71`). The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,296,352 bytes, SHA-256 `a6ac1dba89fce77a2017f45a256b3fef5332c8e6b5d258c7a337bbce805fbc68`). The SD pack is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Static RAM is 172468/327680. Settings version line is `v1.2.8`.
+The image published as 1.2.8 was `releases/mothdeck-cardputer-adv.bin` (1,230,816 bytes, magic `E9`, SHA-256 `4a95e55c2b194d3ab6f9db23dd3dc234c0578a4c92cd7a08b7e7c5b038ac9f71`). A copy built for the MothBoot partition table is `releases/mothdeck-1.2.8-mothboot.bin`. The full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,296,352 bytes, SHA-256 `a6ac1dba89fce77a2017f45a256b3fef5332c8e6b5d258c7a337bbce805fbc68`). The SD pack is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Static RAM is 172468/327680. Settings version line is `v1.2.8`.
 
 ## 1.2.7 (2026-10-13)
 

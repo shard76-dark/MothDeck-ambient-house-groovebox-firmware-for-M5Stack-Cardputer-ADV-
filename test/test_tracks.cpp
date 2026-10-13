@@ -491,12 +491,24 @@ static void noteOff(Tracker &tracker, int channel, int note) {
   tracker.HandleMidi(ev);
 }
 
+static void nearBpm(Tracker &tracker, int bpm) {
+  if (bpm < 40) {
+    bpm = 40;
+  } else if (bpm > 240) {
+    bpm = 240;
+  }
+  tracker.NudgeBpm(bpm - tracker.Bpm());
+}
+
 static void testExternalClockPackets() {
   const int rates[] = {60, 120, 174};
   const int groups[] = {2, 3, 4};
   for (int r = 0; r < 3; r++) {
     int bpm = rates[r];
     Tracker shared;
+    if (bpm < 90) {
+      nearBpm(shared, bpm);
+    }
     transport(shared, MIDI_MSG_START, 0);
     int head = shared.trackIndex;
     bool kept = feedClockPackets(shared, bpm, 30, groups[r], false);
@@ -506,6 +518,9 @@ static void testExternalClockPackets() {
     expect(shown >= bpm - 3 && shown <= bpm + 3, "shared-timestamp packet tempo stays on the clock");
 
     Tracker stamped;
+    if (bpm < 90) {
+      nearBpm(stamped, bpm);
+    }
     transport(stamped, MIDI_MSG_START, 0);
     head = stamped.trackIndex;
     kept = feedClockPackets(stamped, bpm, 30, groups[r], true);
@@ -984,6 +999,9 @@ static void testTempoSweep() {
         total = 72;
       }
       Tracker tracker;
+      if (bpm < 90) {
+        nearBpm(tracker, bpm);
+      }
       transport(tracker, MIDI_MSG_START, 0);
       MidiRunningState state;
       std::memset(&state, 0, sizeof(state));
@@ -1134,11 +1152,110 @@ static void testDenseNotes() {
   expect(wideTicks == 100 && wideOns == 4 && wideParsed.overflow == 0, "a long clock run does not push the notes out");
 }
 
+static void testThinnedClockAndSync() {
+  Tracker deck;
+  nearBpm(deck, 180);
+  expect(deck.Bpm() == 180, "the deck starts at 180");
+  transport(deck, MIDI_MSG_START, 0);
+  int head = deck.trackIndex;
+  for (int i = 0; i < 7; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value14 = clockMillis(i * 4, 180);
+    deck.HandleMidi(clk);
+  }
+  expect(deck.Bpm() >= 176 && deck.Bpm() <= 184, "a thinned 180 BPM clock stays near 180");
+  expect(deck.trackIndex == head + 4, "thinned clocks step at the musical rate");
+
+  Tracker plain;
+  nearBpm(plain, 180);
+  transport(plain, MIDI_MSG_START, 0);
+  for (int i = 0; i < 48; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value14 = clockMillis(i, 180);
+    plain.HandleMidi(clk);
+  }
+  expect(plain.Bpm() >= 177 && plain.Bpm() <= 183, "a dense 180 BPM clock stays near 180");
+
+  Tracker hold;
+  hold.SetCommand('S', SYNC_TRANSPORT);
+  nearBpm(hold, 180);
+  int parked = hold.trackIndex;
+  for (int i = 0; i < 8000; i++) {
+    hold.UpdateTracker();
+  }
+  expect(hold.trackIndex == parked, "transport only waits for start");
+  transport(hold, MIDI_MSG_START, 0);
+  int started = hold.trackIndex;
+  for (int i = 0; i < 24; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value14 = clockMillis(i * 4, 180);
+    hold.HandleMidi(clk);
+  }
+  expect(hold.Bpm() == 180, "transport only keeps the deck BPM");
+  expect(hold.trackIndex == started && hold.isPlaying, "transport only does not chase the clock");
+  for (int i = 0; i < 8000; i++) {
+    hold.UpdateTracker();
+  }
+  expect(hold.trackIndex != started, "transport only then runs on the deck clock");
+
+  Tracker home;
+  home.SetCommand('S', SYNC_INTERNAL);
+  int bpm = home.Bpm();
+  int at = home.trackIndex;
+  transport(home, MIDI_MSG_START, 0);
+  for (int i = 0; i < 24; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value14 = clockMillis(i, 120);
+    home.HandleMidi(clk);
+  }
+  expect(!home.isPlaying && home.Bpm() == bpm && home.trackIndex == at, "internal ignores MIDI clock and transport");
+
+  Tracker wide;
+  nearBpm(wide, 180);
+  MidiEvent quarter = {};
+  quarter.type = MIDI_MSG_MTC;
+  quarter.value = 0x00;
+  quarter.value14 = 0;
+  wide.HandleMidi(quarter);
+  expect(wide.isPlaying && wide.Bpm() == 180 && wide.trackIndex == 0, "a quarter frame starts transport and keeps the BPM");
+  for (int i = 0; i < 30000; i++) {
+    wide.UpdateTracker();
+  }
+  expect(!wide.isPlaying, "MTC ends when the frames stop");
+
+  Tracker locked;
+  nearBpm(locked, 180);
+  const uint8_t pieces[] = {0x00, 0x10, 0x21, 0x30, 0x40, 0x50, 0x60, 0x72};
+  for (int i = 0; i < 8; i++) {
+    MidiEvent ev = {};
+    ev.type = MIDI_MSG_MTC;
+    ev.value = pieces[i];
+    ev.value14 = (uint16_t)(i * 10);
+    locked.HandleMidi(ev);
+  }
+  expect(locked.isPlaying && locked.Bpm() == 180, "matching MTC keeps the deck BPM");
+  expect(locked.trackIndex == 12, "matching MTC seeks one second at 180");
+
+  uint8_t packet[] = {0x80, 0x80, 0xF1, 0x21};
+  MidiRunningState state;
+  std::memset(&state, 0, sizeof(state));
+  MidiParseResult parsed;
+  int count = parseBleMidiPacket(packet, (int)sizeof(packet), &state, &parsed);
+  expect(count == 1 && parsed.events[0].type == MIDI_MSG_MTC && parsed.events[0].value == 0x21, "a quarter frame survives the BLE parser");
+}
+
 static void testUsbClockAndNotes() {
   const int rates[] = {40, 120, 200};
   for (int r = 0; r < 3; r++) {
     int bpm = rates[r];
     Tracker tracker;
+    if (bpm < 90) {
+      nearBpm(tracker, bpm);
+    }
     transport(tracker, MIDI_MSG_START, 0);
     MidiRing ring;
     int total = 96;
@@ -1200,6 +1317,7 @@ int main() {
   testExternalBpmClamp();
   testTempoSweep();
   testDenseNotes();
+  testThinnedClockAndSync();
   testUsbClockAndNotes();
   if (failures) {
     std::printf("%d failed\n", failures);

@@ -1,8 +1,8 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.8 (1,230,816 bytes, magic `E9`, SHA-256 `4a95e55c2b194d3ab6f9db23dd3dc234c0578a4c92cd7a08b7e7c5b038ac9f71`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.9 (1,233,936 bytes, magic `E9`, SHA-256 `f3542da19084462aeb2f7358f51c1c65adb28d67e2737c930346d6c01e16d509`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
 
-1.2.8 includes the releases before it:
+1.2.9 includes the releases before it:
 
 - **1.2.2.** NimBLE is reserved at boot, before the loop windows. On and Off only start or stop advertising. Unload BLE frees that block for large loops on the next boot. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does, and then those notes record at the playhead.
@@ -11,10 +11,11 @@ MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published imag
 - **1.2.6.** Clocks are counted instead of queued, so a burst does not crowd out the notes behind them. Ticks before Start in the same packet are not counted. The production build does not print from the connect callbacks. Pairing and advertising are unchanged.
 - **1.2.7.** With Rec on, a MIDI note lands on the step that just played. Halfway through the step it rounds forward. The end of the pattern wraps to step 0 of that pattern. Note-off stores a hold of 1 to 4 steps. Rec off still only plays.
 - **1.2.8.** An external clock follows the master from 40 to 200 BPM, including clocks that share one timestamp. Note-ons that arrive with a dense clock still sound. The USB port is a MIDI device named Mothdeck, on the same cable as serial. Unplugging it releases live notes. The MIDI page shows `USB MIDI` or `USB off`.
+- **1.2.9.** Settings has a Sync row: Internal, External, or Transport. External scales a thinned BLE clock against the current BPM. Transport follows start, stop, and position and keeps the deck BPM. Internal keeps the deck clock. Quarter-frame MTC can run the transport.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
-The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.8 still uses. On a 1.2.8 board the Settings version line says `v1.2.8`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`). Settings does not print a counter line. The MIDI page also shows `USB MIDI` or `USB off`, which the 1.2.0 shot does not.
+The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.9 still uses. On a 1.2.9 board the Settings version line says `v1.2.9`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`). Settings adds a Sync row under Bars. Settings does not print a counter line. The MIDI page also shows `USB MIDI` or `USB off`, which the 1.2.0 shot does not.
 
 ## Moving around
 
@@ -218,7 +219,7 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | CC 1 | Low pass |
 | CC 7 / CC 39 | Volume, mapped to 0–8 |
 | Pitch bend | Per channel |
-| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Every clock in a packet counts, including several that share one timestamp. They are counted rather than queued. Ticks before Start in that packet are not counted. With Rec on, a note lands on the step that just played, and three or more clocks round it to the next step. The pattern wraps to its own step 0. Tempo is smoothed over a beat and clamps at 200 |
+| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. In External, a timestamp gap is scaled to the nearest number of ticks at the current BPM, so a thinned MPC clock stays near that BPM. Several clocks that share one timestamp still count as themselves. They are counted rather than queued. Ticks before Start in that packet are not counted. With Rec on, a note lands on the step that just played, and three or more clocks round it to the next step. The pattern wraps to its own step 0. Tempo is smoothed over a beat and clamps at 200. Transport keeps the deck BPM. Internal ignores the clock |
 | Note on | Up to four notes sound on the track. A fifth replaces the oldest. Note-off, including velocity 0, releases only that note and channel, on the track that sounded it. Stored in the pattern only while Rec is on, with a hold of 1 to 4 steps |
 | CC 120 / CC 123 | Release live notes on that channel. Pattern, loops, and sampler stay |
 | Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec |
@@ -236,7 +237,7 @@ Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change the selected row.
 
 ![Settings, BLE row](screenshots/screen-settings-ble-2x.png)
 
-Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.8`. There is no counter line under the rows. The dev build still uses the Radio row for a heap readout. The hidden MIDI status view is where the other counts live.
+Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars, Sync. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.9`. Sync is Internal, External, or Transport. There is no counter line under the rows. The dev build still uses the Radio row for a heap readout. The hidden MIDI status view is where the other counts live.
 
 | Row | Keys |
 | --- | --- |
@@ -245,6 +246,7 @@ Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE
 | BLE | Fn+`,` turns the radio off. Fn+`/` turns it on |
 | Unload / Load | Enter stores the choice |
 | Bars | Fn+`,` and Fn+`/` set the pattern length from 1 to 8 bars and leave the notes in place |
+| Sync | Fn+`,` and Fn+`/` step Internal, External, and Transport. The choice is stored. External is the setting for an MPC |
 
 ![Settings, Bars row](screenshots/screen-settings-bars-2x.png)
 

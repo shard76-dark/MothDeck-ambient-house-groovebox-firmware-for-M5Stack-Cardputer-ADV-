@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <M5Cardputer.h>
+#include <esp_partition.h>
+#include <string.h>
 #include <esp_heap_caps.h>
 #include "AudioEngine.h"
 #include "UsbMidi.h"
@@ -7,6 +9,7 @@
 #include "BoardConfig.h"
 #include "DevLog.h"
 #include "LauncherExit.h"
+#include "MothBootJump.h"
 #include "PcmHold.h"
 #include "SplashMoth.h"
 #include "Ui.h"
@@ -42,6 +45,26 @@ static void bootExitChord() {
     delay(15);
   }
   if (!held) {
+    return;
+  }
+  const esp_partition_t *factory = esp_partition_find_first(
+    ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, nullptr);
+  if (factory) {
+    uint32_t confirm = millis();
+    while ((uint32_t)(millis() - confirm) < 350) {
+      M5Cardputer.update();
+      if (!exitChordHeld()) {
+        return;
+      }
+      delay(15);
+    }
+    M5Cardputer.Display.fillScreen(0x1082);
+    M5Cardputer.Display.setTextColor(0xEF5D);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setCursor(8, 56);
+    M5Cardputer.Display.println("MothBoot");
+    delay(200);
+    mothRebootToLauncher();
     return;
   }
   if (!launcherInstalled()) {
@@ -140,18 +163,22 @@ static void logHeap(const char *tag) {
 }
 
 void setup() {
+  mothBootGuard();
   // USB CDC is on from boot. Playback is first: the speaker DMA and the
   // audio task take their internal RAM before the sprite. NimBLE is next,
   // before the loop pool and before the card scan, which is the 1.1.0
   // order that paired. The stack stays resident. Off does not advertise.
   Serial.begin(115200);
   Serial.printf("MothDeck %s\n", MOTHDECK_VERSION);
+  static const char kMothImage[] = "MOTHIMG:" MOTHDECK_VERSION;
+  Serial.println(kMothImage);
   uiLoadPrefs();
   bringUpDisplay();
   logHeap("after display");
   showSplash();
   audioBindMidi(&ble);
   audioStart();
+  audioCommand('S', uiSyncMode());
   uiBegin();
   uiDraw(ble);
   bootExitChord();
@@ -174,10 +201,41 @@ void setup() {
   logHeap("after loops");
   uiMountStorage(!ble.UserEnabled());
   logHeap("after storage");
+  mothMarkAppValid();
+}
+
+static void pollLauncherLine() {
+  static char cmd[24];
+  static size_t used = 0;
+  while (Serial.available() > 0) {
+    int ch = Serial.read();
+    if (ch < 0) {
+      return;
+    }
+    if (ch == '\n') {
+      cmd[used] = 0;
+      used = 0;
+      if (strcmp(cmd, "launcher") == 0 || strcmp(cmd, "LAUNCHER") == 0) {
+        Serial.println("{\"t\":\"launcher\",\"ok\":true}");
+        Serial.flush();
+        mothRebootToLauncher();
+      }
+      continue;
+    }
+    if (ch == '\r') {
+      continue;
+    }
+    if (used + 1 < sizeof(cmd)) {
+      cmd[used++] = (char)ch;
+    } else {
+      used = 0;
+    }
+  }
 }
 
 void loop() {
   M5Cardputer.update();
+  pollLauncherLine();
   ble.Maintain();
   uiPoll(ble);
 

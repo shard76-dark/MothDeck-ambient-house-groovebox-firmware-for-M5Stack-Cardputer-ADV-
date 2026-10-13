@@ -9,7 +9,8 @@
 // payload, and Just Works bonding as MothDeck. The device name is MothDiag.
 
 static const char *const kMothDiagName = "MothDiag";
-static const char *const kMothDiagVersion = "0.1.1";
+static const char *const kMothDiagVersion = "0.1.3";
+static const char kMothDiagImage[] = "MOTHIMG:0.1.3";
 
 struct DiagLinkInfo {
   bool connected;
@@ -23,6 +24,13 @@ struct DiagLinkInfo {
   bool hasInterval;
   bool hasMtu;
   bool hasRssi;
+  uint16_t askedMin;
+  uint16_t askedMax;
+  uint16_t askedTimeout;
+  bool hasAsk;
+  uint8_t updateStatus;
+  bool hasStatus;
+  char source[12];
 };
 
 enum DiagLinkKind : uint8_t {
@@ -45,5 +53,10 @@ uint32_t diagBleQueueDrops();
 void diagBleRefreshRssi();
 const DiagLinkInfo *diagBleInfo();
 const char *diagBleFailReason();
+void diagBleSetInterval(uint16_t minU, uint16_t maxU, uint32_t delayMs, bool sendNow);
+void diagBleIntervalOff();
+void diagBleRequestGap();
+const char *diagBleProfileName();
+bool diagBleStoreProfile(const char *name);
 
 #endif

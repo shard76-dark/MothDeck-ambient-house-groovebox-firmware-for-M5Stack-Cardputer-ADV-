@@ -1,3 +1,4 @@
+#include "diag_mtc.h"
 #include "diag_selftest.h"
 
 #include <stdio.h>
@@ -300,8 +301,35 @@ int diagSelfTest(void (*emit)(const char *line, void *ctx), void *ctx) {
   emitLine(emit, ctx, "clock_with_notes", clockOk, "clock interleaved with notes");
   failed += clockOk ? 0 : 1;
 
+  diagStateClear(&dstate);
+  const uint8_t stamped[] = {0x80, 0x80, 0xF8, 0x90, 0xF8};
+  diagParse(stamped, (int)sizeof(stamped), &dstate, &pkt);
+  bool tsOk = pkt.hdr == 0x80 && pkt.tsHi == 0 && pkt.tsLoN == 2 && pkt.tsLo[0] == 0x00 && pkt.tsLo[1] == 0x10;
+  emitLine(emit, ctx, "timestamp_bytes", tsOk, "timestamp high and low");
+  failed += tsOk ? 0 : 1;
+
+  DiagMtcAsm asmState;
+  DiagMtcEvent ev;
+  diagMtcReset(&asmState);
+  const uint8_t quarters[] = {0x04, 0x10, 0x23, 0x30, 0x42, 0x50, 0x61, 0x72};
+  bool mtcOk = true;
+  for (int i = 0; i < 8; i++) {
+    if (!diagMtcQuarter(&asmState, quarters[i], (uint64_t)(i + 1) * 1000ull, &ev)) {
+      mtcOk = false;
+    }
+  }
+  if (!ev.complete || ev.hours != 1 || ev.minutes != 2 || ev.seconds != 3 || ev.frames != 4 || ev.rateCode != 1 || !ev.hasGap) {
+    mtcOk = false;
+  }
+  const uint8_t full[] = {0x7F, 0x00, 0x01, 0x01, (uint8_t)((1 << 5) | 1), 2, 3, 4};
+  if (!diagMtcFull(full, (int)sizeof(full), 20000, &asmState, &ev) || ev.hours != 1 || ev.minutes != 2 || ev.seconds != 3 || ev.frames != 4 || ev.rateCode != 1) {
+    mtcOk = false;
+  }
+  emitLine(emit, ctx, "mtc", mtcOk, "quarter frame and full frame");
+  failed += mtcOk ? 0 : 1;
+
   char summary[96];
-  snprintf(summary, sizeof(summary), "{\"t\":\"selftest\",\"ok\":%s,\"passed\":%d,\"failed\":%d}", failed ? "false" : "true", 5 - failed, failed);
+  snprintf(summary, sizeof(summary), "{\"t\":\"selftest\",\"ok\":%s,\"passed\":%d,\"failed\":%d}", failed ? "false" : "true", 7 - failed, failed);
   if (emit) {
     emit(summary, ctx);
   }

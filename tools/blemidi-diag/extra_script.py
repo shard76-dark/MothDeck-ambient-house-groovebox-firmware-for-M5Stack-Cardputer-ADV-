@@ -8,5 +8,5 @@ env.Append(CPPPATH=[os.path.join(root, "include")])
 env.BuildSources(
     os.path.join("$BUILD_DIR", "mothdeck"),
     os.path.join(root, "src"),
-    src_filter="+<MidiProtocol.cpp> +<BleAdvert.cpp>",
+    src_filter="+<MidiProtocol.cpp> +<BleAdvert.cpp> +<MothBootJump.cpp>",
 )

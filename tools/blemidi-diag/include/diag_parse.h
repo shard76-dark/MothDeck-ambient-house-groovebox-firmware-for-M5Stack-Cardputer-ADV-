@@ -34,9 +34,15 @@ struct DiagMsg {
   uint16_t bleTs;
 };
 
+static const int kDiagTsLoMax = 24;
+
 struct DiagPacket {
   // Timestamp after the header and the first timestamp byte.
   uint16_t bleTs;
+  uint8_t hdr;
+  uint8_t tsHi;
+  uint8_t tsLo[kDiagTsLoMax];
+  int tsLoN;
   int errors;
   bool rejected;
   int count;
