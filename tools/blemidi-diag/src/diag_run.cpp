@@ -3,6 +3,7 @@
 #include "diag_ble.h"
 #include "diag_ui.h"
 
+#include <Arduino.h>
 #include <stdio.h>
 
 struct Step {
@@ -38,6 +39,18 @@ static void showStep(int percent) {
   diagUiTest(gLabel, step->hint, percent);
 }
 
+static void logStep(const char *phase) {
+  const Step *step = &kSteps[gIndex];
+  Serial.printf(
+    "{\"t\":\"test\",\"step\":%d,\"steps\":%d,\"name\":\"%s\",\"phase\":\"%s\",\"min\":%u,\"max\":%u}\n",
+    gIndex + 1,
+    kStepCount,
+    step->name,
+    phase ? phase : "",
+    (unsigned)step->minU,
+    (unsigned)step->maxU);
+}
+
 static void enterStep(uint32_t nowMs) {
   const Step *step = &kSteps[gIndex];
   if (step->changeInterval) {
@@ -46,11 +59,13 @@ static void enterStep(uint32_t nowMs) {
   if (step->waitGo) {
     gWait = true;
     showStep(-1);
+    logStep("wait");
     return;
   }
   gWait = false;
   gStartMs = nowMs;
   showStep(0);
+  logStep("run");
 }
 
 void diagRunStart() {
@@ -59,12 +74,20 @@ void diagRunStart() {
   enterStep(0);
 }
 
-void diagRunGo() {
-  if (!gActive || !gWait) {
-    return;
+bool diagRunGo() {
+  if (!gActive) {
+    diagRunStart();
+  }
+  if (!gActive) {
+    return false;
+  }
+  if (!gWait) {
+    return true;
   }
   gWait = false;
   gStartMs = 0;
+  logStep("run");
+  return true;
 }
 
 void diagRunStop() {
@@ -102,6 +125,7 @@ void diagRunPoll(uint32_t nowMs) {
   if (gIndex >= kStepCount) {
     gActive = false;
     diagUiTest("Done", "", 100);
+    Serial.println("{\"t\":\"test\",\"phase\":\"done\"}");
     return;
   }
   enterStep(nowMs);

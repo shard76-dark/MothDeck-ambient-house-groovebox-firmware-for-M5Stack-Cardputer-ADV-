@@ -20,7 +20,10 @@ static DiagMeter meter;
 static DiagState diagState;
 static MidiRunningState midiState;
 static bool verbose = true;
-static char bpmText[12] = "--";
+static char midiText[12] = "--";
+static char arrText[12] = "--";
+static char clkText[12] = "--";
+static char mtcText[12] = "--";
 static char lineBuf[8192];
 static DiagMtcAsm mtc;
 static char uiHint[48] = "Press Play on MPC";
@@ -162,11 +165,22 @@ static Js jsMake() {
   return j;
 }
 
-static void emitLine(Js *j) {
+static void emitLine(Js *j, bool drop) {
   jsEnd(j);
-  if (!j->overflow && j->n > 2 && j->b[j->n - 1] == '}') {
-    Serial.println(j->b);
+  if (j->overflow || j->n < 3 || j->b[j->n - 1] != '}') {
+    return;
   }
+  (void)drop;
+  // Leave the line out when the USB buffer is short. A stalled port must
+  // not sit inside println, and a partial line is not useful either.
+  if (Serial.availableForWrite() < (int)j->n + 2) {
+    return;
+  }
+  Serial.println(j->b);
+}
+
+static void emitLine(Js *j) {
+  emitLine(j, false);
 }
 
 static void fmtTenths(char *dst, size_t n, bool has, double v) {
@@ -187,7 +201,7 @@ static void fmtTenths(char *dst, size_t n, bool has, double v) {
 static void refreshScreen() {
   const DiagLinkInfo *info = diagBleInfo();
   diagUiLink(info && info->connected);
-  diagUiBpm(bpmText);
+  diagUiRates(midiText, arrText, clkText, mtcText);
   if (!diagRunActive()) {
     diagUiTest(uiTest, uiHint, uiPercent);
   }
@@ -201,13 +215,15 @@ static void emitSelf(const char *line, void *ctx) {
 }
 
 static void emitLink(const DiagLinkEvent &ev, uint64_t us) {
+  DiagLinkInfo info = ev.info;
   const char *name = "link";
   if (ev.kind == DIAG_LINK_CONNECT) {
     name = "connect";
   } else if (ev.kind == DIAG_LINK_DISCONNECT) {
     name = "disconnect";
+  } else if (info.source[0] && strcmp(info.source, "ask") == 0) {
+    name = "interval";
   }
-  DiagLinkInfo info = ev.info;
   diagBleRefreshRssi();
   const DiagLinkInfo *live = diagBleInfo();
   if (live && live->hasRssi && (ev.kind == DIAG_LINK_CONNECT || ev.kind == DIAG_LINK_UPDATE)) {
@@ -279,7 +295,7 @@ static void emitPacket(const uint8_t *raw, int len, uint64_t us, const DiagPacke
   jsAdd(&j, "]");
   jsI32(&j, "n", pkt.count);
   jsHex(&j, "hex", raw, len);
-  emitLine(&j);
+  emitLine(&j, true);
 }
 
 static void emitMidi(const DiagPacket &pkt, const DiagMsg &msg, uint64_t us) {
@@ -318,7 +334,7 @@ static void emitMidi(const DiagPacket &pkt, const DiagMsg &msg, uint64_t us) {
   }
   jsBool(&j, "running", msg.running);
   jsI32(&j, "ble_ts", msg.bleTs);
-  emitLine(&j);
+  emitLine(&j, true);
 }
 
 static void emitStats(const DiagWindow &w, uint64_t us) {
@@ -594,7 +610,10 @@ static void handleCommand(char *line) {
     diagStateClear(&diagState);
     memset(&midiState, 0, sizeof(midiState));
     diagMtcReset(&mtc);
-    snprintf(bpmText, sizeof(bpmText), "--");
+    snprintf(midiText, sizeof(midiText), "--");
+    snprintf(arrText, sizeof(arrText), "--");
+    snprintf(clkText, sizeof(clkText), "--");
+    snprintf(mtcText, sizeof(mtcText), "--");
     Js j = jsMake();
     jsBegin(&j);
     jsStr(&j, "t", "reset");
@@ -655,14 +674,13 @@ static void handleCommand(char *line) {
     return;
   }
   if (strcmp(line, "go") == 0) {
-    diagRunGo();
-    if (!diagRunActive()) {
-      progressStart = millis();
-    }
+    bool ok = diagRunGo();
     Js j = jsMake();
     jsBegin(&j);
     jsStr(&j, "t", "go");
-    jsBool(&j, "ok", true);
+    jsBool(&j, "ok", ok);
+    jsBool(&j, "active", diagRunActive());
+    jsBool(&j, "wait", diagRunWaiting());
     emitLine(&j);
     return;
   }
@@ -862,6 +880,7 @@ static void pollSerial() {
 
 void setup() {
   Serial.begin(115200);
+  Serial.setTxTimeoutMs(0);
   mothBootGuard();
   memset(&midiState, 0, sizeof(midiState));
   diagStateClear(&diagState);
@@ -922,14 +941,14 @@ void loop() {
 
   DiagLinkEvent ev;
   int links = 0;
-  while (links < 4 && diagBlePopLink(&ev)) {
+  while (links < 8 && diagBlePopLink(&ev)) {
     emitLink(ev, nowUs);
     links++;
   }
 
   uint8_t raw[256];
   int packets = 0;
-  while (packets < 4) {
+  while (packets < 16) {
     uint64_t us = 0;
     int n = diagBlePopPacket(raw, (int)sizeof(raw), &us);
     if (n <= 0) {
@@ -941,7 +960,14 @@ void loop() {
 
   DiagWindow window;
   if (meter.takeWindow(nowUs, &window)) {
-    fmtTenths(bpmText, sizeof(bpmText), window.hasBpmArrival, window.bpmArrival);
+    fmtTenths(midiText, sizeof(midiText), window.hasBpmMidi, window.bpmMidi);
+    fmtTenths(arrText, sizeof(arrText), window.hasBpmArrival, window.bpmArrival);
+    uint32_t span = window.elapsedMs ? window.elapsedMs : window.windowMs;
+    if (span == 0) {
+      span = 1;
+    }
+    snprintf(clkText, sizeof(clkText), "%u/s", (unsigned)((uint32_t)window.clocks * 1000u / span));
+    snprintf(mtcText, sizeof(mtcText), "%u/s", (unsigned)(mtc.qfWindow * 1000u / span));
     emitStats(window, nowUs);
   }
   diagRunPoll(nowMs);

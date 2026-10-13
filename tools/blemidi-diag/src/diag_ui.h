@@ -3,7 +3,7 @@
 
 void diagUiBegin();
 void diagUiLink(bool connected);
-void diagUiBpm(const char *bpm);
+void diagUiRates(const char *midiBpm, const char *arrivalBpm, const char *clockRate, const char *mtcRate);
 void diagUiTest(const char *testName, const char *hint, int percent);
 
 #endif

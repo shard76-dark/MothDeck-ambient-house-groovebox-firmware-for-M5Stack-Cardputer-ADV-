@@ -1,3 +1,21 @@
+## MothDiag 0.1.3 (2026-10-13)
+
+Flash `releases/mothdiag-0.1.3.bin` (821,200 bytes, magic `E9`, chip `0x0009`, SHA-256 `2bfb2859a237dbdf8815bf4c8602cddcaf0f819c6a45b36bd18ce197baf9eb4e`). The same bytes are `releases/mothdiag-cardputer-adv.bin`. Version on the screen is 0.1.3. Host tests passed. This image has not been tried on a Cardputer. Static RAM is 67380/327680.
+
+The screen shows MIDI BPM and arrival BPM in large type, plus the clock rate and the MTC quarter-frame rate. Each line redraws only when its text changes. The words on screen stay plain. `run` walks the interval steps and prints a `test` line for each one. `go` starts that walk when no run is active, and it releases a step that is waiting. An interval request is logged as `interval` even when the negotiated interval stays the same. Verbose `pkt` and `midi` lines are dropped when the USB buffer is full, so a stalled port does not fill the MIDI queue.
+
+## 1.2.9 (2026-10-13)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,233,936 bytes, magic `E9`, chip `0x0009`, SHA-256 `f3542da19084462aeb2f7358f51c1c65adb28d67e2737c930346d6c01e16d509`). The same bytes are `releases/mothdeck-1.2.9.bin`. Version on the Settings screen is 1.2.9. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 172516/327680.
+
+Settings adds Sync: Internal, External, or Transport. External follows MIDI start, stop, and song position and scales a thinned BLE clock against the current BPM. Transport follows start, stop, and position and keeps the deck BPM. Internal keeps the deck clock. Quarter-frame MTC can run the transport, and it seeks when the spacing matches the rate in the message.
+
+On a board that already has MothBoot, install this application image into an OTA slot. `mothdeck-cardputer-adv-full.bin` is the older layout (1,296,352 bytes, SHA-256 `a6ac1dba89fce77a2017f45a256b3fef5332c8e6b5d258c7a337bbce805fbc68`) and is not the 1.2.9 image.
+
+This image includes the 1.2.2 through 1.2.8 behavior. The LilyGO TTGO T8 port is a different binary, pre-release [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4) on the `ttgo-t8` branch. It is not in this folder.
+
+The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
+
 ## MothDiag 0.1.1 (2026-10-13)
 
 Flash `releases/mothdiag-cardputer-adv.bin` (808,688 bytes, magic `E9`, chip `0x0009`, SHA-256 `360959a33821222a9efb818a22d0193e9e6cf8eefeaa818fd2de799805ea7162`). Version on the screen is 0.1.1. Host tests passed. This image has not been tried on a Cardputer. Static RAM is 59852/327680. Supersedes 0.1.0.

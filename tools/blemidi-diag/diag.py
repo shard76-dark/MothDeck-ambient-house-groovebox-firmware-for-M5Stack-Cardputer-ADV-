@@ -277,7 +277,16 @@ def find_port(explicit: Optional[str], baud: int):
     errors = []
     for device in candidates:
         try:
-            handle = serial.Serial(device, baud, timeout=0.2, write_timeout=1)
+            handle = serial.Serial()
+            handle.port = device
+            handle.baudrate = baud
+            handle.timeout = 0.2
+            handle.write_timeout = 1
+            handle.dtr = False
+            handle.rts = False
+            handle.open()
+            handle.dtr = False
+            handle.rts = False
         except serial.SerialException as exc:
             errors.append(f"{device}: {exc}")
             continue

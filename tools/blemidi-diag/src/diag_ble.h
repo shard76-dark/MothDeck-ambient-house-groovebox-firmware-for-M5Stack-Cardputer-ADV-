@@ -9,8 +9,8 @@
 // payload, and Just Works bonding as MothDeck. The device name is MothDiag.
 
 static const char *const kMothDiagName = "MothDiag";
-static const char *const kMothDiagVersion = "0.1.2";
-static const char kMothDiagImage[] = "MOTHIMG:0.1.2";
+static const char *const kMothDiagVersion = "0.1.3";
+static const char kMothDiagImage[] = "MOTHIMG:0.1.3";
 
 struct DiagLinkInfo {
   bool connected;

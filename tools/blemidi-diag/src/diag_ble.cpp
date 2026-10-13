@@ -22,7 +22,7 @@ static const char *kMidiCharUuid = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
 static const uint16_t kAdvIntervalMin = 0x20;
 static const uint16_t kAdvIntervalMax = 0x40;
 static const uint32_t kBleMinLargest = 36 * 1024;
-static const int kPktSlots = 24;
+static const int kPktSlots = 48;
 static const int kPktCap = 256;
 static const int kLinkSlots = 8;
 
@@ -169,6 +169,9 @@ static void requestShortInterval(uint16_t handle) {
   }
   // 6..12 is 7.5..15 ms. Timeout is in 10 ms units.
   bool ok = midiServer->requestConnParams(handle, askMin, askMax, askLatency, askTimeout);
+  strncpy(linkInfo.source, "ask", sizeof(linkInfo.source) - 1);
+  linkInfo.hasStatus = false;
+  pushLink(DIAG_LINK_UPDATE);
   if (ok) {
     connParamsPending = false;
     return;
@@ -245,14 +248,13 @@ class DiagServerCallbacks : public BLEServerCallbacks {
 
   void onConnParamsUpdate(uint16_t conn_handle, uint16_t interval, uint16_t latency, uint16_t timeout, uint8_t status) override {
     (void)conn_handle;
-    bool changed = interval != 0 && (!linkInfo.hasInterval || linkInfo.interval != interval || linkInfo.latency != latency || linkInfo.timeout != timeout);
     if (interval != 0) {
       rememberInterval(interval, latency, timeout);
     }
     linkInfo.updateStatus = status;
     linkInfo.hasStatus = true;
     strncpy(linkInfo.source, "update", sizeof(linkInfo.source) - 1);
-    if (changed && connected) {
+    if (connected) {
       pushLink(DIAG_LINK_UPDATE);
     }
     // The first update is often the central's own interval, with status 0.

@@ -14,6 +14,7 @@ static const uint16_t kMuted = 0x9CD3;
 struct Line {
   int x, y, w, h;
   uint16_t color;
+  uint8_t size;
   char text[48];
   bool drawn;
 };
@@ -27,7 +28,9 @@ struct Bar {
 static Line gLink;
 static Line gTest;
 static Line gHint;
-static Line gBpm;
+static Line gMidi;
+static Line gArrival;
+static Line gRates;
 static Bar gBar;
 static bool gReady = false;
 
@@ -40,7 +43,7 @@ static void drawLine(Line *line, const char *text, uint16_t color) {
   }
   auto &d = M5Cardputer.Display;
   d.fillRect(line->x, line->y, line->w, line->h, kBg);
-  d.setTextSize(1);
+  d.setTextSize(line->size ? line->size : 1);
   d.setTextColor(color);
   d.setCursor(line->x, line->y + 1);
   d.print(text);
@@ -112,14 +115,16 @@ void diagUiBegin() {
   M5Cardputer.Display.setTextColor(kMuted);
   M5Cardputer.Display.setCursor(168, 10);
   M5Cardputer.Display.print(kMothDiagVersion);
-  gLink = {8, 28, 224, 14, kInk, "", false};
-  gTest = {8, 44, 224, 14, kInk, "", false};
-  gBar = {8, 62, 224, 12, -1, false};
-  gBpm = {8, 78, 224, 14, kAmber, "", false};
-  gHint = {8, 100, 224, 28, kMuted, "", false};
+  gLink = {4, 22, 232, 12, kInk, 1, "", false};
+  gTest = {4, 34, 232, 12, kInk, 1, "", false};
+  gBar = {4, 48, 232, 10, -1, false};
+  gMidi = {4, 60, 232, 18, kAmber, 2, "", false};
+  gArrival = {4, 78, 232, 18, kAmber, 2, "", false};
+  gRates = {4, 98, 232, 12, kInk, 1, "", false};
+  gHint = {4, 112, 232, 22, kMuted, 1, "", false};
   gReady = true;
   diagUiLink(false);
-  diagUiBpm("--");
+  diagUiRates("--", "--", "--", "--");
   diagUiTest("Idle", "Press Play on MPC", -1);
 }
 
@@ -130,13 +135,19 @@ void diagUiLink(bool connected) {
   drawLine(&gLink, connected ? "Connected" : "Waiting", connected ? kAmber : kMuted);
 }
 
-void diagUiBpm(const char *bpm) {
+void diagUiRates(const char *midiBpm, const char *arrivalBpm, const char *clockRate, const char *mtcRate) {
   if (!gReady) {
     return;
   }
-  char bpmLine[32];
-  snprintf(bpmLine, sizeof(bpmLine), "BPM %s", bpm && bpm[0] ? bpm : "--");
-  drawLine(&gBpm, bpmLine, kAmber);
+  char midiLine[32];
+  char arrivalLine[32];
+  char rateLine[40];
+  snprintf(midiLine, sizeof(midiLine), "MIDI %s", midiBpm && midiBpm[0] ? midiBpm : "--");
+  snprintf(arrivalLine, sizeof(arrivalLine), "Arr  %s", arrivalBpm && arrivalBpm[0] ? arrivalBpm : "--");
+  snprintf(rateLine, sizeof(rateLine), "Clk %s  MTC %s", clockRate && clockRate[0] ? clockRate : "--", mtcRate && mtcRate[0] ? mtcRate : "--");
+  drawLine(&gMidi, midiLine, kAmber);
+  drawLine(&gArrival, arrivalLine, kAmber);
+  drawLine(&gRates, rateLine, kInk);
 }
 
 void diagUiTest(const char *testName, const char *hint, int percent) {

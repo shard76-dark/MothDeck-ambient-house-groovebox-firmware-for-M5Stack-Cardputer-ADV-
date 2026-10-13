@@ -178,6 +178,7 @@ void setup() {
   showSplash();
   audioBindMidi(&ble);
   audioStart();
+  audioCommand('S', uiSyncMode());
   uiBegin();
   uiDraw(ble);
   bootExitChord();

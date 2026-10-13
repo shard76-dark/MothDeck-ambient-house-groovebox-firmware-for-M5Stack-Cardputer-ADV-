@@ -5,7 +5,7 @@
 #include <stdbool.h>
 
 void diagRunStart();
-void diagRunGo();
+bool diagRunGo();
 void diagRunStop();
 void diagRunPoll(uint32_t nowMs);
 bool diagRunActive();
