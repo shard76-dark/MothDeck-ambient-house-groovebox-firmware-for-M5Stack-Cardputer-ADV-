@@ -97,8 +97,8 @@ class MidiCharCallbacks : public BLECharacteristicCallbacks {
     }
     for (int i = 0; i < parsed.count; i++) {
       countParsed(parsed.events[i]);
-      midiRing.Push(parsed.events[i]);
     }
+    midiRing.PushParsed(parsed.events, parsed.count);
   }
 };
 
@@ -109,7 +109,7 @@ static void requestShortInterval(BLEServer *server, uint16_t handle) {
   // Interval units are 1.25 ms. 6..12 is 7.5..15 ms. Timeout is in 10 ms
   // units, and it has to be longer than the interval.
   bool ok = server->requestConnParams(handle, 6, 12, 0, 500);
-  Serial.printf("BLE: conn interval request 7.5-15ms handle=%u ok=%d try=%u\n", handle, ok ? 1 : 0, connParamTries);
+  DEV_LOGF("BLE: conn interval request 7.5-15ms handle=%u ok=%d try=%u\n", handle, ok ? 1 : 0, connParamTries);
   if (ok) {
     connParamsPending = false;
     return;
@@ -119,7 +119,7 @@ static void requestShortInterval(BLEServer *server, uint16_t handle) {
     connParamDue = millis() + 250;
   } else {
     connParamsPending = false;
-    Serial.println("BLE: conn interval request failed");
+    DEV_LOG("BLE: conn interval request failed");
   }
 }
 
@@ -176,7 +176,7 @@ class MidiServerCallbacks : public BLEServerCallbacks {
 
   void onConnParamsUpdate(uint16_t conn_handle, uint16_t interval, uint16_t latency, uint16_t timeout, uint8_t status) override {
     linkInterval = interval;
-    Serial.printf(
+    DEV_LOGF(
       "BLE: conn interval %u (%.1f ms) latency=%u timeout=%u status=%u\n",
       interval,
       (double)interval * 1.25,

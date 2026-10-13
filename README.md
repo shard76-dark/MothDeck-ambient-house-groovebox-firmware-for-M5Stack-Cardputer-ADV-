@@ -8,28 +8,35 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.2.5
-- SHA-256: `7d51c26422d82fc3fb5c5aa269a0f65338749e0f8db30d84bd0e00027909e867`
-- Size: 1,157,024 bytes (app image, magic `E9`)
-- 1.2.5 releases stuck live notes on Stop and on a dropped link, keeps note-offs, and resumes Continue from the song position. Details are in [What 1.2.5 includes](#what-125-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
+- Version 1.2.6
+- SHA-256: `2987446d5dc03265aee849aad1fdb5b696137812b7e85f35b008973ab0796e3a`
+- Size: 1,157,632 bytes (app image, magic `E9`)
+- 1.2.6 counts MIDI clocks instead of queueing every tick, and it keeps Start, Continue, Stop, and Song Position in order. Details are in [What 1.2.6 includes](#what-126-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
 
 The public source and releases live in this repository. Flash the application image with [releases/INSTALL.md](releases/INSTALL.md). The same overview, with HTML meta tags for search and link previews, is [docs/index.html](docs/index.html).
 
+## What 1.2.6 includes
+
+1.2.6 is the Cardputer image to flash. It includes the 1.2.2 through 1.2.5 behavior. This image has not been tried on a Cardputer. Use earphones.
+
+- **Clock counter.** MIDI clocks are counted instead of taking a queue slot each. A burst of ticks, including a 200 BPM run, still advances the pattern, and the notes in that packet stay behind the ticks that preceded them. Start, Continue, Stop, and Song Position stay in the queue in that order. Start clears ticks that have not been applied yet, and ticks that sit before Start in the same packet are not counted. Clocks between Song Position and Continue still count.
+- **Quiet connect.** The production build does not print from the connect and interval callbacks. Pairing, the advertising packet, and the 7.5–15 ms request are unchanged. The dev build still prints those lines.
+
 ## What 1.2.5 includes
 
-1.2.5 is the Cardputer image to flash. It includes the 1.2.2, 1.2.3, and 1.2.4 behavior. This image has not been tried on a Cardputer. Use earphones.
+1.2.5 is included in the 1.2.6 image. It has not been tried on a Cardputer on its own. Use earphones.
 
 - **Stop and disconnect.** MIDI Stop, and a Bluetooth link that drops, release live MIDI notes. The pattern, loops, and sampler keep going. CC 120 and CC 123 do the same for the channel that sent them.
-- **Note-off.** A note-off releases the matching note and channel on whichever track sounded it, and it does not change the selected track. Clocks, then controllers, then note-ons give up queue slots first. A note-off or a transport message is kept while any of those can move.
+- **Note-off.** A note-off releases the matching note and channel on whichever track sounded it, and it does not change the selected track. Controllers, then note-ons, give up queue slots first. A note-off or a transport message is kept while any of those can move.
 - **Continue.** Continue stays on the current step. Clocks that arrived after a Song Position still count, so the step does not slip by a tick. An external clock still reads 40–200 BPM, and a faster clock clamps at 200.
 - **Status.** The Settings page no longer prints a counter line. The MIDI page counts packets, messages, clocks, and notes. Fn+D on that page opens a status view with the shed counts, how long the MIDI drain took, and the step length of the safety release. Backspace closes it. A tonal note with no note-off releases after that many steps (192 by default, about 24 seconds at 120 BPM). Held arp is not timed.
 
 ## What 1.2.4 includes
 
-1.2.4 is included in the 1.2.5 image. It has not been tried on a Cardputer on its own. Use earphones.
+1.2.4 is included in the 1.2.6 image. It has not been tried on a Cardputer on its own. Use earphones.
 
 - **1.2.2.** NimBLE is reserved at boot, before the loop windows. Turning BLE on starts advertising and does not allocate, so it does not fail for lack of a free block. Unload BLE skips the stack on the next boot and frees that block for a large loop library. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes only play while Rec is off. They are not written into the pattern. Space turns Rec on, and then they record at the playhead. MIDI Start and Continue do not arm Rec. A piano-roll key while the transport is running follows that same rule.
@@ -331,7 +338,7 @@ Rows: speaker, brightness, BLE name, BLE, Unload BLE, battery, radio, card, bars
 
 ![MIDI mode notice](docs/screenshots/screen-ble-loops-warning-2x.png)
 
-The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.5 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.5`. There is no counter line under the rows.
+The two Settings pictures are the 1.2.0 screen. The version line says `v1.2.0`, and the row under Battery says Free RAM. On 1.2.6 that row says Radio (`off`, `adv`, or `conn`) and the version line says `v1.2.6`. There is no counter line under the rows.
 
 ![Settings, BLE row](docs/screenshots/screen-settings-ble-2x.png)
 
@@ -351,11 +358,11 @@ On an MPC Live II, open Menu, then Preferences, then Bluetooth. Turn BLE on in S
 
 Advertised as a BLE MIDI peripheral on legacy connectable advertising. The name `Mothdeck` and the MIDI service UUID are both in the primary advertising packet, which is what an MPC lists. A name longer than 8 characters is shortened there; the full name is in the scan response and on the MIDI page. The stack is NimBLE, and its controller memory is internal RAM, reserved at boot before the loop windows. The Stamp-S3A has no PSRAM. Audio starts before the screen sprite. Advertising stays off until Settings turns it on, and that switch does not allocate. Unload BLE frees the stack's block on the next boot so a large loop library can use it. The sprite is rgb332 (32,400 bytes) and is expanded to the panel eight rows at a time, so the blit does not allocate a second full frame. Pairing is Just Works with bonding and no passkey, the same security 1.1.0 used. The host starts pairing. MIDI bytes are not gated on encryption, so a host that never finishes pairing can still connect.
 
-Incoming BLE MIDI is parsed a whole packet at a time. One packet may hold several notes and interleaved `0xF8` clocks; Note On with velocity 0 is Note Off. Channels 1–4 play the four tracks, and any other channel plays the track that is already selected. While Rec is off those notes only play, and they are not written into the pattern. Space arms Rec, and then they record at the playhead. MIDI Start, Continue, Stop, and Song Position move the transport and do not arm Rec. Clock is 24 per quarter note, and a pattern step is a 16th, so six clocks advance one step. Start puts the current pattern on bar 1 step 1 and plays that step. Continue resumes on the current step and keeps the clock phase, including clocks that arrived after Song Position. Song Position is a sixteenth-note index taken modulo the pattern length, and it does not switch patterns. The tempo shown on screen is smoothed over one beat and an external clock clamps at 200. Every clock in the packet counts, including several that share one timestamp. A track sounds up to four MIDI notes at once. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel, on the track that sounded it, and does not change the selected track. Notes in one packet each get a voice. When the queue is under pressure, clocks are dropped first, then controllers, then note-ons. Note-offs and transport stay. Stop, and a link that drops, release live notes and leave the pattern, loops, and sampler running. A tonal note with no note-off releases after a long run of steps. Space still starts and stops the internal clock.
+Incoming BLE MIDI is parsed a whole packet at a time. One packet may hold several notes and interleaved `0xF8` clocks; Note On with velocity 0 is Note Off. Channels 1–4 play the four tracks, and any other channel plays the track that is already selected. While Rec is off those notes only play, and they are not written into the pattern. Space arms Rec, and then they record at the playhead. MIDI Start, Continue, Stop, and Song Position move the transport and do not arm Rec. Clock is 24 per quarter note, and a pattern step is a 16th, so six clocks advance one step. Start puts the current pattern on bar 1 step 1 and plays that step. Continue resumes on the current step and keeps the clock phase, including clocks that arrived after Song Position. Song Position is a sixteenth-note index taken modulo the pattern length, and it does not switch patterns. The tempo shown on screen is smoothed over one beat and an external clock clamps at 200. Every clock in the packet counts, including several that share one timestamp. Those clocks are a counter, not a slot each, so a burst does not push the notes out of the queue. Ticks before Start in the same packet are not counted. A track sounds up to four MIDI notes at once. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel, on the track that sounded it, and does not change the selected track. Notes in one packet each get a voice. When the queue is under pressure, controllers are dropped before note-ons. Note-offs and transport stay. Stop, and a link that drops, release live notes and leave the pattern, loops, and sampler running. A tonal note with no note-off releases after a long run of steps. Space still starts and stops the internal clock.
 
 MIDI has no message for the other machine's sequence length. Auto-length watches for Start, or a Song Position of 0, after a whole number of bars of clocks (one bar is 96 clocks, and the count has to land within half a beat of that). It rounds to 1–8 bars and adopts that length. The MPC Live II manual documents MIDI Clock, Start, Stop, and Continue. It does not document a message at the sequence loop point, and in practice the Live II keeps the clock running through the loop and does not send Start or Song Position there. When nothing comes back to zero, auto-length leaves the length set on the device. Phase still follows the clock from the last Start: a 1-bar pattern stays locked to a longer MPC sequence, and a length that does not divide the MPC sequence drifts until the next Start or Song Position. Stop, Space, and a Song Position that is not zero throw away the measurement so the next Start does not resize from a partial pass.
 
-After a connection has been up for 250 ms the link asks for a 7.5–15 ms interval. Serial prints the interval the central accepted, and the MIDI page shows it as `link 15.0ms` (or whatever was negotiated). The characteristic accepts write and write-without-response. While connected, the audio task drains MIDI every 32 samples and renders 128-sample blocks with one buffer queued, instead of waiting out two 256-sample blocks. The MIDI page counts packets, messages, clocks, and notes. Fn+D on that page opens status: shed clocks, note-ons, and note-offs, a full ring, parser misses, safety releases, late speaker refills, play retries, the longest MIDI drain, free RAM, and the safety step length. The screen redraws when that picture changes. Settings does not print a counter line. Its Radio row says whether BLE is off, advertising, or connected. Change the BLE name on Settings. The name is stored in NVS. The first boot of 1.1.2 stores `Mothdeck`. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
+After a connection has been up for 250 ms the link asks for a 7.5–15 ms interval. The production build does not print that exchange. The dev build does, and the MIDI page shows it as `link 15.0ms` (or whatever was negotiated). The characteristic accepts write and write-without-response. While connected, the audio task drains MIDI every 32 samples and renders 128-sample blocks with one buffer queued, instead of waiting out two 256-sample blocks. The MIDI page counts packets, messages, clocks, and notes. Fn+D on that page opens status: shed clocks, note-ons, and note-offs, a full ring, parser misses, safety releases, late speaker refills, play retries, the longest MIDI drain, free RAM, and the safety step length. The screen redraws when that picture changes. Settings does not print a counter line. Its Radio row says whether BLE is off, advertising, or connected. Change the BLE name on Settings. The name is stored in NVS. The first boot of 1.1.2 stores `Mothdeck`. Packets are Apple-style timestamped MIDI, the same codec as MothOS.
 
 | Message | Map |
 | --- | --- |
@@ -365,7 +372,7 @@ After a connection has been up for 250 ms the link asks for a 7.5–15 ms interv
 | CC 1 mod | Low pass |
 | CC 7 / CC 39 volume | 14-bit, mapped to voice volume 0–8 |
 | Pitch bend | Per channel, ± the voice pitch ratio |
-| Clock `0xF8` | 24 per quarter. Six clocks advance one 16th. Every clock in the packet counts. Tempo is smoothed over one beat |
+| Clock `0xF8` | 24 per quarter. Six clocks advance one 16th. Every clock in the packet counts, as a counter rather than a queued byte. Ticks before Start in that packet are not counted. Tempo is smoothed over one beat |
 | Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec. Learns a loop length only after a full run of clocks |
 | Continue `0xFB` | Resume external sync on the current step, keeping the clock phase. Does not arm Rec |
 | Stop `0xFC` | Stop, leave external sync, cancel auto-length, release live notes |

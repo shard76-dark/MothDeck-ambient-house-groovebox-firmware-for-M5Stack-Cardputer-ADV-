@@ -32,7 +32,14 @@ static void testOrder() {
   expect(out[0].number == 60 && out[1].number == 60, "both events keep the note");
 }
 
-static void testClockShed() {
+static int clockTicks(const MidiEvent &event) {
+  if (event.type != MIDI_MSG_CLOCK) {
+    return 0;
+  }
+  return event.value == 0 ? 1 : (int)event.value;
+}
+
+static void testClockCounter() {
   MidiRing ring;
   int kept = 0;
   for (int i = 0; i < 400; i++) {
@@ -40,13 +47,36 @@ static void testClockShed() {
       kept++;
     }
   }
-  int limit = MidiRing::kLen - 1 - MidiRing::kReserve;
-  expect(kept == limit, "clocks stop at the note reserve");
+  expect(kept == 400 && ring.PendingTicks() == 400, "a clock burst stays in the counter");
   MidiDrops drops;
   ring.CopyDrops(&drops);
-  expect(drops.clock == (uint32_t)(400 - kept) && drops.noteOff == 0, "shed clocks are counted on their own");
-  expect(ring.Push(ev(MIDI_MSG_NOTE_ON, 60)), "a note still enters after clocks are shed");
-  expect(ring.Push(ev(MIDI_MSG_NOTE_OFF, 60)), "a note-off still enters after clocks are shed");
+  expect(drops.clock == 0 && drops.noteOff == 0, "clocks are not shed to make room");
+  expect(ring.Push(ev(MIDI_MSG_NOTE_ON, 60)), "a note still enters after a clock burst");
+  expect(ring.PendingTicks() == 0, "the note takes the ticks that came before it");
+  expect(ring.Push(ev(MIDI_MSG_NOTE_OFF, 60)), "a note-off still enters after a clock burst");
+
+  int ticks = 0;
+  bool sawOn = false;
+  bool order = true;
+  MidiEvent out[8];
+  for (int guard = 0; guard < 20 && (ticks < 400 || !sawOn); guard++) {
+    int n = ring.Poll(out, 8);
+    if (n <= 0) {
+      break;
+    }
+    for (int i = 0; i < n; i++) {
+      int got = clockTicks(out[i]);
+      if (got > 0) {
+        if (sawOn) {
+          order = false;
+        }
+        ticks += got;
+      } else if (out[i].type == MIDI_MSG_NOTE_ON && out[i].number == 60) {
+        sawOn = true;
+      }
+    }
+  }
+  expect(ticks == 400 && sawOn && order, "the burst drains before the note");
 }
 
 static void testControllerShed() {
@@ -125,7 +155,7 @@ static void testBothRings() {
 
 int main() {
   testOrder();
-  testClockShed();
+  testClockCounter();
   testControllerShed();
   testNoteOffKept();
   testStopKept();

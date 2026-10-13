@@ -1,3 +1,4 @@
+#include "MidiRing.h"
 #include "Tracker.h"
 #include "InstrumentBank.h"
 #include "SongFile.h"
@@ -707,6 +708,121 @@ static void testSafetyHold() {
   expect(arp.SafetyReleases() == 0, "held arp is not timed out");
 }
 
+static bool feedClockPacketsRing(Tracker &tracker, int bpm, int total, int perPacket, bool ownStamp) {
+  MidiRunningState state;
+  std::memset(&state, 0, sizeof(state));
+  MidiRing ring;
+  int sent = 0;
+  bool kept = true;
+  while (sent < total) {
+    int batch = perPacket;
+    if (batch > total - sent) {
+      batch = total - sent;
+    }
+    uint8_t buf[96];
+    uint16_t ts0 = clockMillis(sent, bpm);
+    int n = 0;
+    buf[n++] = (uint8_t)(0x80 | ((ts0 >> 7) & 0x3F));
+    if (!ownStamp) {
+      uint8_t bits = (uint8_t)(ts0 & 0x7F);
+      if (bits >= 0x78) {
+        bits = 0x77;
+      }
+      buf[n++] = (uint8_t)(0x80 | bits);
+      for (int i = 0; i < batch; i++) {
+        buf[n++] = 0xF8;
+      }
+    } else {
+      for (int i = 0; i < batch; i++) {
+        n = pushClockByte(buf, n, clockMillis(sent + i, bpm));
+      }
+    }
+    MidiParseResult parsed;
+    int count = parseBleMidiPacket(buf, n, &state, &parsed);
+    if (count != batch || parsed.overflow != 0) {
+      kept = false;
+    }
+    ring.PushParsed(parsed.events, parsed.count);
+    MidiEvent out[16];
+    int ticks = 0;
+    for (int guard = 0; guard < 8; guard++) {
+      int got = ring.Poll(out, 16);
+      if (got <= 0) {
+        break;
+      }
+      for (int i = 0; i < got; i++) {
+        if (out[i].type == MIDI_MSG_CLOCK) {
+          ticks += out[i].value == 0 ? 1 : (int)out[i].value;
+        }
+        tracker.HandleMidi(out[i]);
+      }
+    }
+    if (ticks != batch) {
+      kept = false;
+    }
+    sent += batch;
+  }
+  return kept;
+}
+
+static void testRingClockTempo() {
+  Tracker shared;
+  transport(shared, MIDI_MSG_START, 0);
+  int head = shared.trackIndex;
+  bool kept = feedClockPacketsRing(shared, 120, 30, 3, false);
+  expect(kept, "shared-timestamp clocks pass through the counter");
+  expect(shared.trackIndex == head + 5, "counted clocks still move five 16ths");
+  int shown = shared.Bpm();
+  expect(shown >= 117 && shown <= 123, "shared-timestamp tempo survives the counter");
+
+  Tracker burst;
+  transport(burst, MIDI_MSG_START, 0);
+  head = burst.trackIndex;
+  kept = feedClockPacketsRing(burst, 200, 48, 6, true);
+  expect(kept, "a 200 BPM burst passes through the counter");
+  expect(burst.trackIndex == head + 8, "48 counted clocks move eight 16ths");
+  shown = burst.Bpm();
+  expect(shown >= 197 && shown <= 200, "a 200 BPM burst stays on the clock");
+
+  Tracker phase;
+  transport(phase, MIDI_MSG_START, 0);
+  MidiRing ring;
+  MidiEvent clocksOnly[3];
+  for (int i = 0; i < 3; i++) {
+    clocksOnly[i].type = MIDI_MSG_CLOCK;
+    clocksOnly[i].channel = 0;
+    clocksOnly[i].number = 0;
+    clocksOnly[i].value = 0;
+    clocksOnly[i].value14 = (uint16_t)(i + 1);
+  }
+  ring.PushParsed(clocksOnly, 3);
+  MidiEvent cont = {};
+  cont.type = MIDI_MSG_CONTINUE;
+  ring.Push(cont);
+  MidiEvent out[8];
+  int n = ring.Poll(out, 8);
+  int before = 0;
+  bool seenCont = false;
+  bool clocksAfter = false;
+  for (int i = 0; i < n; i++) {
+    if (out[i].type == MIDI_MSG_CLOCK) {
+      int ticks = out[i].value == 0 ? 1 : (int)out[i].value;
+      if (seenCont) {
+        clocksAfter = true;
+      } else {
+        before += ticks;
+      }
+    } else if (out[i].type == MIDI_MSG_CONTINUE) {
+      seenCont = true;
+    }
+    phase.HandleMidi(out[i]);
+  }
+  expect(before == 3 && seenCont && !clocksAfter, "clocks stay ahead of continue");
+  int idx = phase.trackIndex;
+  clocks(phase, 3);
+  expect(phase.trackIndex == idx + 1, "continue leaves the clocks that arrived before it");
+}
+
 static void testExternalBpmClamp() {
   Tracker fast;
   transport(fast, MIDI_MSG_START, 0);
@@ -743,6 +859,7 @@ int main() {
   testStopReleasesLiveOnly();
   testContinuePhase();
   testSafetyHold();
+  testRingClockTempo();
   testExternalBpmClamp();
   if (failures) {
     std::printf("%d failed\n", failures);

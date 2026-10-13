@@ -9,14 +9,15 @@ Two images are produced by `./build.sh`:
 
 Checksums are in `SHA256SUMS` next to the images. The application image starts with the byte `E9`.
 
-This folder's application image is 1.2.5 (1,157,024 bytes, magic `E9`, SHA-256 `7d51c26422d82fc3fb5c5aa269a0f65338749e0f8db30d84bd0e00027909e867`). The full-flash image is 1,222,560 bytes, SHA-256 `c318d72cdf92c29614f59fbfb240e67418b542f850285d7a2ae7eb402d9ab23c`. It has not been tried on a Cardputer. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). The 1.2.2 through 1.2.4 releases stay published and are superseded by this image.
+This folder's application image is 1.2.6 (1,157,632 bytes, magic `E9`, SHA-256 `2987446d5dc03265aee849aad1fdb5b696137812b7e85f35b008973ab0796e3a`). The full-flash image is 1,223,168 bytes, SHA-256 `985613c71213045176b09057f407e1762f13810b47aab31dec3476d144c99ab6`. It has not been tried on a Cardputer. Unzip `mothdeck-sd-pack.zip` onto the card root for the kits, loops, sample instruments, and patches. That zip is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). The 1.2.2 through 1.2.5 releases stay published and are superseded by this image.
 
-1.2.5 includes the behavior from 1.2.2, 1.2.3, and 1.2.4:
+1.2.6 includes the behavior from 1.2.2 through 1.2.5:
 
 - **1.2.2.** BLE memory is reserved at boot, so turning it on always starts advertising and does not allocate. Unload BLE frees that memory for large loops on the next boot. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes only play while Rec is off. They are not written into the pattern. Space turns Rec on, and then they record. MIDI Start does not arm Rec.
 - **1.2.4.** An external clock counts every tick in a BLE packet. The BPM is smoothed over a beat and tracks from 40 to 200. Notes on one track sound together, up to four voices. A fifth replaces the oldest. Note-off, including velocity 0, releases only that note. Notes in one packet each get a voice, and extra clocks are dropped when the queue is nearly full so a chord behind them is kept.
 - **1.2.5.** Stop and a dropped link release live notes and leave loops, the pattern, and the sampler running. Note-offs are kept and release the track that sounded the note. Continue keeps the song-position phase. Fn+D on the MIDI page opens Status. Settings has no counter line. An external clock clamps at 200.
+- **1.2.6.** Clocks are counted instead of queued, so a burst does not crowd out notes. Start clears pending ticks, and ticks before Start in the same packet are not counted. The production build does not print from the connect callbacks. Pairing and advertising are unchanged.
 
 The LilyGO TTGO T8 is a different board and a different download. Its pre-release is [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4), on the [`ttgo-t8` branch](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/tree/ttgo-t8). Those images are not in this folder. Do not flash one onto a Cardputer.
 

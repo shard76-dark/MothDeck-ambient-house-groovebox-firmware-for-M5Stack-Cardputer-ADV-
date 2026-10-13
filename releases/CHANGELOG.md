@@ -1,6 +1,18 @@
+## 1.2.6 (2026-10-13)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,157,632 bytes, magic `E9`, chip `0x0009`, SHA-256 `2987446d5dc03265aee849aad1fdb5b696137812b7e85f35b008973ab0796e3a`). Version on the Settings screen is 1.2.6. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 139428/327680.
+
+MIDI clocks are counted instead of queued. A burst of ticks leaves room for the notes in the same packet. Start, Continue, Stop, and Song Position stay in order. Start clears pending ticks, and ticks before Start in the same packet are not counted. Clocks between Song Position and Continue still count. The production build does not print from the connect or interval callbacks. Pairing, the advertising packet, and the 7.5–15 ms request are unchanged. The dev build still prints those lines.
+
+This image includes the 1.2.2 through 1.2.5 behavior: BLE is reserved at boot, Unload BLE frees that block on the next boot, incoming notes only play while Rec is off, the clock follows every tick in a packet, and Stop releases live notes. The LilyGO TTGO T8 port is a different binary, pre-release [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4) on the `ttgo-t8` branch. It is not in this folder.
+
+The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,223,168 bytes, SHA-256 `985613c71213045176b09057f407e1762f13810b47aab31dec3476d144c99ab6`). It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
+
+The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
+
 ## 1.2.5 (2026-10-13)
 
-Flash `releases/mothdeck-cardputer-adv.bin` (1,157,024 bytes, magic `E9`, chip `0x0009`, SHA-256 `7d51c26422d82fc3fb5c5aa269a0f65338749e0f8db30d84bd0e00027909e867`). Version on the Settings screen is 1.2.5. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 138012/327680.
+Flash `releases/mothdeck-cardputer-adv.bin` (1,157,024 bytes, magic `E9`, chip `0x0009`, SHA-256 `7d51c26422d82fc3fb5c5aa269a0f65338749e0f8db30d84bd0e00027909e867`). Version on the Settings screen is 1.2.5. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 138012/327680. Superseded by 1.2.6.
 
 MIDI Stop, and a link that drops, release live notes. Loops, the pattern, and the sampler keep going. CC 120 and CC 123 release live notes on that channel. A note-off finds the note on the track that sounded it and does not change the selected track. When the queue is under pressure, clocks are dropped first, then controllers, then note-ons. Note-offs and transport are kept. Continue stays on the current step and keeps clocks that arrived after Song Position. An external clock clamps at 200 BPM.
 

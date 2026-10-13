@@ -24,6 +24,7 @@ echo "MIDI and song file"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_midi_song.cpp" \
   "$ROOT/src/MidiProtocol.cpp" \
+  "$ROOT/src/MidiRing.cpp" \
   "$ROOT/src/SongFile.cpp" \
   -o /tmp/mothdeck_test_midi
 /tmp/mothdeck_test_midi
@@ -66,6 +67,7 @@ echo "Per-track instruments"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_tracks.cpp" \
   "$ROOT/src/Tracker.cpp" \
+  "$ROOT/src/MidiRing.cpp" \
   "$ROOT/src/Voice.cpp" \
   "$ROOT/src/ToneSynth.cpp" \
   "$ROOT/src/MidiProtocol.cpp" \

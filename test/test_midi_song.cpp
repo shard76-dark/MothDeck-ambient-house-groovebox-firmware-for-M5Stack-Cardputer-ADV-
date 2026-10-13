@@ -1,5 +1,6 @@
 #include "MidiProtocol.h"
 #include "MidiMap.h"
+#include "MidiRing.h"
 #include "SongFile.h"
 #include "DevLog.h"
 #include <cstdio>
@@ -404,6 +405,146 @@ static void testSongV4() {
   expect(songDecode(buf, n - 1, &loaded) == false, "truncated version 4 is rejected");
 }
 
+static int clockTicks(const MidiEvent &event) {
+  if (event.type != MIDI_MSG_CLOCK) {
+    return 0;
+  }
+  return event.value == 0 ? 1 : (int)event.value;
+}
+
+static int drainTicks(MidiRing &ring, MidiMsgType *types, int typeCap, int *typeCount) {
+  int ticks = 0;
+  if (typeCount) {
+    *typeCount = 0;
+  }
+  MidiEvent out[16];
+  for (int guard = 0; guard < 40; guard++) {
+    int n = ring.Poll(out, 16);
+    if (n <= 0) {
+      break;
+    }
+    for (int i = 0; i < n; i++) {
+      ticks += clockTicks(out[i]);
+      if (types && typeCount && *typeCount < typeCap && clockTicks(out[i]) == 0) {
+        types[(*typeCount)++] = out[i].type;
+      }
+    }
+  }
+  return ticks;
+}
+
+static void testClockQueue() {
+  MidiRunningState state;
+  zeroState(&state);
+  MidiParseResult parsed;
+  MidiRing ring;
+
+  const uint8_t chord[] = {
+    0x80, 0x80, 0xF8, 0x81, 0xF8, 0x82, 0xF8, 0x83, 0xF8, 0x84, 0xF8, 0x85, 0xF8,
+    0x86, 0x90, 60, 100,
+    0x87, 0x90, 64, 110,
+    0x88, 0x90, 67, 90
+  };
+  int count = parseBleMidiPacket(chord, (int)sizeof(chord), &state, &parsed);
+  expect(count == 9 && countType(parsed, MIDI_MSG_CLOCK) == 6, "parser still sees six clocks and a chord");
+  ring.PushParsed(parsed.events, parsed.count);
+  MidiMsgType kinds[8];
+  int kindCount = 0;
+  int ticks = drainTicks(ring, kinds, 8, &kindCount);
+  expect(ticks == 6, "the chord packet keeps every clock in the counter");
+  expect(kindCount == 3 && kinds[0] == MIDI_MSG_NOTE_ON && kinds[1] == MIDI_MSG_NOTE_ON && kinds[2] == MIDI_MSG_NOTE_ON, "the chord is queued behind those clocks");
+  MidiDrops drops;
+  ring.CopyDrops(&drops);
+  expect(drops.clock == 0 && drops.noteOn == 0, "the chord packet drops nothing");
+
+  const uint8_t started[] = {
+    0x80, 0x80, 0xF8, 0x81, 0xF8, 0x82, 0xF8, 0x83, 0xF8,
+    0x84, 0xFA,
+    0x85, 0xF8, 0x86, 0xF8, 0x87, 0xF8, 0x88, 0xF8, 0x89, 0xF8, 0x8A, 0xF8,
+    0x8B, 0x90, 60, 100
+  };
+  zeroState(&state);
+  count = parseBleMidiPacket(started, (int)sizeof(started), &state, &parsed);
+  expect(countType(parsed, MIDI_MSG_CLOCK) == 10 && countType(parsed, MIDI_MSG_START) == 1, "parser sees clocks on both sides of start");
+  ring.PushParsed(parsed.events, parsed.count);
+  expect(ring.PendingTicks() == 0, "ticks after start are bound to the note");
+  MidiEvent out[16];
+  int n = ring.Poll(out, 16);
+  expect(n >= 2 && out[0].type == MIDI_MSG_START, "start is ahead of the clocks that followed it");
+  int after = 0;
+  bool note = false;
+  bool clockBeforeStart = false;
+  for (int i = 0; i < n; i++) {
+    if (i == 0) {
+      continue;
+    }
+    int got = clockTicks(out[i]);
+    if (got > 0) {
+      if (note) {
+        clockBeforeStart = true;
+      }
+      after += got;
+    } else if (out[i].type == MIDI_MSG_NOTE_ON) {
+      note = true;
+    }
+  }
+  expect(after == 6 && note && !clockBeforeStart, "clocks before start in the packet are discarded");
+
+  const uint8_t between[] = {
+    0x80, 0x80, 0xF2, 0x08, 0x00,
+    0x81, 0xF8, 0x82, 0xF8, 0x83, 0xF8,
+    0x84, 0xFB
+  };
+  zeroState(&state);
+  count = parseBleMidiPacket(between, (int)sizeof(between), &state, &parsed);
+  ring.PushParsed(parsed.events, parsed.count);
+  n = ring.Poll(out, 16);
+  expect(n >= 3 && out[0].type == MIDI_MSG_SONG_POS, "song position stays ahead of the clocks");
+  int mid = 0;
+  bool cont = false;
+  for (int i = 1; i < n; i++) {
+    int got = clockTicks(out[i]);
+    if (got > 0 && !cont) {
+      mid += got;
+    } else if (out[i].type == MIDI_MSG_CONTINUE) {
+      cont = true;
+    }
+  }
+  expect(mid == 3 && cont, "clocks between song position and continue stay in order");
+
+  uint8_t burst[160];
+  int bytes = 0;
+  burst[bytes++] = 0x80;
+  const int burstClocks = 36;
+  for (int i = 0; i < burstClocks; i++) {
+    uint32_t ms = (uint32_t)i * 60000u / (uint32_t)(200 * 24);
+    uint8_t bits = (uint8_t)(ms & 0x7F);
+    if (bits >= 0x78) {
+      bits = 0x77;
+    }
+    burst[bytes++] = (uint8_t)(0x80 | bits);
+    burst[bytes++] = 0xF8;
+  }
+  const uint8_t notes[] = {60, 64, 67};
+  const uint8_t vels[] = {100, 110, 90};
+  for (int i = 0; i < 3; i++) {
+    burst[bytes++] = 0xB0;
+    burst[bytes++] = 0x90;
+    burst[bytes++] = notes[i];
+    burst[bytes++] = vels[i];
+  }
+  zeroState(&state);
+  count = parseBleMidiPacket(burst, bytes, &state, &parsed);
+  expect(countType(parsed, MIDI_MSG_CLOCK) == burstClocks && countType(parsed, MIDI_MSG_NOTE_ON) == 3, "a 200 BPM burst keeps the clocks and the chord");
+  expect(parsed.overflow == 0, "the burst fits in the parser");
+  ring.PushParsed(parsed.events, parsed.count);
+  ring.CopyDrops(&drops);
+  kindCount = 0;
+  ticks = drainTicks(ring, kinds, 8, &kindCount);
+  expect(ticks == burstClocks && drops.clock == 0, "the 200 BPM burst is counted and not dropped");
+  expect(kindCount == 3 && kinds[0] == MIDI_MSG_NOTE_ON, "the chord follows the 200 BPM burst");
+}
+
 static void testDevLogDefault() {
   expect(MOTHOS_DEV_LOG == 0, "MOTHOS_DEV_LOG stays off unless the compiler sets it");
   DEV_LOG("SD OLED DAC logs are compiled out");
@@ -421,6 +562,7 @@ int main() {
   testSongV2();
   testSongV4();
   testSongV3();
+  testClockQueue();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

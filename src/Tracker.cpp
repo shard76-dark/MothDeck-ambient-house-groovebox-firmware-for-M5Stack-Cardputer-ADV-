@@ -1630,9 +1630,16 @@ bool Tracker::LiveDown(int track, int midi) const {
 
 void Tracker::HandleMidi(const MidiEvent &event) {
   switch (event.type) {
-    case MIDI_MSG_CLOCK:
-      MidiClock(event.value14);
+    case MIDI_MSG_CLOCK: {
+      // A queued clock can stand for several 0xF8 bytes that shared one
+      // timestamp. Zero still means a single tick, which is what the
+      // parser emits when the host calls HandleMidi directly.
+      int ticks = event.value == 0 ? 1 : (int)event.value;
+      for (int i = 0; i < ticks; i++) {
+        MidiClock(event.value14);
+      }
       return;
+    }
     case MIDI_MSG_START:
       MidiStart();
       return;

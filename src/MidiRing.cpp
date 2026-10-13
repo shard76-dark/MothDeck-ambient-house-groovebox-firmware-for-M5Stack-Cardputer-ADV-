@@ -29,11 +29,8 @@ static bool isController(const MidiEvent &event) {
   return event.type == MIDI_MSG_MSB || event.type == MIDI_MSG_LSB;
 }
 
-// Lower is shed first. 9 is kept.
+// Lower is shed first. 9 is kept. Clocks are not stored in the ring.
 static int shedRank(const MidiEvent &event) {
-  if (event.type == MIDI_MSG_CLOCK) {
-    return 0;
-  }
   if (isController(event)) {
     return 1;
   }
@@ -46,10 +43,16 @@ static int shedRank(const MidiEvent &event) {
 MidiRing::MidiRing() {
   memset(mainQ, 0, sizeof(mainQ));
   memset(relQ, 0, sizeof(relQ));
+  memset(mainClocks, 0, sizeof(mainClocks));
+  memset(relClocks, 0, sizeof(relClocks));
+  memset(groups, 0, sizeof(groups));
   mainHead = 0;
   mainTail = 0;
   relHead = 0;
   relTail = 0;
+  groupHead = 0;
+  groupTail = 0;
+  pendingTicks = 0;
   dropClock = 0;
   dropNoteOn = 0;
   dropNoteOff = 0;
@@ -65,22 +68,104 @@ uint32_t MidiRing::relUsed() const {
   return (relHead + (uint32_t)kRelease - relTail) % (uint32_t)kRelease;
 }
 
-bool MidiRing::pushMain(const MidiEvent &event) {
+void MidiRing::addTick(uint16_t timestamp) {
+  timestamp = (uint16_t)(timestamp & 0x1FFF);
+  if (groupTail != groupHead) {
+    uint32_t last = (groupHead + (uint32_t)kGroups - 1) % (uint32_t)kGroups;
+    if (groups[last].timestamp == timestamp && groups[last].count < 65535) {
+      groups[last].count++;
+      pendingTicks++;
+      return;
+    }
+  }
+  uint32_t next = (groupHead + 1) % (uint32_t)kGroups;
+  if (next != groupTail) {
+    groups[groupHead].timestamp = timestamp;
+    groups[groupHead].count = 1;
+    groupHead = next;
+    pendingTicks++;
+    return;
+  }
+  // The group list is full. Keep the tick on the latest group so the step
+  // still moves. A later poll applies it with that group's timestamp.
+  uint32_t last = (groupHead + (uint32_t)kGroups - 1) % (uint32_t)kGroups;
+  if (groups[last].count < 65535) {
+    groups[last].count++;
+    pendingTicks++;
+    return;
+  }
+  dropClock++;
+}
+
+void MidiRing::dropUnbound() {
+  uint32_t left = pendingTicks;
+  while (left > 0 && groupTail != groupHead) {
+    uint32_t last = (groupHead + (uint32_t)kGroups - 1) % (uint32_t)kGroups;
+    if ((uint32_t)groups[last].count <= left) {
+      left -= groups[last].count;
+      groupHead = last;
+    } else {
+      groups[last].count = (uint16_t)(groups[last].count - left);
+      left = 0;
+    }
+  }
+  pendingTicks = 0;
+}
+
+bool MidiRing::emitClock(MidiEvent *out, uint32_t *budget) {
+  if (!out || !budget || *budget == 0) {
+    return false;
+  }
+  while (groupTail != groupHead && groups[groupTail].count == 0) {
+    groupTail = (groupTail + 1) % (uint32_t)kGroups;
+  }
+  if (groupTail == groupHead) {
+    // The budget has no group left. Drop it so the following event can move.
+    *budget = 0;
+    return false;
+  }
+  ClockGroup &group = groups[groupTail];
+  uint32_t take = group.count;
+  if (take > *budget) {
+    take = *budget;
+  }
+  if (take > 255) {
+    take = 255;
+  }
+  if (take == 0) {
+    groupTail = (groupTail + 1) % (uint32_t)kGroups;
+    return false;
+  }
+  memset(out, 0, sizeof(*out));
+  out->type = MIDI_MSG_CLOCK;
+  out->value = (uint8_t)take;
+  out->value14 = group.timestamp;
+  group.count = (uint16_t)(group.count - take);
+  *budget -= take;
+  if (group.count == 0) {
+    groupTail = (groupTail + 1) % (uint32_t)kGroups;
+  }
+  return true;
+}
+
+bool MidiRing::pushMain(const MidiEvent &event, uint32_t clocksBefore) {
   uint32_t next = (mainHead + 1) % (uint32_t)kLen;
   if (next == mainTail) {
     return false;
   }
   mainQ[mainHead] = event;
+  mainClocks[mainHead] = clocksBefore;
   mainHead = next;
   return true;
 }
 
-bool MidiRing::pushRelease(const MidiEvent &event) {
+bool MidiRing::pushRelease(const MidiEvent &event, uint32_t clocksBefore) {
   uint32_t next = (relHead + 1) % (uint32_t)kRelease;
   if (next == relTail) {
     return false;
   }
   relQ[relHead] = event;
+  relClocks[relHead] = clocksBefore;
   relHead = next;
   return true;
 }
@@ -102,7 +187,10 @@ void MidiRing::countDrop(const MidiEvent &event) {
   }
 }
 
-bool MidiRing::shedOne() {
+bool MidiRing::shedOne(uint32_t *orphan) {
+  if (orphan) {
+    *orphan = 0;
+  }
   uint32_t used = mainUsed();
   if (used == 0) {
     return false;
@@ -115,7 +203,7 @@ bool MidiRing::shedOne() {
     if (rank < best) {
       best = rank;
       victim = (int)idx;
-      if (rank == 0) {
+      if (rank == 1) {
         break;
       }
     }
@@ -124,25 +212,37 @@ bool MidiRing::shedOne() {
   if (victim < 0 || best > 2) {
     return false;
   }
+  uint32_t clocks = mainClocks[victim];
+  bool wasLast = ((uint32_t)victim + 1) % (uint32_t)kLen == mainHead;
   countDrop(mainQ[victim]);
   uint32_t dst = (uint32_t)victim;
   uint32_t src = (dst + 1) % (uint32_t)kLen;
   while (src != mainHead) {
     mainQ[dst] = mainQ[src];
+    mainClocks[dst] = mainClocks[src];
     dst = src;
     src = (src + 1) % (uint32_t)kLen;
   }
   mainHead = (mainHead + (uint32_t)kLen - 1) % (uint32_t)kLen;
+  if (clocks > 0) {
+    if (wasLast) {
+      if (orphan) {
+        *orphan = clocks;
+      }
+    } else {
+      mainClocks[victim] += clocks;
+    }
+  }
   return true;
 }
 
-bool MidiRing::pushLocked(const MidiEvent &event) {
+bool MidiRing::enqueueLocked(const MidiEvent &event, uint32_t clocksBefore) {
   if (relUsed() > 0) {
     if (!unshedable(event)) {
       countDrop(event);
       return false;
     }
-    if (pushRelease(event)) {
+    if (pushRelease(event, clocksBefore)) {
       return true;
     }
     if (event.type == MIDI_MSG_NOTE_OFF) {
@@ -154,22 +254,19 @@ bool MidiRing::pushLocked(const MidiEvent &event) {
   }
 
   uint32_t used = mainUsed();
-  if (event.type == MIDI_MSG_CLOCK && used >= (uint32_t)(kLen - 1 - kReserve)) {
-    dropClock++;
-    return false;
-  }
   if (isController(event) && used >= (uint32_t)(kLen - 1 - kControlReserve)) {
     dropRing++;
     return false;
   }
-  if (pushMain(event)) {
+  if (pushMain(event, clocksBefore)) {
     return true;
   }
   if (unshedable(event)) {
-    if (shedOne() && pushMain(event)) {
+    uint32_t orphan = 0;
+    if (shedOne(&orphan) && pushMain(event, clocksBefore + orphan)) {
       return true;
     }
-    if (pushRelease(event)) {
+    if (pushRelease(event, clocksBefore)) {
       return true;
     }
     if (event.type == MIDI_MSG_NOTE_OFF) {
@@ -183,11 +280,76 @@ bool MidiRing::pushLocked(const MidiEvent &event) {
   return false;
 }
 
+void MidiRing::ingestLocked(const MidiEvent &event) {
+  if (event.type == MIDI_MSG_CLOCK) {
+    addTick(event.value14);
+    return;
+  }
+  if (event.type == MIDI_MSG_START) {
+    dropUnbound();
+    enqueueLocked(event, 0);
+    return;
+  }
+  uint32_t before = pendingTicks;
+  pendingTicks = 0;
+  if (!enqueueLocked(event, before)) {
+    pendingTicks += before;
+  }
+}
+
 bool MidiRing::Push(const MidiEvent &event) {
   RING_LOCK();
-  bool ok = pushLocked(event);
+  if (event.type == MIDI_MSG_CLOCK) {
+    addTick(event.value14);
+    RING_UNLOCK();
+    return true;
+  }
+  if (event.type == MIDI_MSG_START) {
+    dropUnbound();
+    bool ok = enqueueLocked(event, 0);
+    RING_UNLOCK();
+    return ok;
+  }
+  uint32_t before = pendingTicks;
+  pendingTicks = 0;
+  bool ok = enqueueLocked(event, before);
+  if (!ok) {
+    pendingTicks += before;
+  }
   RING_UNLOCK();
   return ok;
+}
+
+void MidiRing::PushParsed(const MidiEvent *events, int count) {
+  if (!events || count <= 0) {
+    return;
+  }
+  RING_LOCK();
+  int startAt = -1;
+  for (int i = 0; i < count; i++) {
+    if (events[i].type == MIDI_MSG_START) {
+      startAt = i;
+      break;
+    }
+  }
+  if (startAt >= 0) {
+    for (int i = 0; i < startAt; i++) {
+      if (events[i].type == MIDI_MSG_CLOCK) {
+        continue;
+      }
+      enqueueLocked(events[i], 0);
+    }
+    dropUnbound();
+    enqueueLocked(events[startAt], 0);
+    for (int i = startAt + 1; i < count; i++) {
+      ingestLocked(events[i]);
+    }
+  } else {
+    for (int i = 0; i < count; i++) {
+      ingestLocked(events[i]);
+    }
+  }
+  RING_UNLOCK();
 }
 
 int MidiRing::Poll(MidiEvent *out, int maxOut) {
@@ -196,13 +358,39 @@ int MidiRing::Poll(MidiEvent *out, int maxOut) {
   }
   RING_LOCK();
   int n = 0;
-  while (n < maxOut && mainTail != mainHead) {
-    out[n++] = mainQ[mainTail];
-    mainTail = (mainTail + 1) % (uint32_t)kLen;
-  }
-  while (n < maxOut && relTail != relHead) {
-    out[n++] = relQ[relTail];
-    relTail = (relTail + 1) % (uint32_t)kRelease;
+  while (n < maxOut) {
+    if (mainTail != mainHead) {
+      if (mainClocks[mainTail] > 0) {
+        if (!emitClock(&out[n], &mainClocks[mainTail])) {
+          break;
+        }
+        n++;
+        continue;
+      }
+      out[n++] = mainQ[mainTail];
+      mainTail = (mainTail + 1) % (uint32_t)kLen;
+      continue;
+    }
+    if (relTail != relHead) {
+      if (relClocks[relTail] > 0) {
+        if (!emitClock(&out[n], &relClocks[relTail])) {
+          break;
+        }
+        n++;
+        continue;
+      }
+      out[n++] = relQ[relTail];
+      relTail = (relTail + 1) % (uint32_t)kRelease;
+      continue;
+    }
+    if (pendingTicks > 0) {
+      if (!emitClock(&out[n], &pendingTicks)) {
+        break;
+      }
+      n++;
+      continue;
+    }
+    break;
   }
   RING_UNLOCK();
   return n;
@@ -212,6 +400,8 @@ void MidiRing::Flush() {
   RING_LOCK();
   mainTail = mainHead;
   relTail = relHead;
+  groupTail = groupHead;
+  pendingTicks = 0;
   RING_UNLOCK();
 }
 
@@ -235,4 +425,11 @@ void MidiRing::CopyDrops(MidiDrops *out) const {
   out->ringFull = dropRing;
   out->parser = dropParser;
   RING_UNLOCK();
+}
+
+uint32_t MidiRing::PendingTicks() const {
+  RING_LOCK();
+  uint32_t n = pendingTicks;
+  RING_UNLOCK();
+  return n;
 }
