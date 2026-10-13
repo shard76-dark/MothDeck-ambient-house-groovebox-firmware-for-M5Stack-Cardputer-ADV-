@@ -13,6 +13,13 @@ echo "BLE MIDI advertising payload"
   -o /tmp/mothdeck_test_ble_advert
 /tmp/mothdeck_test_ble_advert
 
+echo "MIDI ring"
+"$CXX" "${FLAGS[@]}" \
+  "$ROOT/test/test_midi_ring.cpp" \
+  "$ROOT/src/MidiRing.cpp" \
+  -o /tmp/mothdeck_test_ring
+/tmp/mothdeck_test_ring
+
 echo "MIDI and song file"
 "$CXX" "${FLAGS[@]}" \
   "$ROOT/test/test_midi_song.cpp" \

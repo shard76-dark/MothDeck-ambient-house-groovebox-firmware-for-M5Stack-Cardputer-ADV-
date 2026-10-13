@@ -44,6 +44,8 @@ Tracker::Tracker() {
   bpmSmooth = 0;
   liveAge = 0;
   memset(live, 0, sizeof(live));
+  safetyHold = 192;
+  safetyReleases = 0;
   clocksSinceZero = 0;
   blockLearn = false;
   autoLength = true;
@@ -304,13 +306,14 @@ void Tracker::AdvanceStep() {
     trackIndex = patternLength * currentPattern;
   }
   SyncEditBar();
+  AgeLive();
 }
 
 void Tracker::ApplyExternalBpm(int bpm) {
   if (bpm < 40) {
     bpm = 40;
-  } else if (bpm > 240) {
-    bpm = 240;
+  } else if (bpm > 200) {
+    bpm = 200;
   }
   if (bpms[bpmSlot] == (uint8_t)bpm) {
     return;
@@ -346,8 +349,9 @@ void Tracker::MidiContinue() {
   extSync = true;
   isPlaying = true;
   pressedOnce = true;
-  // Same as Start: transport only, Rec is unchanged.
-  clockCount = 0;
+  // Song position is a sixteenth, so it already left clockCount on a
+  // 6-clock boundary. Clocks between that message and Continue stay
+  // counted. With no song position, the current step and phase stay too.
   ResetTempoWindow();
   SetHint("MIDI Cont");
 }
@@ -359,6 +363,8 @@ void Tracker::MidiStop() {
   clocksSinceZero = 0;
   blockLearn = true;
   ResetTempoWindow();
+  // Live notes only. The pattern, loops, and sampler keep running.
+  AllNotesOff();
   SetHint("MIDI Stop");
 }
 
@@ -373,6 +379,101 @@ void Tracker::ResetTempoWindow() {
 void Tracker::SilenceLive() {
   memset(live, 0, sizeof(live));
   liveAge = 0;
+}
+
+void Tracker::AllNotesOff() {
+  for (int t = 0; t < 4; t++) {
+    for (int i = 0; i < kLiveVoices; i++) {
+      LiveVoice &slot = live[t][i];
+      if (slot.on && !slot.tonal) {
+        voices[t].ReleaseHit(slot.pitch);
+      }
+    }
+    if (voices[t].block.arpMode == 3) {
+      voices[t].ClearHeld();
+      voices[t].sounding = 0;
+    }
+    voices[t].bend14 = 8192;
+  }
+  SilenceLive();
+}
+
+void Tracker::ReleaseMatching(uint8_t channel, uint8_t note) {
+  for (int t = 0; t < 4; t++) {
+    ReleaseLive(t, channel, note);
+  }
+  if (channel < 4) {
+    if (voices[channel].block.arpMode == 3) {
+      voices[channel].HeldNote(note, false, trackVoice[channel]);
+    }
+    return;
+  }
+  for (int t = 0; t < 4; t++) {
+    if (voices[t].block.arpMode == 3) {
+      voices[t].HeldNote(note, false, trackVoice[t]);
+    }
+  }
+}
+
+void Tracker::ReleaseChannel(uint8_t channel) {
+  for (int t = 0; t < 4; t++) {
+    bool touched = false;
+    for (int i = 0; i < kLiveVoices; i++) {
+      LiveVoice &slot = live[t][i];
+      if (!slot.on || slot.channel != channel) {
+        continue;
+      }
+      if (!slot.tonal) {
+        voices[t].ReleaseHit(slot.pitch);
+      }
+      slot.on = 0;
+      touched = true;
+    }
+    bool arpTrack = channel >= 4 || t == (int)channel;
+    if (arpTrack && voices[t].block.arpMode == 3) {
+      voices[t].ClearHeld();
+      voices[t].sounding = 0;
+      touched = true;
+    }
+    if (touched || t == (int)channel) {
+      voices[t].bend14 = 8192;
+    }
+  }
+}
+
+void Tracker::SetSafetyHold(int steps) {
+  if (steps < 0) {
+    steps = 0;
+  } else if (steps > 1024) {
+    steps = 1024;
+  }
+  safetyHold = steps;
+}
+
+void Tracker::AgeLive() {
+  if (safetyHold <= 0) {
+    return;
+  }
+  uint16_t limit = (uint16_t)safetyHold;
+  for (int t = 0; t < 4; t++) {
+    // A held arp is a chord the player meant to keep. It is not timed.
+    if (voices[t].block.arpMode == 3) {
+      continue;
+    }
+    for (int i = 0; i < kLiveVoices; i++) {
+      LiveVoice &slot = live[t][i];
+      if (!slot.on || !slot.tonal) {
+        continue;
+      }
+      if (slot.heldSteps < 65535) {
+        slot.heldSteps++;
+      }
+      if (slot.heldSteps >= limit) {
+        slot.on = 0;
+        safetyReleases++;
+      }
+    }
+  }
 }
 
 void Tracker::MidiClock(uint16_t timestamp13) {
@@ -588,6 +689,9 @@ void Tracker::SetCommand(char command, int val) {
     case 'P':
       TogglePlayStop();
       SetHint(recOn ? "Rec On" : "Rec Off");
+      break;
+    case 'Q':
+      SetSafetyHold(val);
       break;
     case 'p':
       if (isPlaying) {
@@ -1436,6 +1540,7 @@ void Tracker::SoundLive(int track, uint8_t channel, uint8_t midi, int pitch, int
   held.channel = channel;
   held.tonal = tonal ? 1 : 0;
   held.age = ++liveAge;
+  held.heldSteps = 0;
   held.pitch = (int8_t)pitch;
   if (!tonal) {
     voice.SetNote(pitch, false, oct, inst);
@@ -1540,6 +1645,14 @@ void Tracker::HandleMidi(const MidiEvent &event) {
     case MIDI_MSG_SONG_POS:
       MidiSongPosition((int)event.value14);
       return;
+    case MIDI_MSG_NOTE_OFF:
+      // The track is the one that sounded the note. A note-off does not
+      // move the selected track.
+      ReleaseMatching(event.channel, event.number);
+      return;
+    case MIDI_MSG_ALL_OFF:
+      ReleaseChannel(event.channel);
+      return;
     default:
       break;
   }
@@ -1576,14 +1689,6 @@ void Tracker::HandleMidi(const MidiEvent &event) {
       }
       break;
     }
-    case MIDI_MSG_NOTE_OFF:
-      if (voices[selectedTrack].block.arpMode == 3) {
-        int inst = trackVoice[selectedTrack];
-        voices[selectedTrack].HeldNote(event.number, false, inst);
-      } else {
-        ReleaseLive(selectedTrack, event.channel, event.number);
-      }
-      break;
     case MIDI_MSG_MSB:
     case MIDI_MSG_LSB:
       ApplyController(event);
@@ -2010,6 +2115,8 @@ void Tracker::FillSnap(Snap *snap) const {
   snap->barIndex = (uint8_t)(bar + 1);
   snap->barCount = (uint8_t)bars;
   snap->patternSlots = (uint8_t)PatternSlots();
+  snap->safetyHold = (uint16_t)safetyHold;
+  snap->safetyReleases = safetyReleases;
   for (int t = 0; t < 4; t++) {
     snap->level[t] = (int16_t)lastSamples[t];
     snap->vol[t] = voices[t].volume;

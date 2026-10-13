@@ -13,16 +13,10 @@
 #include "BleMidi.h"
 #include "BoardConfig.h"
 #include "DevLog.h"
+#include "MidiRing.h"
 
 static const char *kMidiServiceUuid = "03B80E5A-EDE8-4B33-A751-6CE34EC4C700";
 static const char *kMidiCharUuid = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
-// One slot stays empty so head == tail means empty. The producer is the
-// NimBLE host task and the consumer is the audio task.
-// Clocks at 200 BPM are 80 per second. The last slots stay free so a chord
-// that arrives behind a burst of clocks is not the event that gets dropped.
-static const int kQueueLen = 256;
-static const int kNoteReserve = 24;
-
 // Legacy connectable advertising interval, units of 0.625 ms. 0x20..0x40 is
 // 20..40 ms, the range Apple scans for and hardware hosts still catch.
 static const uint16_t kAdvIntervalMin = 0x20;
@@ -44,14 +38,11 @@ static const uint32_t kBleMinLargest = 36 * 1024;
 static BLECharacteristic *midiChar = nullptr;
 static BLEServer *midiServer = nullptr;
 static portMUX_TYPE midiMux = portMUX_INITIALIZER_UNLOCKED;
-static MidiEvent midiQueue[kQueueLen];
-static uint32_t qHead = 0;
-static uint32_t qTail = 0;
+static MidiRing midiRing;
 static uint32_t statPackets = 0;
 static uint32_t statMessages = 0;
 static uint32_t statClocks = 0;
 static uint32_t statNotes = 0;
-static uint32_t statOverflow = 0;
 static volatile bool connected = false;
 static volatile int connectEdge = 0;
 static uint16_t connHandle = 0xFFFF;
@@ -80,24 +71,6 @@ static char diagBuf[44];
 static char counterBuf[44];
 static char linkBuf[20];
 
-static bool pushEvent(const MidiEvent &event) {
-  uint32_t head = __atomic_load_n(&qHead, __ATOMIC_RELAXED);
-  uint32_t tail = __atomic_load_n(&qTail, __ATOMIC_ACQUIRE);
-  uint32_t next = (head + 1) % kQueueLen;
-  if (next == tail) {
-    __atomic_fetch_add(&statOverflow, 1, __ATOMIC_RELAXED);
-    return false;
-  }
-  uint32_t used = (head + kQueueLen - tail) % kQueueLen;
-  if (event.type == MIDI_MSG_CLOCK && used >= (uint32_t)(kQueueLen - 1 - kNoteReserve)) {
-    __atomic_fetch_add(&statOverflow, 1, __ATOMIC_RELAXED);
-    return false;
-  }
-  midiQueue[head] = event;
-  __atomic_store_n(&qHead, next, __ATOMIC_RELEASE);
-  return true;
-}
-
 static void countParsed(const MidiEvent &event) {
   __atomic_fetch_add(&statMessages, 1, __ATOMIC_RELAXED);
   if (event.type == MIDI_MSG_CLOCK) {
@@ -120,11 +93,11 @@ class MidiCharCallbacks : public BLECharacteristicCallbacks {
     __atomic_fetch_add(&statPackets, 1, __ATOMIC_RELAXED);
     parseBleMidiPacket(data, (int)len, &running, &parsed);
     if (parsed.overflow > 0) {
-      __atomic_fetch_add(&statOverflow, (uint32_t)parsed.overflow, __ATOMIC_RELAXED);
+      midiRing.AddParser((uint32_t)parsed.overflow);
     }
     for (int i = 0; i < parsed.count; i++) {
       countParsed(parsed.events[i]);
-      pushEvent(parsed.events[i]);
+      midiRing.Push(parsed.events[i]);
     }
   }
 };
@@ -663,13 +636,19 @@ void BleMidi::Maintain() {
     lastStatMs = now;
     uint32_t packets = __atomic_load_n(&statPackets, __ATOMIC_RELAXED);
     if (connected || packets != 0) {
+      MidiDrops drops;
+      midiRing.CopyDrops(&drops);
       DEV_LOGF(
-        "MIDI: pk=%lu msg=%lu clk=%lu note=%lu ovf=%lu\n",
+        "MIDI: pk=%lu msg=%lu clk=%lu note=%lu clkShed=%lu onShed=%lu offShed=%lu ring=%lu parse=%lu\n",
         (unsigned long)packets,
         (unsigned long)__atomic_load_n(&statMessages, __ATOMIC_RELAXED),
         (unsigned long)__atomic_load_n(&statClocks, __ATOMIC_RELAXED),
         (unsigned long)__atomic_load_n(&statNotes, __ATOMIC_RELAXED),
-        (unsigned long)__atomic_load_n(&statOverflow, __ATOMIC_RELAXED));
+        (unsigned long)drops.clock,
+        (unsigned long)drops.noteOn,
+        (unsigned long)drops.noteOff,
+        (unsigned long)drops.ringFull,
+        (unsigned long)drops.parser);
     }
   }
   if (restartAdvert && userEnabled && initOk && serverOk && !connected) {
@@ -775,7 +754,13 @@ void BleMidi::CopyCounters(MidiCounters *out) const {
   out->messages = __atomic_load_n(&statMessages, __ATOMIC_RELAXED);
   out->clocks = __atomic_load_n(&statClocks, __ATOMIC_RELAXED);
   out->notes = __atomic_load_n(&statNotes, __ATOMIC_RELAXED);
-  out->overflows = __atomic_load_n(&statOverflow, __ATOMIC_RELAXED);
+  MidiDrops drops;
+  midiRing.CopyDrops(&drops);
+  out->overflows = drops.clock + drops.noteOn + drops.noteOff + drops.ringFull + drops.parser;
+}
+
+void BleMidi::CopyDrops(MidiDrops *out) const {
+  midiRing.CopyDrops(out);
 }
 
 const char *BleMidi::CounterLine() {
@@ -784,12 +769,11 @@ const char *BleMidi::CounterLine() {
   snprintf(
     counterBuf,
     sizeof(counterBuf),
-    "p%lu m%lu c%lu n%lu o%lu",
+    "p%lu m%lu c%lu n%lu",
     (unsigned long)c.packets,
     (unsigned long)c.messages,
     (unsigned long)c.clocks,
-    (unsigned long)c.notes,
-    (unsigned long)c.overflows);
+    (unsigned long)c.notes);
   return counterBuf;
 }
 
@@ -798,19 +782,14 @@ int BleMidi::Poll(MidiEvent *out, int maxOut) {
     return 0;
   }
   if (!userEnabled) {
-    uint32_t head = __atomic_load_n(&qHead, __ATOMIC_ACQUIRE);
-    __atomic_store_n(&qTail, head, __ATOMIC_RELEASE);
+    midiRing.Flush();
     return 0;
   }
-  uint32_t tail = __atomic_load_n(&qTail, __ATOMIC_RELAXED);
-  uint32_t head = __atomic_load_n(&qHead, __ATOMIC_ACQUIRE);
-  int count = 0;
-  while (tail != head && count < maxOut) {
-    out[count++] = midiQueue[tail];
-    tail = (tail + 1) % kQueueLen;
-  }
-  __atomic_store_n(&qTail, tail, __ATOMIC_RELEASE);
-  return count;
+  return midiRing.Poll(out, maxOut);
+}
+
+void BleMidi::FlushIncoming() {
+  midiRing.Flush();
 }
 
 int BleMidi::ConsumeConnectEdge() {

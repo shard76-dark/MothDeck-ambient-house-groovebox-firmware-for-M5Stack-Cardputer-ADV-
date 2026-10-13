@@ -10,7 +10,7 @@ MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published imag
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
-The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.4 still uses. On a 1.2.4 board the Settings version line says `v1.2.4`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`).
+The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.5 still uses. On a 1.2.5 board the Settings version line says `v1.2.5`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`). Settings does not print a counter line.
 
 ## Moving around
 
@@ -185,13 +185,15 @@ With no card the page says `Insert a card for loops` and `/moth/loops/<name>/`.
 
 ## MIDI
 
-The MIDI page shows the radio state, the stored name, the channel map, the heap line, and the counters.
+The MIDI page shows the radio state, the stored name, the channel map, and the counters.
 
 ![MIDI page](screenshots/screen-midi-2x.png)
 
-At boot the status is `BLE off`. It says `MIDI advertising` only while the controller is advertising, and `MIDI connected` while a host is connected. If the stack cannot start, the status says `restart` or `BLE off`. The next line is the free internal heap and the largest free block (`heap` and `blk`). Those numbers stay on this page. The release Settings screen does not repeat them.
+At boot the status is `BLE off`. It says `MIDI advertising` only while the controller is advertising, and `MIDI connected` while a host is connected. If the stack cannot start, the status says `restart` or `BLE off`.
 
-While a host is connected, the status row also shows the negotiated interval, for example `link 15.0ms`. Under the map it counts packets, parsed messages, overflows, clocks, and notes (`pk`, `msg`, `ovf`, `clk`, `note`). `E` jumps to Settings and starts editing the BLE name. Enter does nothing on this page.
+While a host is connected, the status row also shows the negotiated interval, for example `link 15.0ms`. Under the map it counts packets, messages, clocks, and notes (`pk`, `msg`, `clk`, `note`). `E` jumps to Settings and starts editing the BLE name. Enter does nothing on this page. Fn+D opens Status. Backspace closes it and stays on the MIDI page.
+
+Status lists shed clocks, note-ons, and note-offs (`clk`, `on`, `off`), a full ring and parser misses (`ring`, `parse`), safety releases (`hold`), late speaker refills (`late`), play retries (`retry`), the longest MIDI drain, free memory, and the safety step length. Fn+`,` and Fn+`/` step that length through 32, 96, 192, and 384. 192 is the default. A tonal live note with no note-off releases after that many steps. Held arp is not timed. Stop and a dropped link release live notes immediately and do not wait for the step count.
 
 The air name is `Mothdeck`. A stored name longer than 8 characters is shortened in the advertising packet, and the page shows that shorter name in parentheses.
 
@@ -212,11 +214,12 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | CC 1 | Low pass |
 | CC 7 / CC 39 | Volume, mapped to 0–8 |
 | Pitch bend | Per channel |
-| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Every clock in a packet counts, including several that share one timestamp. Tempo is smoothed over a beat, from 40 to 200. Extra clocks are dropped when the queue is nearly full so a following chord is kept |
-| Note on | Up to four notes sound on the track. A fifth replaces the oldest. Note-off, including velocity 0, releases only that note and channel. Stored in the pattern only while Rec is on |
+| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Every clock in a packet counts, including several that share one timestamp. Tempo is smoothed over a beat and clamps at 200. Extra clocks are dropped when the queue is nearly full so a following chord is kept |
+| Note on | Up to four notes sound on the track. A fifth replaces the oldest. Note-off, including velocity 0, releases only that note and channel, on the track that sounded it. Stored in the pattern only while Rec is on |
+| CC 120 / CC 123 | Release live notes on that channel. Pattern, loops, and sampler stay |
 | Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec |
-| Continue `0xFB` | Resume, no jump. Does not arm Rec |
-| Stop `0xFC` | Stop and leave external sync. Space returns to the internal clock |
+| Continue `0xFB` | Resume on the current step and keep the clock phase, including clocks after Song Position. Does not arm Rec |
+| Stop `0xFC` | Stop, leave external sync, and release live notes. Loops and the pattern keep going. Space returns to the internal clock |
 | Song position `0xF2` | Sixteenth-note index, modulo the pattern length |
 
 The link asks for 7.5–15 ms a quarter of a second after connect. If the MPC accepts 15 ms, expect about 25 ms end to end. If it stays at 30 ms, expect about 40 ms. The page shows the number that was negotiated. These are estimates from the buffer sizes. Chris approved the 1.2.2 image. 1.2.3 is the Rec-off rule as its own version.
@@ -229,7 +232,7 @@ Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change the selected row.
 
 ![Settings, BLE row](screenshots/screen-settings-ble-2x.png)
 
-Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.4`. The dev build still uses the row for a heap readout.
+Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.5`. There is no counter line under the rows. The dev build still uses the Radio row for a heap readout. The hidden MIDI status view is where the other counts live.
 
 | Row | Keys |
 | --- | --- |

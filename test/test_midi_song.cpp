@@ -85,6 +85,12 @@ static void testMsbLsb() {
   expect(count == 2 && parsed.events[0].type == MIDI_MSG_LSB && parsed.events[1].type == MIDI_MSG_MSB, "pitch bend emits LSB then MSB");
   expect(parsed.events[0].number == kMidiPitchCc && parsed.events[0].value14 == 8192 && parsed.events[1].value14 == 8192, "pitch bend center is 8192");
 
+  const uint8_t allOff[] = {0x80, 0x80, 0xB0, 123, 0, 0x81, 0xB1, 120, 0};
+  count = parseBleMidiPacket(allOff, (int)sizeof(allOff), &state, &parsed);
+  expect(count == 2, "all-notes-off and all-sound-off are both kept");
+  expect(parsed.events[0].type == MIDI_MSG_ALL_OFF && parsed.events[0].channel == 0 && parsed.events[0].number == 123, "CC 123 is all notes off on its channel");
+  expect(parsed.events[1].type == MIDI_MSG_ALL_OFF && parsed.events[1].channel == 1 && parsed.events[1].number == 120, "CC 120 is all sound off on its channel");
+
   expect(parseBleMidiPacket(packet, 1, &state, &parsed) == 0, "short packet is ignored");
   const uint8_t badHeader[] = {0x00, 0x90, 60, 100};
   expect(parseBleMidiPacket(badHeader, 4, &state, &parsed) == 0, "missing timestamp MSB is rejected");

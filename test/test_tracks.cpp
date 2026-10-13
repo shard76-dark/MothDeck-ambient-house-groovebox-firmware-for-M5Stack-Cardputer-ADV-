@@ -607,6 +607,129 @@ static void testMidiPolyphony() {
   expect(renderEnergy(drums, 16) > 0, "the other drum hits keep ringing");
 }
 
+static void testNoteOffFindsTrack() {
+  Tracker routed;
+  routed.SetCommand('I', 2);
+  noteOn(routed, 5, 60);
+  routed.SetCommand('T', 2);
+  expect(routed.selectedTrack == 2, "the keyboard can leave the track that sounded");
+  noteOff(routed, 5, 60);
+  expect(!routed.LiveDown(0, 60), "note-off finds the note on its original track");
+  expect(routed.selectedTrack == 2, "note-off does not change the selected track");
+
+  noteOn(routed, 0, 62);
+  noteOn(routed, 1, 64);
+  expect(routed.selectedTrack == 1, "a note on channel 2 selects track 2");
+  noteOff(routed, 0, 62);
+  expect(!routed.LiveDown(0, 62) && routed.LiveDown(1, 64), "the other channel's note stays");
+  expect(routed.selectedTrack == 1, "that note-off still leaves the selection");
+
+  MidiEvent all = {};
+  all.type = MIDI_MSG_ALL_OFF;
+  all.channel = 1;
+  all.number = 123;
+  routed.HandleMidi(all);
+  expect(!routed.LiveDown(1, 64), "all notes off releases that channel");
+  noteOn(routed, 0, 67);
+  noteOn(routed, 2, 69);
+  all.channel = 0;
+  routed.HandleMidi(all);
+  expect(!routed.LiveDown(0, 67) && routed.LiveDown(2, 69), "all notes off does not clear another channel");
+}
+
+static void testStopReleasesLiveOnly() {
+  Tracker live;
+  live.SetCommand('I', 2);
+  noteOn(live, 0, 60);
+  live.voices[0].bend14 = 1000;
+  live.loopPlay[0].enabled = 1;
+  live.SetCommand('r', 0 | (4 << 8) | (1 << 12));
+  expect(live.NoteAt(0, 0) == 5, "the pattern has a note before stop");
+  expect(live.LiveDown(0, 60), "the live note is sounding");
+  transport(live, MIDI_MSG_STOP, 0);
+  expect(!live.LiveDown(0, 60) && live.LiveHeld(0) == 0, "stop releases live notes");
+  expect(live.loopPlay[0].enabled == 1, "stop leaves the loop running");
+  expect(live.NoteAt(0, 0) == 5, "stop leaves the pattern");
+  expect(live.voices[0].bend14 == 8192, "stop centers bend");
+  expect(!live.isPlaying && live.recOn == false, "stop still pauses transport");
+}
+
+static void testContinuePhase() {
+  Tracker phase;
+  transport(phase, MIDI_MSG_START, 0);
+  clocks(phase, 3);
+  int idx = phase.trackIndex;
+  transport(phase, MIDI_MSG_CONTINUE, 0);
+  clocks(phase, 3);
+  expect(phase.trackIndex == idx + 1, "continue keeps clocks already counted in the step");
+
+  Tracker located;
+  located.SetCommand('Y', 2);
+  transport(located, MIDI_MSG_START, 0);
+  transport(located, MIDI_MSG_SONG_POS, 40);
+  expect(located.trackIndex == 8, "song position still lands inside the pattern");
+  clocks(located, 2);
+  idx = located.trackIndex;
+  transport(located, MIDI_MSG_CONTINUE, 0);
+  expect(located.trackIndex == idx, "continue without a new position stays on the song position");
+  clocks(located, 4);
+  expect(located.trackIndex == idx + 1, "clocks between song position and continue still count");
+
+  Tracker stay;
+  transport(stay, MIDI_MSG_START, 0);
+  clocks(stay, 6);
+  idx = stay.trackIndex;
+  transport(stay, MIDI_MSG_CONTINUE, 0);
+  expect(stay.trackIndex == idx, "continue with no song position keeps the current step");
+}
+
+static void testSafetyHold() {
+  Tracker held;
+  held.SetCommand('I', 2);
+  held.SetCommand('Q', 4);
+  noteOn(held, 0, 60);
+  for (int i = 0; i < 1000; i++) {
+    held.UpdateTracker();
+  }
+  expect(held.LiveDown(0, 60) && held.SafetyReleases() == 0, "a short hold does not release the note");
+  for (int i = 0; i < 40000 && held.LiveDown(0, 60); i++) {
+    held.UpdateTracker();
+  }
+  expect(!held.LiveDown(0, 60) && held.SafetyReleases() == 1, "the tonal note releases after the safety length");
+
+  Tracker arp;
+  arp.voices[0].block.arpMode = 3;
+  arp.SetCommand('Q', 4);
+  noteOn(arp, 0, 60);
+  for (int i = 0; i < 40000; i++) {
+    arp.UpdateTracker();
+  }
+  expect(arp.SafetyReleases() == 0, "held arp is not timed out");
+}
+
+static void testExternalBpmClamp() {
+  Tracker fast;
+  transport(fast, MIDI_MSG_START, 0);
+  for (int i = 0; i < 48; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value14 = clockMillis(i, 240);
+    fast.HandleMidi(clk);
+  }
+  expect(fast.Bpm() == 200, "an external clock above 200 clamps to 200");
+
+  Tracker mid;
+  transport(mid, MIDI_MSG_START, 0);
+  for (int i = 0; i < 48; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value14 = clockMillis(i, 180);
+    mid.HandleMidi(clk);
+  }
+  int shown = mid.Bpm();
+  expect(shown >= 177 && shown <= 183, "180 stays inside the clamp");
+}
+
 int main() {
   testAssignStaysOnTrack();
   testMidiBankStaysOnChannel();
@@ -616,6 +739,11 @@ int main() {
   testMidiNotesRespectRec();
   testExternalClockPackets();
   testMidiPolyphony();
+  testNoteOffFindsTrack();
+  testStopReleasesLiveOnly();
+  testContinuePhase();
+  testSafetyHold();
+  testExternalBpmClamp();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

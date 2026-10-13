@@ -88,6 +88,11 @@ public:
   static const int kLiveVoices = 4;
   int LiveHeld(int track) const;
   bool LiveDown(int track, int midi) const;
+  // Live MIDI voices only. Sequencer steps, loops, and the sampler stay.
+  void AllNotesOff();
+  void SetSafetyHold(int steps);
+  int SafetyHold() const { return safetyHold; }
+  uint32_t SafetyReleases() const { return safetyReleases; }
 
 private:
   float bps;
@@ -115,10 +120,15 @@ private:
     int freq;
     int8_t id;
     int8_t pitch;
+    uint16_t heldSteps;
     ToneVoice tone;
   };
   LiveVoice live[4][kLiveVoices];
   uint32_t liveAge;
+  // Steps a tonal live note may sound with no note-off. 0 leaves it.
+  // Held-arp notes are not counted. Default is long, so a pad can stay.
+  int safetyHold;
+  uint32_t safetyReleases;
   // Clocks since the last position-zero (Start or Song Position 0). Used to
   // learn an external loop length. A Stop, Space, or a non-zero Song
   // Position abandons the measurement.
@@ -158,6 +168,9 @@ private:
   void MidiClock(uint16_t timestamp13);
   void ResetTempoWindow();
   void SilenceLive();
+  void ReleaseMatching(uint8_t channel, uint8_t note);
+  void ReleaseChannel(uint8_t channel);
+  void AgeLive();
   void SoundLive(int track, uint8_t channel, uint8_t midi, int pitch, int oct);
   void ReleaseLive(int track, uint8_t channel, uint8_t midi);
   int AllocLive(int track, uint8_t channel, uint8_t midi);

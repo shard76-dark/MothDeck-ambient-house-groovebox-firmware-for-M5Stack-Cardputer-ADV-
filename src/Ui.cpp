@@ -92,6 +92,9 @@ static int rollStep = 0;
 static int rollPitch = 24;
 static int rollOrigin = 0;
 static bool rollFollow = true;
+// Hidden page on MIDI. Fn+D opens it. Normal pages do not show it.
+static bool midiStatus = false;
+static uint32_t uiEpoch = 0;
 
 static const int kRollY = 24;
 static const int kRollH = 96;
@@ -109,6 +112,7 @@ static const uint16_t COL_CURSOR = 0xFFFF;
 static void toastSet(const char *msg) {
   snprintf(toast, sizeof(toast), "%s", msg ? msg : "");
   toastUntil = millis() + 2200;
+  uiEpoch++;
 }
 
 static uint8_t bleOn = 0;
@@ -1045,11 +1049,8 @@ static void drawMidi(BleMidi &ble) {
     canvas->setCursor(148, 16);
     canvas->print(ble.LinkLine());
   }
-  canvas->setTextColor(COL_DIM);
-  canvas->setCursor(2, 28);
-  canvas->print(ble.DiagLine());
   canvas->setTextColor(COL_TEXT);
-  canvas->setCursor(2, 40);
+  canvas->setCursor(2, 36);
   BleAdvertPackets advert;
   buildBleMidiAdvert(bleName, MOTHDECK_BLE_NAME_DEFAULT, &advert);
   if (advert.nameShortened) {
@@ -1069,10 +1070,67 @@ static void drawMidi(BleMidi &ble) {
   canvas->setCursor(2, 102);
   MidiCounters ctr;
   ble.CopyCounters(&ctr);
-  canvas->printf("pk %lu  msg %lu  ovf %lu", (unsigned long)ctr.packets, (unsigned long)ctr.messages, (unsigned long)ctr.overflows);
-  canvas->setCursor(2, 114);
+  canvas->printf("pk %lu  msg %lu", (unsigned long)ctr.packets, (unsigned long)ctr.messages);
+  canvas->setCursor(2, 112);
   canvas->printf("clk %lu  note %lu", (unsigned long)ctr.clocks, (unsigned long)ctr.notes);
-  legend("E edit name in Settings");
+  legend("E name   Fn D status");
+}
+
+static const int kHoldPresets[] = {32, 96, 192, 384};
+
+static int holdPresetIndex(int steps) {
+  int best = 2;
+  int bestDelta = 100000;
+  for (int i = 0; i < 4; i++) {
+    int delta = steps - kHoldPresets[i];
+    if (delta < 0) {
+      delta = -delta;
+    }
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = i;
+    }
+  }
+  return best;
+}
+
+static void nudgeHold(int dir) {
+  int idx = holdPresetIndex((int)snap.safetyHold);
+  idx += dir;
+  if (idx < 0) {
+    idx = 3;
+  } else if (idx > 3) {
+    idx = 0;
+  }
+  audioCommand('Q', kHoldPresets[idx]);
+}
+
+static void drawMidiStatus(BleMidi &ble) {
+  canvas->setTextColor(COL_AMBER);
+  canvas->setCursor(2, 16);
+  canvas->print("Status");
+  MidiDrops drops;
+  ble.CopyDrops(&drops);
+  AudioDiag diag;
+  audioCopyDiag(&diag);
+  canvas->setTextColor(COL_TEXT);
+  canvas->setCursor(2, 32);
+  canvas->printf("clk %lu  on %lu  off %lu", (unsigned long)drops.clock, (unsigned long)drops.noteOn, (unsigned long)drops.noteOff);
+  canvas->setCursor(2, 44);
+  canvas->printf("ring %lu  parse %lu", (unsigned long)drops.ringFull, (unsigned long)drops.parser);
+  canvas->setCursor(2, 56);
+  canvas->printf("hold %lu  late %lu", (unsigned long)snap.safetyReleases, (unsigned long)diag.late);
+  canvas->setCursor(2, 68);
+  canvas->printf("retry %lu  drain %luus", (unsigned long)diag.retry, (unsigned long)diag.drainUs);
+  uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  canvas->setTextColor(COL_DIM);
+  canvas->setCursor(2, 84);
+  canvas->printf("free %uk  blk %uk", (unsigned)(freeB / 1024), (unsigned)(largest / 1024));
+  canvas->setCursor(2, 96);
+  canvas->printf("steps %u", snap.safetyHold);
+  (void)ble;
+  legend("Fn , / steps   Bksp close");
 }
 
 static void drawSettings(BleMidi &ble) {
@@ -1143,8 +1201,6 @@ static void drawSettings(BleMidi &ble) {
   }
   canvas->setTextColor(COL_DIM);
   canvas->setCursor(4, 96);
-  canvas->print(ble.CounterLine());
-  canvas->setCursor(4, 108);
   canvas->printf("v%s  %s", MOTHDECK_VERSION, BOARD_NAME);
   if (!naming && cursor == 6) {
     legend(ble.StatusLine());
@@ -1231,15 +1287,113 @@ static void drawBleAsk() {
   canvas->print("` cancels");
 }
 
+static uint32_t mixHash(uint32_t h, const void *data, int n) {
+  const uint8_t *bytes = static_cast<const uint8_t *>(data);
+  for (int i = 0; i < n; i++) {
+    h ^= bytes[i];
+    h *= 16777619u;
+  }
+  return h;
+}
+
+static uint32_t screenStamp(BleMidi &ble) {
+  uint32_t h = 2166136261u;
+  h = mixHash(h, &snap, (int)sizeof(snap));
+  h = mixHash(h, &page, (int)sizeof(page));
+  h = mixHash(h, &cursor, (int)sizeof(cursor));
+  h = mixHash(h, &mixRow, (int)sizeof(mixRow));
+  h = mixHash(h, &songSlot, (int)sizeof(songSlot));
+  h = mixHash(h, &loopLib, (int)sizeof(loopLib));
+  h = mixHash(h, &loopRow, (int)sizeof(loopRow));
+  h = mixHash(h, &quantize, (int)sizeof(quantize));
+  h = mixHash(h, &overlay, (int)sizeof(overlay));
+  h = mixHash(h, &naming, (int)sizeof(naming));
+  h = mixHash(h, &rollView, (int)sizeof(rollView));
+  h = mixHash(h, &rollStep, (int)sizeof(rollStep));
+  h = mixHash(h, &rollPitch, (int)sizeof(rollPitch));
+  h = mixHash(h, &rollOrigin, (int)sizeof(rollOrigin));
+  h = mixHash(h, &rollFollow, (int)sizeof(rollFollow));
+  h = mixHash(h, &midiStatus, (int)sizeof(midiStatus));
+  h = mixHash(h, &bleAsk, (int)sizeof(bleAsk));
+  h = mixHash(h, &launcherOk, (int)sizeof(launcherOk));
+  h = mixHash(h, &outVol, (int)sizeof(outVol));
+  h = mixHash(h, &bright, (int)sizeof(bright));
+  h = mixHash(h, &uiEpoch, (int)sizeof(uiEpoch));
+  h = mixHash(h, bleName, (int)strlen(bleName));
+  h = mixHash(h, edit, (int)strlen(edit));
+  h = mixHash(h, toast, (int)strlen(toast));
+  uint8_t toastOn = (toast[0] && (int32_t)(millis() - toastUntil) <= 0) ? 1 : 0;
+  h = mixHash(h, &toastOn, 1);
+  int batt = M5.Power.getBatteryLevel();
+  h = mixHash(h, &batt, (int)sizeof(batt));
+  uint8_t conn = ble.Connected() ? 1 : 0;
+  uint8_t adv = ble.Advertising() ? 1 : 0;
+  h = mixHash(h, &conn, 1);
+  h = mixHash(h, &adv, 1);
+  const char *status = ble.StatusLine();
+  if (status) {
+    h = mixHash(h, status, (int)strlen(status));
+  }
+  const char *link = ble.LinkLine();
+  if (link) {
+    h = mixHash(h, link, (int)strlen(link));
+  }
+  if (page == kMidiPage) {
+    MidiCounters ctr;
+    ble.CopyCounters(&ctr);
+    h = mixHash(h, &ctr, (int)sizeof(ctr));
+    if (midiStatus) {
+      MidiDrops drops;
+      ble.CopyDrops(&drops);
+      h = mixHash(h, &drops, (int)sizeof(drops));
+      AudioDiag diag;
+      audioCopyDiag(&diag);
+      h = mixHash(h, &diag, (int)sizeof(diag));
+      uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      h = mixHash(h, &freeB, (int)sizeof(freeB));
+      h = mixHash(h, &largest, (int)sizeof(largest));
+    }
+  }
+  if (page == kSettingsPage) {
+    int mv = M5.Power.getBatteryVoltage();
+    h = mixHash(h, &mv, (int)sizeof(mv));
+    const char *sw = ble.SwitchLine();
+    if (sw) {
+      h = mixHash(h, sw, (int)strlen(sw));
+    }
+  }
+  if (page == kLoopsPage) {
+    int n = loopLibrary.Count();
+    h = mixHash(h, &n, (int)sizeof(n));
+  }
+  uint8_t mounted = sdCard.Mounted() ? 1 : 0;
+  h = mixHash(h, &mounted, 1);
+  return h;
+}
+
 void uiDraw(BleMidi &ble) {
   if (!canvas) {
     return;
   }
   loopsBlocked = ble.UserEnabled();
+  if (page != kMidiPage) {
+    midiStatus = false;
+  }
   audioReadSnap(&snap);
+  uint32_t stamp = screenStamp(ble);
+  static uint32_t lastStamp = 0;
+  static bool haveStamp = false;
+  if (haveStamp && stamp == lastStamp) {
+    return;
+  }
+  haveStamp = true;
+  lastStamp = stamp;
   canvas->fillSprite(COL_BG);
   statusBar(ble);
-  switch (page) {
+  if (page == kMidiPage && midiStatus) {
+    drawMidiStatus(ble);
+  } else switch (page) {
     case 0:
       if (rollView) {
         drawRoll();
@@ -1561,6 +1715,14 @@ static void doUnloadBle(BleMidi &ble) {
 }
 
 static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool fn, BleMidi &ble) {
+  if (fn && page == kMidiPage && c == 'd') {
+    midiStatus = !midiStatus;
+    return;
+  }
+  if (fn && midiStatus && page == kMidiPage && (c == ',' || c == '/')) {
+    nudgeHold(c == '/' ? 1 : -1);
+    return;
+  }
   if (fn) {
     if (c == ';') {
       if (page == 0 && rollView) {
@@ -1852,6 +2014,7 @@ static void handleChar(char c, bool ctrl, bool shift, bool alt, bool opt, bool f
     return;
   }
   if (page == kMidiPage && c == 'e') {
+    midiStatus = false;
     page = kSettingsPage;
     cursor = 2;
     naming = true;
@@ -1954,6 +2117,10 @@ static void handleState(const Keyboard_Class::KeysState &st, BleMidi &ble) {
     return;
   }
   if (st.del) {
+    if (midiStatus && page == kMidiPage) {
+      midiStatus = false;
+      return;
+    }
     if (page == 0) {
       if (rollView) {
         int cover = rollCoverStart();
@@ -2012,6 +2179,7 @@ void uiPoll(BleMidi &ble) {
     escFired = false;
   }
   if (kb.isChange() && kb.isPressed()) {
+    uiEpoch++;
     Keyboard_Class::KeysState st = kb.keysState();
     KeyEvent ev = eventFrom(st);
     if (bleAsk) {

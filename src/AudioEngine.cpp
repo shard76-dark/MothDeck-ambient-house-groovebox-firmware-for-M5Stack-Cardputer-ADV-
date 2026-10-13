@@ -34,6 +34,11 @@ static Snap snapSlots[2];
 static std::atomic<uint32_t> snapSeq{0};
 static const int kBlock = 256;
 static int16_t blocks[3][kBlock];
+static uint32_t statLate = 0;
+static uint32_t statRetry = 0;
+static uint32_t statDrainUs = 0;
+static bool speakerPrimed = false;
+static uint32_t lastQueueUs = 0;
 
 enum CmdType : uint8_t { CMD_KEY = 1, CMD_MIDI = 2, CMD_STOP_LOOP = 3, CMD_STOP_AUD = 4 };
 
@@ -96,20 +101,33 @@ static void drainSide() {
   }
 }
 
+static void noteDrain(uint32_t us) {
+  uint32_t cur = __atomic_load_n(&statDrainUs, __ATOMIC_RELAXED);
+  while (us > cur && !__atomic_compare_exchange_n(&statDrainUs, &cur, us, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+  }
+}
+
 static void drainMidi() {
   if (!midiIn) {
     return;
   }
+  int edge = midiIn->ConsumeConnectEdge();
+  if (edge < 0) {
+    midiIn->FlushIncoming();
+    tracker.AllNotesOff();
+  }
+  uint32_t t0 = micros();
   MidiEvent ev[12];
   for (int pass = 0; pass < 6; pass++) {
     int n = midiIn->Poll(ev, 12);
     if (n <= 0) {
-      return;
+      break;
     }
     for (int i = 0; i < n; i++) {
       tracker.HandleMidi(ev[i]);
     }
   }
+  noteDrain(micros() - t0);
 }
 
 static int renderCount() {
@@ -180,6 +198,17 @@ static void audioTask(void *arg) {
     // whole queue.
     drainMidi();
     int queued = (int)M5.Speaker.isPlaying(0);
+    if (speakerPrimed && queued == 0) {
+      // A connected link refills when the one queued buffer finishes, so a
+      // gap about one block long is the normal wake. Longer than that, or
+      // an empty queue when two buffers should be waiting, means the
+      // speaker had nothing left to play.
+      uint32_t gap = micros() - lastQueueUs;
+      uint32_t budget = (uint32_t)renderCount() * 1000000u / (uint32_t)kSampleRate;
+      if (queueLimit() > 1 || gap > budget + budget / 2) {
+        __atomic_fetch_add(&statLate, 1, __ATOMIC_RELAXED);
+      }
+    }
     if (queued >= queueLimit()) {
       vTaskDelay(1);
       continue;
@@ -187,9 +216,12 @@ static void audioTask(void *arg) {
     int count = renderCount();
     renderBlock(blocks[fill], count);
     if (!M5.Speaker.playRaw(blocks[fill], count, (uint32_t)kSampleRate, false, 1, 0, false)) {
+      __atomic_fetch_add(&statRetry, 1, __ATOMIC_RELAXED);
       vTaskDelay(1);
       continue;
     }
+    speakerPrimed = true;
+    lastQueueUs = micros();
     fill = (fill + 1) % 3;
   }
 }
@@ -404,4 +436,13 @@ void audioReadSnap(Snap *out) {
 
 void audioSetSpeakerVolume(uint8_t volume) {
   M5.Speaker.setVolume(volume);
+}
+
+void audioCopyDiag(AudioDiag *out) {
+  if (!out) {
+    return;
+  }
+  out->late = __atomic_load_n(&statLate, __ATOMIC_RELAXED);
+  out->retry = __atomic_load_n(&statRetry, __ATOMIC_RELAXED);
+  out->drainUs = __atomic_load_n(&statDrainUs, __ATOMIC_RELAXED);
 }

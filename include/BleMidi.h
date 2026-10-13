@@ -1,6 +1,7 @@
 #ifndef BleMidi_h
 #define BleMidi_h
 #include "MidiProtocol.h"
+#include "MidiRing.h"
 
 struct MidiCounters {
   uint32_t packets;
@@ -44,9 +45,13 @@ public:
   // is active. Fits on the MIDI page and does not need a serial cable.
   const char *DiagLine();
   void CopyCounters(MidiCounters *out) const;
-  // One screen line: packets, messages, clocks, notes, overflows.
+  void CopyDrops(MidiDrops *out) const;
+  // One screen line: packets, messages, clocks, notes.
   const char *CounterLine();
   int Poll(MidiEvent *out, int maxOut);
+  // Drops anything still queued. Used when the link falls so a note-on
+  // already in the ring cannot sound after the voices are released.
+  void FlushIncoming();
   int ConsumeConnectEdge();
   void Send(const MidiEvent &event);
 

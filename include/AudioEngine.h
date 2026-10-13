@@ -29,4 +29,12 @@ bool audioPopMidi(MidiEvent *event);
 void audioReadSnap(Snap *out);
 void audioSetSpeakerVolume(uint8_t volume);
 
+struct AudioDiag {
+  uint32_t late;
+  uint32_t retry;
+  uint32_t drainUs;
+};
+
+void audioCopyDiag(AudioDiag *out);
+
 #endif

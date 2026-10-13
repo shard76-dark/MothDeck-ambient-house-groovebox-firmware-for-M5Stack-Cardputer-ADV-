@@ -95,6 +95,12 @@ static void emitMessage(uint8_t status, const uint8_t *data, MidiRunningState *s
       uint8_t msb = state->msbKnown[base] ? state->msb[base] : 0;
       event.value14 = (uint16_t)(((uint16_t)msb << 7) | val);
       pushEvent(out, event);
+    } else if (cc == 120 || cc == 123) {
+      event.type = MIDI_MSG_ALL_OFF;
+      event.number = cc;
+      event.value = val;
+      event.value14 = 0;
+      pushEvent(out, event);
     }
     return;
   }

@@ -65,6 +65,10 @@ struct Snap {
   uint8_t barIndex;
   uint8_t barCount;
   uint8_t patternSlots;
+  // Hidden status page. How many steps a tonal live note may stay down,
+  // and how many of those notes the safety release has let go.
+  uint16_t safetyHold;
+  uint32_t safetyReleases;
 };
 
 struct LoopArm {

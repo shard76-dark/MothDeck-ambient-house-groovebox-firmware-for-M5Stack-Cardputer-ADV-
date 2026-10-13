@@ -24,7 +24,9 @@ enum MidiMsgType : uint8_t {
   MIDI_MSG_START = 6,
   MIDI_MSG_CONTINUE = 7,
   MIDI_MSG_STOP = 8,
-  MIDI_MSG_SONG_POS = 9
+  MIDI_MSG_SONG_POS = 9,
+  // CC 120 (all sound off) and CC 123 (all notes off) on one channel.
+  MIDI_MSG_ALL_OFF = 10
 };
 
 static const uint8_t kMidiPitchCc = 128;
