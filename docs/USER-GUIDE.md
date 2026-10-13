@@ -1,18 +1,19 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.6 (1,157,632 bytes, magic `E9`, SHA-256 `2987446d5dc03265aee849aad1fdb5b696137812b7e85f35b008973ab0796e3a`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.7 (1,158,480 bytes, magic `E9`, SHA-256 `a27de5ad535ab37efe058298e70aac2f4cfa5d27e5128ee04ab0975fc29472d1`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
 
-1.2.6 includes the releases before it:
+1.2.7 includes the releases before it:
 
 - **1.2.2.** NimBLE is reserved at boot, before the loop windows. On and Off only start or stop advertising. Unload BLE frees that block for large loops on the next boot. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does, and then those notes record at the playhead.
 - **1.2.4.** An external clock counts every tick in a BLE packet, including several that share one timestamp. The BPM follows from 40 to 200, smoothed over a beat. Six ticks advance one 16th. A track sounds up to four notes at once. A fifth replaces the oldest. Note-off, including velocity 0, releases only the matching note and channel. Notes in one packet each get a voice.
 - **1.2.5.** Stop and a dropped link release live notes. Loops, the pattern, and the sampler keep going. Note-off finds the track that sounded the note. Continue keeps the song-position phase. Fn+D on the MIDI page opens Status. An external clock clamps at 200.
 - **1.2.6.** Clocks are counted instead of queued, so a burst does not crowd out the notes behind them. Ticks before Start in the same packet are not counted. The production build does not print from the connect callbacks. Pairing and advertising are unchanged.
+- **1.2.7.** With Rec on, a MIDI note lands on the step that just played. Halfway through the step it rounds forward. The end of the pattern wraps to step 0 of that pattern. Note-off stores a hold of 1 to 4 steps. Rec off still only plays.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
-The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.6 still uses. On a 1.2.6 board the Settings version line says `v1.2.6`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`). Settings does not print a counter line.
+The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.7 still uses. On a 1.2.7 board the Settings version line says `v1.2.7`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`). Settings does not print a counter line.
 
 ## Moving around
 
@@ -22,7 +23,7 @@ Tab steps through Play, Instrument, FX, Mixer, Song, Loops, MIDI, Settings, and 
 
 Space starts and stops the internal clock, and that is Rec. Rec is off at boot. Hold `` ` `` or the front button for about 0.7 seconds to leave for Launcher.
 
-Incoming BLE notes while Rec is off only play. They are not written into the pattern. An MPC Start plays the pattern and does not turn Rec on. With Rec on, those notes record at the playhead.
+Incoming BLE notes while Rec is off only play. They are not written into the pattern. An MPC Start plays the pattern and does not turn Rec on. With Rec on, a note lands on the step that just played. Halfway through the step it rounds to the next one, and the end of the pattern wraps to step 0 of that pattern. Note-off stores the hold, from 1 to 4 steps.
 
 There are four tracks. Keys 1–4 select a track. Keys 5–8 select a pattern, and they stop at the last pattern that fits the current length. A pattern is 1 to 8 bars. A bar is 16 sixteenth-notes, so the length is 16 to 128 steps. A new song is 1 bar. The grid is 256 steps: four patterns fit through 4 bars, three fit at 5 bars, and two fit at 6, 7, or 8 bars.
 
@@ -216,8 +217,8 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | CC 1 | Low pass |
 | CC 7 / CC 39 | Volume, mapped to 0–8 |
 | Pitch bend | Per channel |
-| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Every clock in a packet counts, including several that share one timestamp. They are counted rather than queued, so a burst leaves room for the notes. Ticks before Start in that packet are not counted. Tempo is smoothed over a beat and clamps at 200 |
-| Note on | Up to four notes sound on the track. A fifth replaces the oldest. Note-off, including velocity 0, releases only that note and channel, on the track that sounded it. Stored in the pattern only while Rec is on |
+| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. Every clock in a packet counts, including several that share one timestamp. They are counted rather than queued. Ticks before Start in that packet are not counted. With Rec on, a note lands on the step that just played, and three or more clocks round it to the next step. The pattern wraps to its own step 0. Tempo is smoothed over a beat and clamps at 200 |
+| Note on | Up to four notes sound on the track. A fifth replaces the oldest. Note-off, including velocity 0, releases only that note and channel, on the track that sounded it. Stored in the pattern only while Rec is on, with a hold of 1 to 4 steps |
 | CC 120 / CC 123 | Release live notes on that channel. Pattern, loops, and sampler stay |
 | Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec |
 | Continue `0xFB` | Resume on the current step and keep the clock phase, including clocks after Song Position. Does not arm Rec |
@@ -234,7 +235,7 @@ Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change the selected row.
 
 ![Settings, BLE row](screenshots/screen-settings-ble-2x.png)
 
-Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.6`. There is no counter line under the rows. The dev build still uses the Radio row for a heap readout. The hidden MIDI status view is where the other counts live.
+Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.7`. There is no counter line under the rows. The dev build still uses the Radio row for a heap readout. The hidden MIDI status view is where the other counts live.
 
 | Row | Keys |
 | --- | --- |

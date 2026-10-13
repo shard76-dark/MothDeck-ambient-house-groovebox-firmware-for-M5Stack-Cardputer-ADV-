@@ -341,9 +341,11 @@ static void testMidiNotesRespectRec() {
   expect(live.recOn && live.isPlaying, "space turns rec on");
   head = live.trackIndex;
   noteOn(live, 0, 60);
-  expect(live.NoteAt(0, head) == 1 && live.OctaveAt(0, head) == 2, "rec on writes the midi note at the playhead");
+  int sounded = head > 0 ? head - 1 : 0;
+  expect(live.NoteAt(0, sounded) == 1 && live.OctaveAt(0, sounded) == 2, "rec on writes the step that just played");
+  expect(live.NoteAt(0, head) == 0, "rec does not write the step the playhead has already left");
   noteOn(live, 3, 62);
-  expect(live.NoteAt(3, head) == 3, "rec on writes the channel's track");
+  expect(live.NoteAt(3, sounded) == 3, "rec on writes the channel's track");
 
   transport(live, MIDI_MSG_STOP, 0);
   expect(!live.isPlaying && live.recOn, "midi stop pauses transport and keeps rec");
@@ -362,7 +364,8 @@ static void testMidiNotesRespectRec() {
   expect(live.recOn && live.isPlaying, "midi start keeps rec when it was already on");
   head = live.trackIndex;
   noteOn(live, 0, 60);
-  expect(live.NoteAt(0, head) == 1, "rec stays on across midi stop and start");
+  sounded = head > 0 ? head - 1 : 0;
+  expect(live.NoteAt(0, sounded) == 1, "rec stays on across midi stop and start");
 
   live.SetCommand('P', 0);
   expect(!live.recOn && !live.isPlaying, "space turns rec off");
@@ -823,6 +826,89 @@ static void testRingClockTempo() {
   expect(phase.trackIndex == idx + 1, "continue leaves the clocks that arrived before it");
 }
 
+static void testQuantizeAndGate() {
+  Tracker early;
+  early.SetCommand('P', 0);
+  transport(early, MIDI_MSG_START, 0);
+  noteOn(early, 0, 60);
+  expect(early.NoteAt(0, 0) == 1, "a note as the step starts lands on that step");
+  expect(early.NoteAt(0, 1) == 0, "it does not land a step late");
+  clocks(early, 3);
+  noteOn(early, 0, 64);
+  expect(early.NoteAt(0, 1) == 5, "three of six clocks round to the next step");
+
+  Tracker wrap;
+  wrap.SetCommand('P', 0);
+  wrap.allPatternPlay = true;
+  transport(wrap, MIDI_MSG_START, 0);
+  clocks(wrap, 14 * 6);
+  clocks(wrap, 6);
+  expect(wrap.currentPattern == 1 && wrap.trackIndex == 16, "song mode has entered the next pattern");
+  noteOn(wrap, 0, 60);
+  expect(wrap.NoteAt(0, 15) == 1, "the downbeat stays on the step that just played");
+  expect(wrap.NoteAt(0, 16) == 0, "that note does not write the next pattern");
+  clocks(wrap, 3);
+  noteOn(wrap, 0, 62);
+  expect(wrap.NoteAt(0, 0) == 3, "a late note at the loop end wraps to step 0 of the same pattern");
+  expect(wrap.NoteAt(0, 16) == 0, "the late note does not write the next pattern");
+
+  Tracker gate;
+  gate.SetCommand('P', 0);
+  transport(gate, MIDI_MSG_START, 0);
+  noteOn(gate, 0, 60);
+  noteOff(gate, 0, 60);
+  expect(gate.NoteLenAt(0, 0) == 1, "a note-off on the same clocks is one step");
+  noteOn(gate, 0, 64);
+  clocks(gate, 9);
+  noteOff(gate, 0, 64);
+  expect(gate.NoteLenAt(0, 0) == 2, "nine clocks round to a two-step gate");
+  noteOn(gate, 1, 67);
+  clocks(gate, 21);
+  noteOff(gate, 1, 67);
+  int heldStep = -1;
+  for (int s = 0; s < Tracker::kMaxSteps; s++) {
+    if (gate.NoteAt(1, s) == 8) {
+      heldStep = s;
+    }
+  }
+  expect(heldStep >= 0 && gate.NoteLenAt(1, heldStep) == 4, "twenty-one clocks round to four steps");
+  noteOn(gate, 2, 69);
+  clocks(gate, 40);
+  noteOff(gate, 2, 69);
+  int longStep = -1;
+  for (int s = 0; s < Tracker::kMaxSteps; s++) {
+    if (gate.NoteAt(2, s) == 10) {
+      longStep = s;
+    }
+  }
+  expect(longStep >= 0 && gate.NoteLenAt(2, longStep) == 4, "a longer hold stays inside the two length bits");
+
+  SongData saved;
+  gate.CaptureSong(&saved);
+  expect((saved.tracks[0][0] & 0x0F) == 5, "the gate pitch stays in the note nibble");
+  expect(((saved.tracks[0][0] >> 4) & 3) == 1, "the two-step gate uses the existing length bits");
+  uint8_t buf[4096];
+  int n = songEncode(saved, buf, (int)sizeof(buf));
+  expect(n == kSongFileBytes, "gate length does not change the song version");
+
+  Tracker off;
+  noteOn(off, 0, 60);
+  clocks(off, 12);
+  noteOff(off, 0, 60);
+  expect(gridEmpty(off), "rec off still does not write a gate");
+
+  Tracker internal;
+  internal.SetCommand('P', 0);
+  internal.SetCommand('N', 0);
+  for (int i = 0; i < 2757; i++) {
+    internal.UpdateTracker();
+  }
+  expect(internal.trackIndex == 0, "half an internal step has not moved the playhead");
+  noteOn(internal, 0, 64);
+  expect(internal.NoteAt(0, 1) == 5, "past halfway on the internal clock rounds forward");
+  expect(internal.NoteAt(0, 0) == 1, "the note from the start of the step stays put");
+}
+
 static void testExternalBpmClamp() {
   Tracker fast;
   transport(fast, MIDI_MSG_START, 0);
@@ -860,6 +946,7 @@ int main() {
   testContinuePhase();
   testSafetyHold();
   testRingClockTempo();
+  testQuantizeAndGate();
   testExternalBpmClamp();
   if (failures) {
     std::printf("%d failed\n", failures);

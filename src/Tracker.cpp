@@ -36,6 +36,12 @@ Tracker::Tracker() {
   bpmSlot = 0;
   extSync = false;
   clockCount = 0;
+  soundedPattern = 0;
+  soundedLocal = 0;
+  haveSounded = 0;
+  transportTick = 0;
+  transportSample = 0;
+  memset(recGate, 0, sizeof(recGate));
   lastClockTs = 0;
   haveClockTs = 0;
   tempoMs = 0;
@@ -267,6 +273,18 @@ bool Tracker::LearnLoopLength() {
 }
 
 void Tracker::AdvanceStep() {
+  int span = patternLength > 0 ? patternLength : kStepsPerBar;
+  soundedPattern = currentPattern;
+  int base = soundedPattern * span;
+  int played = trackIndex - base;
+  if (played < 0) {
+    played = 0;
+  } else if (played >= span) {
+    played = span - 1;
+  }
+  soundedLocal = played;
+  haveSounded = 1;
+
   barCount++;
   if (barCount > 3) {
     tempoBlink = 30;
@@ -382,6 +400,7 @@ void Tracker::SilenceLive() {
 }
 
 void Tracker::AllNotesOff() {
+  FinishGates();
   for (int t = 0; t < 4; t++) {
     for (int i = 0; i < kLiveVoices; i++) {
       LiveVoice &slot = live[t][i];
@@ -509,6 +528,7 @@ void Tracker::MidiClock(uint16_t timestamp13) {
   lastClockTs = ts;
   haveClockTs = 1;
   clocksInStamp++;
+  transportTick++;
   if (!extSync || !isPlaying) {
     return;
   }
@@ -543,6 +563,8 @@ void Tracker::MidiSongPosition(int sixteenth) {
   }
   clockCount = 0;
   stepSampleCount = 0;
+  // The playhead is this step, and it has not played yet.
+  haveSounded = 0;
   SyncEditBar();
   if (learned) {
     SetHintF("Bars %d", Bars());
@@ -560,9 +582,12 @@ int Tracker::UpdateTracker() {
     if (samplesPerStep > 1 && stepSampleCount + 1 < samplesPerStep) {
       stepSampleCount++;
     }
-  } else if (++stepSampleCount >= samplesPerStep) {
-    stepSampleCount = 0;
-    AdvanceStep();
+  } else {
+    transportSample++;
+    if (++stepSampleCount >= samplesPerStep) {
+      stepSampleCount = 0;
+      AdvanceStep();
+    }
   }
 
   const int div = 2 + masterVolume * 5;
@@ -1042,6 +1067,108 @@ void Tracker::SetVolume(int val) {
   }
 }
 
+int Tracker::QuantizeRecordStep() const {
+  int span = patternLength > 0 ? patternLength : kStepsPerBar;
+  if (span < 1) {
+    span = 1;
+  }
+  int pattern = currentPattern;
+  int local = 0;
+  if (haveSounded) {
+    pattern = soundedPattern;
+    local = soundedLocal;
+  } else {
+    // Nothing has played yet. The cell is the playhead, including the
+    // rewind to step 0 on the first recorded note.
+    int abs = trackIndex;
+    if (abs < 0) {
+      abs = 0;
+    } else if (abs >= kMaxSteps) {
+      abs = kMaxSteps - 1;
+    }
+    pattern = abs / span;
+    local = abs - pattern * span;
+  }
+  if (local < 0) {
+    local = 0;
+  } else if (local >= span) {
+    local = span - 1;
+  }
+  bool forward = false;
+  if (extSync) {
+    // Six clocks are one step. Halfway and later belongs to the next step.
+    forward = clockCount >= 3;
+  } else if (samplesPerStep > 1) {
+    forward = stepSampleCount * 2 >= samplesPerStep;
+  }
+  if (forward) {
+    local++;
+    if (local >= span) {
+      local = 0;
+    }
+  }
+  if (pattern < 0) {
+    pattern = 0;
+  }
+  int abs = pattern * span + local;
+  if (abs < 0 || abs >= kMaxSteps) {
+    abs = pattern * span;
+    if (abs < 0) {
+      abs = 0;
+    }
+  }
+  return abs;
+}
+
+void Tracker::OpenGate(int track, int pitch, int step, int8_t oct, uint8_t inst) {
+  if (track < 0 || track > 3 || pitch < 0 || pitch > 11) {
+    return;
+  }
+  RecGate &gate = recGate[track];
+  gate.used = 1;
+  gate.pitch = (uint8_t)pitch;
+  gate.oct = oct;
+  gate.inst = inst;
+  gate.external = extSync ? 1 : 0;
+  gate.step = step;
+  gate.origin = extSync ? transportTick : transportSample;
+}
+
+void Tracker::FinishGate(int track) {
+  if (track < 0 || track > 3) {
+    return;
+  }
+  RecGate &gate = recGate[track];
+  if (!gate.used) {
+    return;
+  }
+  int steps = 1;
+  if (gate.external) {
+    uint32_t ticks = transportTick - gate.origin;
+    steps = (int)((ticks + 3u) / 6u);
+  } else if (samplesPerStep > 0) {
+    uint32_t delta = transportSample - gate.origin;
+    uint32_t half = samplesPerStep / 2;
+    steps = (int)((delta + half) / samplesPerStep);
+  }
+  if (steps < 1) {
+    steps = 1;
+  } else if (steps > 4) {
+    steps = 4;
+  }
+  uint8_t note = (uint8_t)(gate.pitch + 1);
+  if (NoteAt(track, gate.step) == note) {
+    SetCell(track, gate.step, note, gate.oct, gate.inst, (uint8_t)(steps - 1));
+  }
+  gate.used = 0;
+}
+
+void Tracker::FinishGates() {
+  for (int t = 0; t < 4; t++) {
+    FinishGate(t);
+  }
+}
+
 void Tracker::SetNote(int val, int track) {
   if (track < 0 || track > 3) {
     return;
@@ -1053,9 +1180,13 @@ void Tracker::SetNote(int val, int track) {
     if (val >= 0) {
       note = (uint8_t)(val + 1);
     }
-    SetCell(track, trackIndex, note, voices[selectedTrack].octave, (uint8_t)inst);
+    int step = QuantizeRecordStep();
+    SetCell(track, step, note, voices[selectedTrack].octave, (uint8_t)inst, 0);
+    if (val >= 0 && val <= 11) {
+      OpenGate(track, val, step, voices[selectedTrack].octave, (uint8_t)inst);
+    }
     int span = patternLength > 0 ? patternLength : 1;
-    lastNoteTrackIndex = trackIndex % span;
+    lastNoteTrackIndex = step % span;
   } else {
     voices[track].SetNote(val, false, -1, inst);
     if (inst == kLoopsVoice) {
@@ -1220,6 +1351,10 @@ void Tracker::ClearAll(int val) {
   trackIndex = 0;
   stepSampleCount = 0;
   barCount = 0;
+  haveSounded = 0;
+  soundedPattern = 0;
+  soundedLocal = 0;
+  memset(recGate, 0, sizeof(recGate));
   memset(trackVoice, 0, sizeof(trackVoice));
   RememberVoiceLabel(0);
   for (int j = 0; j < 4; j++) {
@@ -1652,11 +1787,30 @@ void Tracker::HandleMidi(const MidiEvent &event) {
     case MIDI_MSG_SONG_POS:
       MidiSongPosition((int)event.value14);
       return;
-    case MIDI_MSG_NOTE_OFF:
+    case MIDI_MSG_NOTE_OFF: {
       // The track is the one that sounded the note. A note-off does not
-      // move the selected track.
+      // move the selected track. A recorded hold closes here, in the
+      // existing 2-bit length, and only while Rec is on.
+      int pitch = 0;
+      int oct = 0;
+      midiNoteToSynth(event.number, pitch, oct);
+      (void)oct;
+      if (recOn) {
+        if (event.channel < 4) {
+          if (recGate[event.channel].used && recGate[event.channel].pitch == (uint8_t)pitch) {
+            FinishGate(event.channel);
+          }
+        } else {
+          for (int t = 0; t < 4; t++) {
+            if (recGate[t].used && recGate[t].pitch == (uint8_t)pitch) {
+              FinishGate(t);
+            }
+          }
+        }
+      }
       ReleaseMatching(event.channel, event.number);
       return;
+    }
     case MIDI_MSG_ALL_OFF:
       ReleaseChannel(event.channel);
       return;

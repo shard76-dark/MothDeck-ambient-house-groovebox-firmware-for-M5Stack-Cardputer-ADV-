@@ -103,6 +103,23 @@ private:
   // 16th), and the internal sample counter does not also advance them.
   bool extSync;
   int clockCount;
+  // The step AdvanceStep last played, and which pattern it belonged to.
+  // Recording quantizes from that step. A late note wraps inside it.
+  int soundedPattern;
+  int soundedLocal;
+  uint8_t haveSounded;
+  uint32_t transportTick;
+  uint32_t transportSample;
+  struct RecGate {
+    uint8_t used;
+    uint8_t pitch;
+    int8_t oct;
+    uint8_t inst;
+    uint8_t external;
+    int step;
+    uint32_t origin;
+  };
+  RecGate recGate[4];
   uint16_t lastClockTs;
   uint8_t haveClockTs;
   uint32_t tempoMs;
@@ -191,6 +208,10 @@ private:
   void QueueVolumeMidi();
   void ApplyController(const MidiEvent &event);
   void SetNote(int val, int track);
+  int QuantizeRecordStep() const;
+  void OpenGate(int track, int pitch, int step, int8_t oct, uint8_t inst);
+  void FinishGate(int track);
+  void FinishGates();
   void SetEffect(int val);
   void SetBPM(int val);
   void SetEnvelopeNum(int val);

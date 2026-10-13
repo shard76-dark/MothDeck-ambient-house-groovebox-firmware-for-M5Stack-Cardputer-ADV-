@@ -1,6 +1,18 @@
+## 1.2.7 (2026-10-13)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,158,480 bytes, magic `E9`, chip `0x0009`, SHA-256 `a27de5ad535ab37efe058298e70aac2f4cfa5d27e5128ee04ab0975fc29472d1`). Version on the Settings screen is 1.2.7. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 139516/327680.
+
+With Rec on, a MIDI note records on the step that just played. Three or more clocks into the step round it forward. A late note at the end of the pattern wraps to step 0 of that pattern, including in song mode. Note-off stores a hold of 1 to 4 steps in the existing length bits. The song file does not change. Rec off still only plays.
+
+This image includes the 1.2.2 through 1.2.6 behavior. The LilyGO TTGO T8 port is a different binary, pre-release [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4) on the `ttgo-t8` branch. It is not in this folder.
+
+The USB full-flash image is `releases/mothdeck-cardputer-adv-full.bin` (1,224,016 bytes, SHA-256 `2ded301f7638f12be5dcff120aa693e34b38ed1f2a0d22088aaa8f5231102e20`). It replaces Launcher. Install `mothdeck-cardputer-adv.bin` from Launcher.
+
+The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
+
 ## 1.2.6 (2026-10-13)
 
-Flash `releases/mothdeck-cardputer-adv.bin` (1,157,632 bytes, magic `E9`, chip `0x0009`, SHA-256 `2987446d5dc03265aee849aad1fdb5b696137812b7e85f35b008973ab0796e3a`). Version on the Settings screen is 1.2.6. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 139428/327680.
+Flash `releases/mothdeck-cardputer-adv.bin` (1,157,632 bytes, magic `E9`, chip `0x0009`, SHA-256 `2987446d5dc03265aee849aad1fdb5b696137812b7e85f35b008973ab0796e3a`). Version on the Settings screen is 1.2.6. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 139428/327680. Superseded by 1.2.7.
 
 MIDI clocks are counted instead of queued. A burst of ticks leaves room for the notes in the same packet. Start, Continue, Stop, and Song Position stay in order. Start clears pending ticks, and ticks before Start in the same packet are not counted. Clocks between Song Position and Continue still count. The production build does not print from the connect or interval callbacks. Pairing, the advertising packet, and the 7.5–15 ms request are unchanged. The dev build still prints those lines.
 
