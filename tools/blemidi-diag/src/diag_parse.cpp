@@ -33,7 +33,12 @@ static int expectedDataBytes(uint8_t status) {
 
 // Same wrap rule as src/MidiProtocol.cpp: the low 7 bits move backward only
 // when the high half has ticked.
+static DiagPacket *gCollect = nullptr;
+
 static uint16_t noteTimestamp(uint16_t *cursor, uint8_t timestampByte) {
+  if (gCollect && gCollect->tsLoN < kDiagTsLoMax) {
+    gCollect->tsLo[gCollect->tsLoN++] = (uint8_t)(timestampByte & 0x7F);
+  }
   uint16_t low = (uint16_t)(timestampByte & 0x7F);
   uint16_t prevLow = (uint16_t)(*cursor & 0x7F);
   uint16_t high = (uint16_t)(*cursor & 0x1F80);
@@ -214,6 +219,11 @@ void diagParse(const uint8_t *data, int len, DiagState *state, DiagPacket *out) 
     return;
   }
   memset(out, 0, sizeof(*out));
+  gCollect = out;
+  if (data && len >= 1) {
+    out->hdr = data[0];
+    out->tsHi = (uint8_t)(data[0] & 0x3F);
+  }
   for (int i = 0; i < kDiagMaxMsg; i++) {
     out->msg[i].sysexOff = -1;
   }
@@ -223,6 +233,7 @@ void diagParse(const uint8_t *data, int len, DiagState *state, DiagPacket *out) 
     if (state) {
       state->sysex = 0;
     }
+    gCollect = nullptr;
     return;
   }
 
@@ -231,6 +242,7 @@ void diagParse(const uint8_t *data, int len, DiagState *state, DiagPacket *out) 
     out->bleTs = timestamp;
     out->rejected = true;
     out->errors = 1;
+    gCollect = nullptr;
     return;
   }
 
@@ -248,6 +260,7 @@ void diagParse(const uint8_t *data, int len, DiagState *state, DiagPacket *out) 
     out->bleTs = timestamp;
     out->rejected = true;
     out->errors = 1;
+    gCollect = nullptr;
     return;
   } else {
     takeTimestamp(data, len, &i, &timestamp, false);
@@ -368,4 +381,5 @@ void diagParse(const uint8_t *data, int len, DiagState *state, DiagPacket *out) 
   }
 
   state->sysex = sysex ? 1 : 0;
+  gCollect = nullptr;
 }

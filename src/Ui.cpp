@@ -1197,7 +1197,7 @@ static void drawSettings(BleMidi &ble) {
       canvas->print(bleWord);
 #endif
     } else if (idx == 7) {
-      canvas->print(sdCard.Mounted() ? "mounted" : "none");
+      canvas->print(!sdCard.Mounted() ? "none" : (sdCard.WritesOk() ? "mounted" : "check card"));
     } else {
       canvas->printf("%u", snap.barCount ? snap.barCount : 1);
     }

@@ -8,6 +8,9 @@ class SdCard {
 public:
   bool Ensure();
   bool Mounted() const { return mounted; }
+  // False after a capacity check when the volume is larger than the
+  // measured card. Song saves stay inside the checked size.
+  bool WritesOk();
   bool Exists(const char *path);
   bool Mkdir(const char *path);
   bool Remove(const char *path);
