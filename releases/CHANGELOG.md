@@ -1,3 +1,11 @@
+## MothDiag 0.1.1 (2026-10-13)
+
+Flash `releases/mothdiag-cardputer-adv.bin` (808,688 bytes, magic `E9`, chip `0x0009`, SHA-256 `360959a33821222a9efb818a22d0193e9e6cf8eefeaa818fd2de799805ea7162`). Version on the screen is 0.1.1. Host tests passed. This image has not been tried on a Cardputer. Static RAM is 59852/327680. Supersedes 0.1.0.
+
+The decoder follows MothDeck 1.2.8. A status byte after a clock is the message. Clocks that share one timestamp stay one event. The short-interval request stays pending until the link is 15 ms or faster, or eight tries are used. The message buffer holds 160 messages, the same ceiling as the parser. The screen, the hello line, and help show 0.1.1.
+
+0.1.0 was the first shared image. Install this application image from Launcher. It replaces the app in the boot slot. Install `mothdeck-cardputer-adv.bin` again to return to MothDeck.
+
 ## 1.2.8 (2026-10-13)
 
 Flash `releases/mothdeck-cardputer-adv.bin` (1,230,816 bytes, magic `E9`, chip `0x0009`, SHA-256 `4a95e55c2b194d3ab6f9db23dd3dc234c0578a4c92cd7a08b7e7c5b038ac9f71`). Version on the Settings screen is 1.2.8. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 172468/327680.

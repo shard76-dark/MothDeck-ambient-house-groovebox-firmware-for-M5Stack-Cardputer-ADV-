@@ -1,4 +1,4 @@
-# MothDiag 0.1.0
+# MothDiag 0.1.1
 
 Standalone BLE MIDI diagnostics for the [M5Stack Cardputer ADV](https://docs.m5stack.com/en/core/Cardputer-Adv). It advertises as a BLE MIDI peripheral named **MothDiag**, using the same service, characteristic, advertising packet, and Just Works pairing as MothDeck. There is no synth, no audio, and no sequencer.
 
@@ -6,9 +6,9 @@ Plug the Cardputer into a Windows PC or a uConsole over USB. An assistant reads 
 
 The application image is [`releases/mothdiag-cardputer-adv.bin`](../../releases/mothdiag-cardputer-adv.bin).
 
-- Version 0.1.0
+- Version 0.1.1
 - 808,688 bytes, magic `E9`, chip `0x0009`
-- SHA-256 `9c9777ec5bef04a60e3fbeeb119279a5edf34517504303144f4678665773ddf7`
+- SHA-256 `360959a33821222a9efb818a22d0193e9e6cf8eefeaa818fd2de799805ea7162`
 - Also listed in [`releases/SHA256SUMS`](../../releases/SHA256SUMS)
 
 Installing this image replaces the app in the Cardputer's boot slot. Install `releases/mothdeck-cardputer-adv.bin` again to return to MothDeck. This tool does not play sound.
@@ -24,7 +24,7 @@ Launcher is [bmorcelli/Launcher](https://github.com/bmorcelli/Launcher). Use a C
 3. On the splash that says to press the button to enter Launcher, press Enter or the front button before the timeout.
 4. Open the SD browser, select `mothdiag-cardputer-adv.bin`, and choose Install.
 
-The screen then shows `MothDiag`, `0.1.0`, `Waiting` or `Connected`, a BPM, and note in/out counts. It redraws only when one of those changes.
+The screen then shows `MothDiag`, `0.1.1`, `Waiting` or `Connected`, a BPM, and note in/out counts. It redraws only when one of those changes.
 
 ### USB, from this repo
 
@@ -44,7 +44,7 @@ USB CDC, 115200, 8N1. Every line is one JSON object.
 
 | Line `t` | When |
 | --- | --- |
-| `hello` | Boot. `name` is `MothDiag`, `version` is `0.1.0`. |
+| `hello` | Boot. `name` is `MothDiag`, `version` is `0.1.1`. |
 | `radio` | Advertising started, or the radio did not come up. |
 | `connect`, `disconnect`, `link` | Link up, link down, or a later interval / MTU update. Fields that are not known yet are `null`: `interval` (1.25 ms units), `interval_ms`, `latency`, `timeout` (10 ms units), `timeout_ms`, `mtu`, `rssi`. |
 | `pkt` | One BLE notification, when verbose is on. `hex` is the raw packet, `ble_ts` is the 13-bit MIDI timestamp, `us` is the arrival time in microseconds, `n` is how many MIDI messages were inside. |

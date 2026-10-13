@@ -134,7 +134,7 @@ def render_report(summary: dict[str, Any], port: str, seconds: float, log_path: 
     arrival = summary["bpm_arrival"]
     midi = summary["bpm_midi"]
     lines = [
-        "MothDiag 0.1.0 capture",
+        "MothDiag 0.1.1 capture",
         f"port: {port}",
         f"seconds: {seconds:.1f}",
         f"log: {log_path}",
@@ -183,7 +183,7 @@ def render_report(summary: dict[str, Any], port: str, seconds: float, log_path: 
 
 def self_check() -> int:
     sample = [
-        '{"t":"hello","name":"MothDiag","version":"0.1.0","baud":115200}',
+        '{"t":"hello","name":"MothDiag","version":"0.1.1","baud":115200}',
         '{"t":"connect","us":10,"interval":6,"interval_ms":7.5,"mtu":256,"rssi":-40}',
         '{"t":"midi","us":100,"msg":"note_on","ch":1,"d":[60,100],"running":false,"ble_ts":1}',
         '{"t":"midi","us":200,"msg":"note_off","ch":1,"d":[60,0],"vel0":true,"running":false,"ble_ts":2}',
