@@ -128,14 +128,24 @@ def summarize(lines: Iterable[str]) -> dict[str, Any]:
         "queue_drops": int(queue_drops or 0),
         "parser_mismatch": int(mismatch or 0),
         "extra_offs": int(last_stats.get("extra_offs") or 0),
+        "version": _firmware_version(rows),
     }
+
+
+def _firmware_version(rows: Iterable[dict]) -> str:
+    for row in rows:
+        if row.get("t") in ("hello", "status") and row.get("version"):
+            return str(row["version"])
+    return ""
 
 
 def render_report(summary: dict[str, Any], port: str, seconds: float, log_path: str) -> str:
     arrival = summary["bpm_arrival"]
     midi = summary["bpm_midi"]
+    version = str(summary.get("version") or "")
+    title = f"MothDiag {version} capture" if version else "MothDiag capture"
     lines = [
-        "MothDiag 0.1.1 capture",
+        title,
         f"port: {port}",
         f"seconds: {seconds:.1f}",
         f"log: {log_path}",
@@ -212,6 +222,8 @@ def self_check() -> int:
         problems.append("report text")
     if "stability:" not in report:
         problems.append("stability line")
+    if summary.get("version") != "0.1.1" or "MothDiag 0.1.1 capture" not in report:
+        problems.append("banner version")
     if problems:
         sys.stderr.write("diag.py self-check failed: " + ", ".join(problems) + "\n")
         sys.stderr.write(report + "\n")
@@ -407,6 +419,15 @@ def _send_line(handle, line: str) -> None:
     handle.flush()
 
 
+def _show_progress(sent: int, total: int) -> None:
+    width = 28
+    frac = 0.0 if total <= 0 else sent / total
+    filled = min(width, int(round(frac * width)))
+    pct = 0 if total <= 0 else min(100, int(sent * 100 / total))
+    sys.stderr.write(f"\r[{'#' * filled}{'-' * (width - filled)}] {pct:3d}%")
+    sys.stderr.flush()
+
+
 def transfer_bytes(handle, command: str, blob: bytes, ready_type: str) -> int:
     _send_line(handle, command)
     _lines, ready = _read_objects(
@@ -417,21 +438,54 @@ def transfer_bytes(handle, command: str, blob: bytes, ready_type: str) -> int:
     if not ready or ready.get("phase") != "ready":
         sys.stderr.write("the Cardputer did not accept the transfer\n")
         return 1
+    try:
+        chunk_size = int(ready.get("chunk") or 4096)
+    except (TypeError, ValueError):
+        chunk_size = 4096
+    if chunk_size < 64 or chunk_size > 16384:
+        chunk_size = 4096
     view = memoryview(blob)
     sent = 0
-    while sent < len(blob):
-        chunk = view[sent : sent + 4096]
+    total = len(blob)
+    _show_progress(0, total)
+    while sent < total:
+        chunk = view[sent : sent + chunk_size]
         handle.write(chunk)
+        handle.flush()
         sent += len(chunk)
-    handle.flush()
+        if sent < total:
+            target = sent
+
+            def _ack(item: dict, need: int = target) -> bool:
+                phase = item.get("phase")
+                if phase == "retry":
+                    return True
+                if phase != "ack":
+                    return False
+                try:
+                    return int(item.get("got") or 0) >= need
+                except (TypeError, ValueError):
+                    return False
+
+            _ack_lines, ack = _read_objects(handle, 15.0, _ack)
+            if not ack or ack.get("phase") != "ack":
+                sys.stderr.write("\nthe transfer did not finish\n")
+                return 1
+            try:
+                sent = int(ack.get("got") or sent)
+            except (TypeError, ValueError):
+                pass
+        _show_progress(sent, total)
     _done_lines, done = _read_objects(
         handle,
-        max(60.0, len(blob) / 20000.0 + 30.0),
+        max(90.0, total / 20000.0 + 30.0),
         lambda item: item.get("phase") in ("restarting", "done", "retry", "formatted"),
     )
     if not done or done.get("phase") == "retry":
-        sys.stderr.write("the transfer did not finish\n")
+        sys.stderr.write("\nthe transfer did not finish\n")
         return 1
+    _show_progress(total, total)
+    sys.stderr.write("\n")
     return 0
 
 

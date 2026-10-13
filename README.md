@@ -8,23 +8,31 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.2.9
-- SHA-256: `f3542da19084462aeb2f7358f51c1c65adb28d67e2737c930346d6c01e16d509`
-- Size: 1,233,936 bytes (app image, magic `E9`)
-- 1.2.9 adds a Sync setting. External scales a thinned BLE clock against the current BPM, so an MPC at 180 BPM stays near 180. Transport follows start and stop and keeps the deck BPM. Details are in [What 1.2.9 includes](#what-129-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
+- Version 1.2.10
+- SHA-256: `f7f72e51ec2c5ea37c947b32f52bfb5eb642bc148f2ed78afc8f813ac34b279d`
+- Size: 1,234,096 bytes (app image, magic `E9`)
+- 1.2.10 returns to MothBoot when you send `launcher`. Details are in [What 1.2.10 includes](#what-1210-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
 
 The public source and releases live in this repository. Flash the application image with [releases/INSTALL.md](releases/INSTALL.md). The same overview, with HTML meta tags for search and link previews, is [docs/index.html](docs/index.html).
 
+## What 1.2.10 includes
+
+1.2.10 is the Cardputer image to flash. It includes the 1.2.2 through 1.2.9 behavior. This image has not been tried on a Cardputer. Use earphones.
+
+- **MothBoot.** Sending `launcher` restarts into MothBoot on the USB-Serial-JTAG port. MothBoot 0.1.1 is [`releases/mothboot-0.1.1.bin`](releases/mothboot-0.1.1.bin). A board still running MothBoot 0.1.0 needs that factory image from the ROM bootloader before `--flash` can run at full speed.
+- **Uploads.** `diag.py --flash` and `--sd-put` wait for an ack after each chunk and draw a progress bar.
+- **MothDiag 0.1.4.** `status`, `help`, `stats`, and command replies are always sent. The image is [`releases/mothdiag-0.1.4.bin`](releases/mothdiag-0.1.4.bin).
+
 ## What 1.2.9 includes
 
-1.2.9 is the Cardputer image to flash. It includes the 1.2.2 through 1.2.8 behavior. This image has not been tried on a Cardputer. Use earphones.
+1.2.9 is included in the 1.2.10 image. It includes the 1.2.2 through 1.2.8 behavior. This image has not been tried on a Cardputer. Use earphones.
 
 - **Sync.** Settings has Internal, External, and Transport. External follows MIDI start, stop, and song position. Tempo comes from the BLE timestamps: a gap that covers several ticks of the current BPM is counted as those ticks. Set the deck near the MPC's tempo, then switch to External. Transport follows start, stop, and position and keeps the BPM you set. Internal keeps the deck clock.
 - **MTC.** Quarter frames can start and stop the transport. When their spacing matches the rate in the message, the playhead seeks. A half-rate stream leaves the tempo on the deck, or on the scaled clock when MIDI clocks are arriving too.
-- **MothDiag 0.1.3.** The diagnostic screen shows MIDI BPM, arrival BPM, the clock rate, and the MTC rate, and it redraws only the line that changed. The image is [`releases/mothdiag-0.1.3.bin`](releases/mothdiag-0.1.3.bin).
+- **MothDiag 0.1.3.** The diagnostic screen shows MIDI BPM, arrival BPM, the clock rate, and the MTC rate, and it redraws only the line that changed. Published as [`releases/mothdiag-0.1.3.bin`](releases/mothdiag-0.1.3.bin).
 
 ## What 1.2.8 includes
 

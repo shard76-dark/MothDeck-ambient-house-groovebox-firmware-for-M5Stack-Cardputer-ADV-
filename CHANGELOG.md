@@ -2,15 +2,27 @@
 
 Notes for each image in `releases/` are in [releases/CHANGELOG.md](releases/CHANGELOG.md).
 
+## 1.2.10 (2026-10-13)
+
+`launcher` on the USB serial port returns to MothBoot. MothDeck's USB port uses the OTG controller, and that choice is stored in a register that survives a restart, so 1.2.9 left the board with no USB port at all. 1.2.10 points the USB PHY back at USB-Serial-JTAG before it restarts. MothDiag uses the same path.
+
+MothBoot 0.1.1 reads a flash or SD upload one chunk at a time and answers with an ack before the next chunk. The USB receive queue holds a chunk. `diag.py --flash` and `--sd-put` wait for each ack and draw a progress bar, so a normal copy runs at the speed of the flash or the card. MothBoot 0.1.0 dropped bytes at full speed. Replace it from the ROM bootloader with `releases/mothboot-0.1.1.bin` at `0x10000`, or with `releases/mothboot-0.1.1-full.bin` at `0x0`.
+
+MothDiag 0.1.4 always sends status, help, stats, and command replies, waiting if the USB buffer is short. Verbose packet lines are still dropped when that buffer is full. The capture report banner uses the version from the log.
+
+1.2.10 is the image to flash, and it includes the 1.2.2 through 1.2.9 behavior below. On a board that already has MothBoot 0.1.1, install the application image into an OTA slot. The older full-flash file `releases/mothdeck-cardputer-adv-full.bin` is the pre-MothBoot layout. The LilyGO TTGO T8 port is unchanged on the [`ttgo-t8` branch](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/tree/ttgo-t8). That port is not merged here.
+
+The image to flash is `releases/mothdeck-cardputer-adv.bin` (1,234,096 bytes, magic `E9`, SHA-256 `f7f72e51ec2c5ea37c947b32f52bfb5eb642bc148f2ed78afc8f813ac34b279d`). The same bytes are `releases/mothdeck-1.2.10.bin`. MothDiag 0.1.4 is `releases/mothdiag-0.1.4.bin` (821,504 bytes, SHA-256 `624ab29ba751ee76b88546de237f799f9c2990799d36677eb9da342fcd458cdf`). MothBoot 0.1.1 is `releases/mothboot-0.1.1.bin` (564,448 bytes, SHA-256 `887a3fbad39cb7031741355b74466b49578189ddb64d2962ebe271b01af92e5d`). The merged image is `releases/mothboot-0.1.1-full.bin` (2,459,904 bytes, SHA-256 `da46ab981384a617e285ffee0adbdbc15a4944b62e4090a4f29b7143e2891f89`). The SD pack is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Static RAM is 172516/327680. Settings version line is `v1.2.10`.
+
 ## 1.2.9 (2026-10-13)
 
 Settings adds a Sync row. Internal keeps the deck clock and leaves MIDI clock, start, stop, and song position alone. External follows that transport and reads the tempo from the BLE timestamps. A thinned clock is one `0xF8` every few ticks of the current BPM; the span is counted as that many ticks, so an MPC at 180 BPM stays near 180 when the deck is already near 180. A dense clock still tracks 40–200 and still clamps at 200. Transport follows start, stop, and position and keeps the deck BPM. Quarter-frame MTC can run the transport. When the spacing matches the rate in the message, the playhead seeks. A half-rate MTC stream runs and stops the transport and leaves the tempo on the deck, or on the scaled clock when clocks are also arriving.
 
 MothDiag 0.1.3 draws MIDI BPM, arrival BPM, the clock rate, and the MTC rate. Each of those lines redraws only when the text changes. The screen stays on plain words. The test script prints a line for every step, `go` starts the script when none is running, and a connection-parameter request is logged even when the interval does not move. Verbose packet lines are dropped when the USB buffer is full, so the MIDI queue keeps draining.
 
-1.2.9 is the image to flash, and it includes the 1.2.2 through 1.2.8 behavior below. On a board that already has MothBoot, install the application image into an OTA slot. The older full-flash file in `releases/` is the pre-MothBoot layout. The LilyGO TTGO T8 port is unchanged on the [`ttgo-t8` branch](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/tree/ttgo-t8). That port is not merged here.
+1.2.9 is included in the 1.2.10 image. It includes the 1.2.2 through 1.2.8 behavior below. Superseded by 1.2.10. On a board that already has MothBoot, install the application image into an OTA slot. The older full-flash file in `releases/` is the pre-MothBoot layout. The LilyGO TTGO T8 port is unchanged on the [`ttgo-t8` branch](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/tree/ttgo-t8). That port is not merged here.
 
-The image to flash is `releases/mothdeck-cardputer-adv.bin` (1,233,936 bytes, magic `E9`, SHA-256 `f3542da19084462aeb2f7358f51c1c65adb28d67e2737c930346d6c01e16d509`). The same bytes are `releases/mothdeck-1.2.9.bin`. MothDiag 0.1.3 is `releases/mothdiag-0.1.3.bin` (821,200 bytes, SHA-256 `2bfb2859a237dbdf8815bf4c8602cddcaf0f819c6a45b36bd18ce197baf9eb4e`). The SD pack is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Static RAM is 172516/327680. Settings version line is `v1.2.9`.
+The image published as 1.2.9 was `releases/mothdeck-1.2.9.bin` (1,233,936 bytes, magic `E9`, SHA-256 `f3542da19084462aeb2f7358f51c1c65adb28d67e2737c930346d6c01e16d509`). MothDiag 0.1.3 is `releases/mothdiag-0.1.3.bin` (821,200 bytes, SHA-256 `2bfb2859a237dbdf8815bf4c8602cddcaf0f819c6a45b36bd18ce197baf9eb4e`). The SD pack is unchanged from 1.2.1 (89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`). Static RAM is 172516/327680. Settings version line is `v1.2.9`.
 
 ## 1.2.8 (2026-10-13)
 

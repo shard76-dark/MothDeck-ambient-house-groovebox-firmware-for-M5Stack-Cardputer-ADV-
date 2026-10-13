@@ -9,8 +9,9 @@ void mothBootGuard();
 // Confirm this OTA app so a failed boot can fall back to MothBoot.
 void mothMarkAppValid();
 
-// Select the factory partition and restart. Returns false when this
-// image was not built with a factory slot.
+// Select the factory partition, give the USB PHY back to USB-Serial-JTAG,
+// and restart. Returns false when this image was not built with a factory
+// slot. MothDeck and MothDiag both use this path.
 bool mothRebootToLauncher();
 
 #endif
