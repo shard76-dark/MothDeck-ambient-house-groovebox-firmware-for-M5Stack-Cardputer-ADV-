@@ -18,6 +18,10 @@ jobs:
         run: bash tools/run_tests.sh
       - name: Firmware
         run: pio run -e cardputer-adv
+      - name: MothDiag host checks
+        run: bash tools/blemidi-diag/test_host.sh
+      - name: MothDiag firmware
+        run: pio run -d tools/blemidi-diag -e mothdiag
       - name: Upload application image
         uses: actions/upload-artifact@v4
         with:
