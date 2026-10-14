@@ -50,6 +50,12 @@ static bool takeTimestamp(const uint8_t *data, int len, int *i, uint16_t *timest
   if (!nextIsStatus && !running) {
     return false;
   }
+  // Running status can put a short timestamp in front of the next data
+  // bytes. A note, controller, or bend on another channel is that message,
+  // not a timestamp, even when no new timestamp byte was inserted.
+  if (!nextIsStatus && running && b >= 0x90 && b < 0xF0) {
+    return false;
+  }
   noteTimestamp(timestamp, b);
   (*i)++;
   return true;

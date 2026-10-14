@@ -162,16 +162,60 @@ static void logHeap(const char *tag) {
   DEV_LOGF("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
 }
 
-static void consoleLine(const char *kind) {
-  Serial.printf("{\"t\":\"%s\",\"name\":\"MothDeck\",\"version\":\"%s\"}\n", kind, MOTHDECK_VERSION);
+#if !ARDUINO_USB_MODE
+#include "USB.h"
+#include "esp32-hal-tinyusb.h"
+#endif
+
+// Serial.write drops the reply when the host opens the port with DTR clear.
+// The CDC interface is still up, so queue the line on the IN endpoint.
+static void consoleWrite(const char *text) {
+  if (!text || !text[0]) {
+    return;
+  }
+#if !ARDUINO_USB_MODE
+  if (tud_ready() && !tud_cdc_n_connected(0)) {
+    size_t len = strlen(text);
+    size_t sent = 0;
+    uint32_t start = millis();
+    while (sent < len && (uint32_t)(millis() - start) < 40) {
+      size_t space = tud_cdc_n_write_available(0);
+      if (space == 0) {
+        tud_cdc_n_write_flush(0);
+        delay(1);
+        continue;
+      }
+      if (space > len - sent) {
+        space = len - sent;
+      }
+      size_t n = tud_cdc_n_write(0, text + sent, space);
+      if (n == 0) {
+        break;
+      }
+      sent += n;
+      tud_cdc_n_write_flush(0);
+    }
+    return;
+  }
+#endif
+  Serial.print(text);
   Serial.flush();
 }
 
+static void consoleLine(const char *kind) {
+  char line[96];
+  snprintf(line, sizeof(line), "{\"t\":\"%s\",\"name\":\"MothDeck\",\"version\":\"%s\"}\n", kind, MOTHDECK_VERSION);
+  consoleWrite(line);
+}
+
 static void consoleHelp() {
-  Serial.printf(
+  char line[160];
+  snprintf(
+    line,
+    sizeof(line),
     "{\"t\":\"help\",\"name\":\"MothDeck\",\"version\":\"%s\",\"commands\":[\"status\",\"help\",\"version\",\"launcher\"]}\n",
     MOTHDECK_VERSION);
-  Serial.flush();
+  consoleWrite(line);
 }
 
 void setup() {
@@ -252,10 +296,13 @@ static void pollLauncherLine() {
       cmd[used] = 0;
       used = 0;
       if (sameWord(cmd, "launcher")) {
-        Serial.printf(
+        char line[96];
+        snprintf(
+          line,
+          sizeof(line),
           "{\"t\":\"launcher\",\"ok\":true,\"name\":\"MothDeck\",\"version\":\"%s\"}\n",
           MOTHDECK_VERSION);
-        Serial.flush();
+        consoleWrite(line);
         mothRebootToLauncher();
       } else if (sameWord(cmd, "status") || sameWord(cmd, "version")) {
         consoleLine(cmd[0] == 'v' || cmd[0] == 'V' ? "version" : "status");

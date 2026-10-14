@@ -15,7 +15,7 @@ struct UsbMidiIdentity {
   UsbMidiIdentity() {
     USB.manufacturerName("Mothdeck");
     USB.productName("Mothdeck");
-    USB.firmwareVersion(0x012B);
+    USB.firmwareVersion(0x012C);
   }
 };
 

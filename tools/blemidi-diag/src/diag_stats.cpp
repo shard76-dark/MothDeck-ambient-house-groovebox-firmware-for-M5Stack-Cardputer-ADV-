@@ -266,6 +266,7 @@ bool DiagMeter::takeWindow(uint64_t nowUs, DiagWindow *out) {
   }
   out->clocks = winClocks_;
   out->clocksTotal = clocks_;
+  out->clockHz = winClocks_ * 1000u / out->elapsedMs;
   out->noteOn = winNoteOn_;
   out->noteOff = winNoteOff_;
   out->noteOnTotal = noteOn_;

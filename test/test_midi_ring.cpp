@@ -190,6 +190,41 @@ static void testBothRings() {
   expect(drops.parser == 4 && drops.noteOff == 1, "parser drops stay separate");
 }
 
+static void testStaleNotesDropped() {
+  MidiRing ring;
+  ring.setArrival(1000);
+  expect(ring.Push(ev(MIDI_MSG_NOTE_ON, 60)), "an old note enters");
+  ring.setArrival(1020);
+  expect(ring.Push(ev(MIDI_MSG_NOTE_ON, 64)), "a fresher note enters");
+  for (int i = 0; i < 12; i++) {
+    expect(ring.Push(ev(MIDI_MSG_CLOCK)), "clocks stay in the counter");
+  }
+  ring.setArrival(1080);
+  expect(ring.Push(ev(MIDI_MSG_NOTE_ON, 67)), "a current note enters behind the clocks");
+  MidiEvent out[16];
+  int n = ring.Poll(out, 16, 1090);
+  int ticks = 0;
+  bool saw60 = false;
+  bool saw64 = false;
+  bool saw67 = false;
+  for (int i = 0; i < n; i++) {
+    ticks += clockTicks(out[i]);
+    if (out[i].type == MIDI_MSG_NOTE_ON && out[i].number == 60) {
+      saw60 = true;
+    }
+    if (out[i].type == MIDI_MSG_NOTE_ON && out[i].number == 64) {
+      saw64 = true;
+    }
+    if (out[i].type == MIDI_MSG_NOTE_ON && out[i].number == 67) {
+      saw67 = true;
+    }
+  }
+  MidiDrops drops;
+  ring.CopyDrops(&drops);
+  expect(ticks == 12 && saw67 && !saw60, "stale notes are dropped and the clocks still apply");
+  expect(!saw64 && drops.noteOn == 2, "a note older than 40 ms is the one that goes");
+}
+
 int main() {
   testOrder();
   testClockCounter();
@@ -198,6 +233,7 @@ int main() {
   testNoteOnFollowsTail();
   testStopKept();
   testBothRings();
+  testStaleNotesDropped();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

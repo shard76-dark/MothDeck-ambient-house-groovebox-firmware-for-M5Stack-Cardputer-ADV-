@@ -22,7 +22,7 @@ static MidiRunningState midiState;
 static bool verbose = true;
 static char midiText[12] = "--";
 static char arrText[12] = "--";
-static char clkText[12] = "--";
+static char clkText[24] = "--";
 static char mtcText[12] = "--";
 static char lineBuf[8192];
 static DiagMtcAsm mtc;
@@ -390,6 +390,7 @@ static void emitStats(const DiagWindow &w, uint64_t us) {
   jsI32(&j, "elapsed_ms", (int32_t)w.elapsedMs);
   jsI32(&j, "clocks", (int32_t)w.clocks);
   jsI32(&j, "clocks_total", (int32_t)w.clocksTotal);
+  jsI32(&j, "clock_hz", (int32_t)w.clockHz);
   jsI32(&j, "clock_dup", (int32_t)w.dup);
   jsI32(&j, "clock_dup_total", (int32_t)w.dupTotal);
   jsI32(&j, "clock_burst", (int32_t)w.burst);
@@ -1042,7 +1043,7 @@ void loop() {
       span = 1;
     }
     uint32_t shown = window.playSteps ? window.playSteps : window.clocks;
-    snprintf(clkText, sizeof(clkText), "%u/s", (unsigned)(shown * 1000u / span));
+    snprintf(clkText, sizeof(clkText), "%u/s r%u", (unsigned)(shown * 1000u / span), (unsigned)window.clockHz);
     snprintf(mtcText, sizeof(mtcText), "%u/s", (unsigned)(mtc.qfWindow * 1000u / span));
     emitStats(window, nowUs);
   }

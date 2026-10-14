@@ -89,6 +89,7 @@ static void testBpmAndJitter() {
   expect(meter.takeWindow(500000, &window) == false, "stats wait for the window");
   expect(meter.takeWindow(1000000, &window), "stats fire at one second");
   expect(window.clocks == 24, "window counts the clocks");
+  expect(window.clockHz == 24, "raw clocks per second sit beside the musical rate");
   expect(window.hasBpmArrival && window.bpmArrival > 119.9 && window.bpmArrival < 120.1, "arrival BPM is 120");
   expect(window.hasBpmMidi && window.bpmMidi > 118.9 && window.bpmMidi < 119.2, "timestamp BPM follows 21 ms steps");
   expect(window.maxGapUs == 3000, "max packet gap");

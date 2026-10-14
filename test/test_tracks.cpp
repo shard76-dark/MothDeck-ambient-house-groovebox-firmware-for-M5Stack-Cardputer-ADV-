@@ -638,8 +638,9 @@ static void testNoteOffFindsTrack() {
   noteOn(routed, 5, 60);
   routed.SetCommand('T', 2);
   expect(routed.selectedTrack == 2, "the keyboard can leave the track that sounded");
+  expect(routed.LiveDown(1, 60), "channel 6 sounds on track 2");
   noteOff(routed, 5, 60);
-  expect(!routed.LiveDown(0, 60), "note-off finds the note on its original track");
+  expect(!routed.LiveDown(1, 60), "note-off finds the note on its original track");
   expect(routed.selectedTrack == 2, "note-off does not change the selected track");
 
   noteOn(routed, 0, 62);
@@ -1102,7 +1103,7 @@ static void testDenseNotes() {
     parseBleMidiPacket(buf, n, &state, &parsed);
     expect(parsed.overflow == 0, "a dense packet does not overflow the parser");
     ring.PushParsed(parsed.events, parsed.count);
-    handlePolled(tracker, ring, 3, &gotOn, &gotOff);
+    handlePolled(tracker, ring, 16, &gotOn, &gotOff);
   }
   for (int guard = 0; guard < 200; guard++) {
     MidiEvent out[16];
@@ -1343,6 +1344,89 @@ static void testUsbClockAndNotes() {
   }
 }
 
+static void feedTempo(Tracker &deck, uint32_t *cursor, int bpm, int clocks, int copies) {
+  uint32_t origin = cursor ? *cursor : 0;
+  if (copies < 1) {
+    copies = 1;
+  } else if (copies > 8) {
+    copies = 8;
+  }
+  for (int i = 0; i < clocks; i++) {
+    uint32_t at = origin + (uint32_t)i * 60000u / (uint32_t)(bpm * 24);
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value = (uint8_t)copies;
+    clk.value14 = (uint16_t)(at & 0x1FFF);
+    deck.HandleMidi(clk);
+  }
+  if (cursor) {
+    *cursor = origin + (uint32_t)clocks * 60000u / (uint32_t)(bpm * 24);
+  }
+}
+
+static void testWorkingTempos() {
+  const int rates[] = {80, 100, 120, 138};
+  uint32_t cursor = 100;
+  Tracker deck;
+  transport(deck, MIDI_MSG_START, 0);
+  for (int i = 0; i < 4; i++) {
+    int bpm = rates[i];
+    int before = deck.trackIndex;
+    feedTempo(deck, &cursor, bpm, 32, 1);
+    expect(deck.Bpm() == bpm, "80, 100, 120, and 138 lock within one beat");
+    int moved = deck.trackIndex - before;
+    if (moved < 0) {
+      moved += deck.patternLength;
+    }
+    expect(moved >= 4 && moved <= 7, "a clean clock moves about one step per six ticks");
+    before = deck.trackIndex;
+    feedTempo(deck, &cursor, bpm, 32, 6);
+    expect(deck.Bpm() == bpm, "a burst of copies does not pull 80-138 off the clock");
+    moved = deck.trackIndex - before;
+    if (moved < 0) {
+      moved += deck.patternLength;
+    }
+    expect(moved >= 4 && moved <= 7, "copies do not race the playhead");
+  }
+  const int jump[] = {80, 138, 100, 120, 180, 100};
+  for (int i = 0; i < 6; i++) {
+    feedTempo(deck, &cursor, jump[i], 36, 6);
+    expect(deck.Bpm() == jump[i], "tempo jumps across 80-180 within two beats");
+  }
+}
+
+static void testMultiChannelBurst() {
+  Tracker deck;
+  const uint8_t packet[] = {
+    0x80, 0x80,
+    0x90, 60, 100, 64, 90,
+    0x91, 62, 100,
+    0x92, 65, 100,
+    0x93, 67, 100,
+    0x94, 69, 80,
+    0x99, 36, 110
+  };
+  MidiRunningState state;
+  std::memset(&state, 0, sizeof(state));
+  MidiParseResult parsed;
+  int count = parseBleMidiPacket(packet, (int)sizeof(packet), &state, &parsed);
+  expect(count == 7 && parsed.overflow == 0, "one packet keeps notes on six channels");
+  expect(parsed.events[0].channel == 0 && parsed.events[1].channel == 0, "running status stays on its channel");
+  expect(parsed.events[2].channel == 1 && parsed.events[5].channel == 4 && parsed.events[6].channel == 9, "each status keeps its channel");
+  for (int i = 0; i < parsed.count; i++) {
+    deck.HandleMidi(parsed.events[i]);
+  }
+  expect(deck.LiveDown(0, 60) && deck.LiveDown(0, 64) && deck.LiveDown(0, 69), "track 1 layers its own channels");
+  expect(deck.LiveDown(1, 62) && deck.LiveDown(1, 36), "track 2 sounds channel 2 and channel 10 together");
+  expect(deck.LiveDown(2, 65) && deck.LiveDown(3, 67), "tracks 3 and 4 sound with the others");
+  expect(deck.selectedTrack == 3, "channels above 4 do not steal the selection");
+  expect(renderEnergy(deck, 32) > 0, "the four tracks sound at once");
+  noteOff(deck, 9, 36);
+  expect(!deck.LiveDown(1, 36) && deck.LiveDown(1, 62), "a note-off on channel 10 leaves channel 2");
+  noteOff(deck, 0, 60);
+  expect(!deck.LiveDown(0, 60) && deck.LiveDown(0, 64) && deck.LiveDown(2, 65), "one note-off does not clear the other tracks");
+}
+
 int main() {
   testAssignStaysOnTrack();
   testMidiBankStaysOnChannel();
@@ -1364,6 +1448,8 @@ int main() {
   testClockBurstLock();
   testThinnedClockAndSync();
   testUsbClockAndNotes();
+  testWorkingTempos();
+  testMultiChannelBurst();
   if (failures) {
     std::printf("%d failed\n", failures);
     return 1;

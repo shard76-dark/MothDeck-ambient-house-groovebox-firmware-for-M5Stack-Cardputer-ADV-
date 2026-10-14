@@ -1963,16 +1963,9 @@ void Tracker::HandleMidi(const MidiEvent &event) {
       midiNoteToSynth(event.number, pitch, oct);
       (void)oct;
       if (recOn) {
-        if (event.channel < 4) {
-          if (recGate[event.channel].used && recGate[event.channel].pitch == (uint8_t)pitch) {
-            FinishGate(event.channel);
-          }
-        } else {
-          for (int t = 0; t < 4; t++) {
-            if (recGate[t].used && recGate[t].pitch == (uint8_t)pitch) {
-              FinishGate(t);
-            }
-          }
+        int gate = (int)(event.channel & 3);
+        if (recGate[gate].used && recGate[gate].pitch == (uint8_t)pitch) {
+          FinishGate(gate);
         }
       }
       ReleaseMatching(event.channel, event.number);
@@ -1984,10 +1977,12 @@ void Tracker::HandleMidi(const MidiEvent &event) {
     default:
       break;
   }
-  // Channels 1-4 (status nibble 0-3) are the four tracks. Any other
-  // channel plays whichever track is already selected.
+  // MIDI channel 1-4 select the four tracks. Channel 5 lands on track 1,
+  // channel 10 on track 2, and so on, so an MPC track on a higher channel
+  // still sounds on its own voices. Selection follows channels 1-4 only.
+  int track = (int)(event.channel & 3);
   if (event.channel < 4) {
-    selectedTrack = event.channel;
+    selectedTrack = track;
   }
   switch (event.type) {
     case MIDI_MSG_NOTE_ON: {
@@ -1995,32 +1990,38 @@ void Tracker::HandleMidi(const MidiEvent &event) {
       if (recOn && isPlaying) {
         ArmTransport();
       }
-      if (voices[selectedTrack].block.arpMode == 3) {
-        int inst = trackVoice[selectedTrack];
-        voices[selectedTrack].HeldNote(event.number, true, inst);
+      if (voices[track].block.arpMode == 3) {
+        int inst = trackVoice[track];
+        voices[track].HeldNote(event.number, true, inst);
         break;
       }
       int pitch = 0;
       int oct = 0;
       midiNoteToSynth(event.number, pitch, oct);
-      voices[selectedTrack].SetOctave(oct);
+      voices[track].SetOctave(oct);
       if (recOn && isPlaying && pressedOnce) {
-        SetNote(pitch, selectedTrack);
+        SetNote(pitch, track);
       }
-      int inst = trackVoice[selectedTrack];
+      int inst = trackVoice[track];
       if (inst == kLoopsVoice) {
         if (!(recOn && isPlaying && pressedOnce)) {
-          SetNote(pitch, selectedTrack);
+          SetNote(pitch, track);
         }
       } else {
-        SoundLive(selectedTrack, event.channel, event.number, pitch, oct);
+        SoundLive(track, event.channel, event.number, pitch, oct);
       }
       break;
     }
     case MIDI_MSG_MSB:
-    case MIDI_MSG_LSB:
+    case MIDI_MSG_LSB: {
+      int saved = selectedTrack;
+      selectedTrack = track;
       ApplyController(event);
+      if (event.channel >= 4) {
+        selectedTrack = saved;
+      }
       break;
+    }
     default:
       break;
   }

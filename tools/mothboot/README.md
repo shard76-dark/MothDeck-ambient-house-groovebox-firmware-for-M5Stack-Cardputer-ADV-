@@ -37,10 +37,12 @@ python -m esptool --chip esp32s3 --port COM6 --baud 921600 write-flash --flash-m
 From MothBoot 0.1.2's USB serial port. `diag.py --flash` sends `launcher`
 when an app is running and waits for MothBoot. The port number can change.
 Each chunk is acknowledged before
-the next one is sent, and the command prints a progress bar:
+the next one is sent, and the command prints a progress bar. The merged
+image above carries MothDiag 0.1.5. The current standalone diagnostic
+image is 0.1.6:
 
 ```
-python3 tools/blemidi-diag/diag.py --port COM6 --flash releases/mothdiag-0.1.5.bin --slot 0
+python3 tools/blemidi-diag/diag.py --port COM6 --flash releases/mothdiag-0.1.6.bin --slot 0
 python3 tools/blemidi-diag/diag.py --port COM6 --sd-put local.bin /apps/local.bin
 python3 tools/blemidi-diag/diag.py --port COM6 --sd-ls /apps
 python3 tools/blemidi-diag/diag.py --port COM6 --sd-rm /apps/local.bin

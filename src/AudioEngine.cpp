@@ -121,7 +121,7 @@ static void drainMidi() {
   uint32_t t0 = micros();
   MidiEvent ev[12];
   for (int pass = 0; pass < 6; pass++) {
-    int n = midiIn->Poll(ev, 12);
+    int n = midiIn->Poll(ev, 12, (uint16_t)millis());
     if (n <= 0) {
       break;
     }
