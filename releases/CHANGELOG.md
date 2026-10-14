@@ -4,9 +4,15 @@ Flash `releases/mothboot-0.1.2.bin` (564,608 bytes, magic `E9`, chip `0x0009`, S
 
 Slot status reads the version from the whole application image. 0.1.1 stopped at 256 KB, so slot B showed empty after MothDeck 1.2.10 installed even though `boot 1` started it. `diag.py --flash` sends `launcher` when an app is running and waits for MothBoot. The port number can change on that reboot. Uploads still ack each chunk. A board on 0.1.1 can keep that launcher for uploads. Write this factory image from the ROM bootloader when you want the slot B version line.
 
+## MothDiag 0.1.6 (2026-10-14)
+
+Flash `releases/mothdiag-cardputer-adv.bin` (823,680 bytes, magic `E9`, chip `0x0009`, SHA-256 `07935549f946a37d2dbc08ac860ded1718a59bad4f6b1029c293eda00763bff4`). The same bytes are `releases/mothdiag-0.1.6.bin`. Version on the screen is 0.1.6. Host tests passed. This image has not been tried on a Cardputer. Static RAM is 68068/327680.
+
+Stats add `clock_hz`, the raw clock bytes per second in the window, beside the musical rate. The clock line shows both (`24/s r478`). Each line redraws only when its text changes. Clock-only packets stay in the BLE callback, the same as 0.1.5.
+
 ## MothDiag 0.1.5 (2026-10-14)
 
-Flash `releases/mothdiag-cardputer-adv.bin` (823,376 bytes, magic `E9`, chip `0x0009`, SHA-256 `351e052a953e8b6192dfc1bb49eb3f99c6dedfbb42ca8282e9049111ce05fa4e`). The same bytes are `releases/mothdiag-0.1.5.bin`. Version on the screen is 0.1.5. Host tests passed. This image has not been tried on a Cardputer. Static RAM is 67684/327680.
+Published as `releases/mothdiag-0.1.5.bin` (823,376 bytes, magic `E9`, chip `0x0009`, SHA-256 `351e052a953e8b6192dfc1bb49eb3f99c6dedfbb42ca8282e9049111ce05fa4e`). Version on the screen is 0.1.5. Host tests passed. This image has not been tried on a Cardputer. Static RAM is 67684/327680. Superseded by 0.1.6.
 
 Clock bytes are counted in the BLE callback. A clock-only packet is not queued, so a full-rate MPC does not fill the packet queue or drop the notes behind it. MIDI BPM uses the 13-bit timestamp, ignores a backwards step, and does not count a repeated timestamp as another tick. Stats add `clock_dup`, `clock_burst`, and `clock_step`. The screen clock rate is the musical rate. Each line redraws only when its text changes.
 
@@ -28,9 +34,27 @@ Flash `releases/mothdiag-0.1.3.bin` (821,200 bytes, magic `E9`, chip `0x0009`, S
 
 The screen shows MIDI BPM and arrival BPM in large type, plus the clock rate and the MTC quarter-frame rate. Each line redraws only when its text changes. The words on screen stay plain. `run` walks the interval steps and prints a `test` line for each one. `go` starts that walk when no run is active, and it releases a step that is waiting. An interval request is logged as `interval` even when the negotiated interval stays the same. Verbose `pkt` and `midi` lines are dropped when the USB buffer is full, so a stalled port does not fill the MIDI queue.
 
+## 1.2.12 (2026-10-14)
+
+Flash `releases/mothdeck-cardputer-adv.bin` (1,235,872 bytes, magic `E9`, chip `0x0009`, SHA-256 `9b98e52296c0634d2577b3fa6f98c0125cec331b60e1f9f07e440d255c90aa24`). The same bytes are `releases/mothdeck-1.2.12.bin`. Version on the Settings screen is 1.2.12. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 170548/327680.
+
+External sync reads tempo from the incoming ticks and their timestamps. One beat follows a change. Two beats hold a steady tempo, so 80, 100, 120, and 138 land on that integer, and a jump between them, including up to 180, shows within about two beats. The deck BPM is the fallback only when a gap is much longer than one tick. Several clocks on one timestamp count separately when each slice is a real tick. Copies of one tick count once. A run of sub-tick clocks does not race the playhead. Faster than 200 clamps to 200.
+
+The MIDI ring is 48 events (was 256). The note-off tail is 16 (was 32). Clock groups are 32 (was 64). A note-on older than 40 ms is dropped. Note-offs stay. Clocks stay a counter. The audio task still drains up to 72 events a call.
+
+Channels 1, 5, 9, and 13 play track 1. Channels 2, 6, 10, and 14 play track 2. Channels 3, 7, 11, and 15 play track 3. Channels 4, 8, 12, and 16 play track 4. Channels 1–4 also select that track. A higher channel leaves the selection alone. Each track keeps its own four voices.
+
+`status`, `help`, and `version` answer when the USB host leaves DTR and RTS low.
+
+On a board that already has MothBoot, install this application image into an OTA slot. `mothdeck-cardputer-adv-full.bin` is the older layout (1,296,352 bytes, SHA-256 `a6ac1dba89fce77a2017f45a256b3fef5332c8e6b5d258c7a337bbce805fbc68`) and is not this image. MothBoot stays 0.1.2. The merged image still contains MothDiag 0.1.5. MothDiag 0.1.6 is `releases/mothdiag-0.1.6.bin`.
+
+This image includes the 1.2.2 through 1.2.11 behavior. The LilyGO TTGO T8 port is a different binary, pre-release [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/releases/tag/ttgo-t8-v1.2.4) on the `ttgo-t8` branch. It is not in this folder.
+
+The SD pack is the same file as 1.2.1 (`mothdeck-sd-pack.zip`, 89,409 bytes, SHA-256 `46398772022192f49ccfaeebd69bed8e3075b8596d824cd17cb7e7ad1a7f11e9`).
+
 ## 1.2.11 (2026-10-14)
 
-Flash `releases/mothdeck-cardputer-adv.bin` (1,234,896 bytes, magic `E9`, chip `0x0009`, SHA-256 `41e11c020debcad6608a8251cd7e06e5834faf6fad3df9e0acde942a3b400cc5`). The same bytes are `releases/mothdeck-1.2.11.bin`. Version on the Settings screen is 1.2.11. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 172596/327680.
+Published as `releases/mothdeck-1.2.11.bin` (1,234,896 bytes, magic `E9`, chip `0x0009`, SHA-256 `41e11c020debcad6608a8251cd7e06e5834faf6fad3df9e0acde942a3b400cc5`). Version on the Settings screen is 1.2.11. Host tests passed. Use earphones. This image has not been tried on a Cardputer. Static RAM is 172596/327680. Superseded by 1.2.12.
 
 `status`, `help`, and `version` answer on the USB serial port, and opening that port does not reboot the board. External sync locks to a full-rate clock and to a thinned one. A smoothed estimate rejects duplicate clocks and a sub-tick burst. A thinned clock still steps at the musical rate when the deck is already near the source tempo.
 

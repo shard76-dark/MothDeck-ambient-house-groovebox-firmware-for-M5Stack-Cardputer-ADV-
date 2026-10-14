@@ -1,8 +1,8 @@
 # MothDeck user guide
 
-MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.11 (1,234,896 bytes, magic `E9`, SHA-256 `41e11c020debcad6608a8251cd7e06e5834faf6fad3df9e0acde942a3b400cc5`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
+MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published image is 1.2.12 (1,235,872 bytes, magic `E9`, SHA-256 `9b98e52296c0634d2577b3fa6f98c0125cec331b60e1f9f07e440d255c90aa24`). Use earphones or headphones in the 3.5 mm jack. The internal speaker stays quiet. This image has not been tried on a Cardputer.
 
-1.2.11 includes the releases before it:
+1.2.12 includes the releases before it:
 
 - **1.2.2.** NimBLE is reserved at boot, before the loop windows. On and Off only start or stop advertising. Unload BLE frees that block for large loops on the next boot. The toast says `BLE unloads after restart`.
 - **1.2.3.** Incoming MIDI notes play and are not stored while Rec is off. MIDI Start does not arm Rec. Space does, and then those notes record at the playhead.
@@ -14,10 +14,11 @@ MothDeck is groovebox firmware for the M5Stack Cardputer ADV. The published imag
 - **1.2.9.** Settings has a Sync row: Internal, External, or Transport. External scales a thinned BLE clock against the current BPM. Transport follows start, stop, and position and keeps the deck BPM. Internal keeps the deck clock. Quarter-frame MTC can run the transport.
 - **1.2.10.** Sending `launcher` on the USB serial port returns to MothBoot. The board comes back on the USB-Serial-JTAG port.
 - **1.2.11.** External sync locks to a full-rate clock and to a thinned one. Duplicate clocks and a sub-tick burst do not race the playhead. `status`, `help`, and `version` answer on the USB serial port. Opening that port does not reboot the board.
+- **1.2.12.** External tempo is the incoming tick count over the timestamps. 80–138 land on that integer, and a jump up to 180 shows within about two beats. The deck BPM is the fallback only when the clock is thinned. A note-on older than 40 ms is dropped. Channels 1–16 play the four tracks, four channels per track, and channels above 4 leave the selection alone. `status` answers with DTR and RTS low.
 
 Flash [`releases/mothdeck-cardputer-adv.bin`](../releases/mothdeck-cardputer-adv.bin) from Launcher. The button sequence is in [`releases/INSTALL.md`](../releases/INSTALL.md). Unzip [`releases/mothdeck-sd-pack.zip`](../releases/mothdeck-sd-pack.zip) onto the card root when you want the kits, loops, sample instruments, and patches. Key drawings for every page are in the [README keyboard section](../README.md#keyboard).
 
-The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.11 still uses. On a 1.2.11 board the Settings version line says `v1.2.11`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`). Settings adds a Sync row under Bars. Settings does not print a counter line. The MIDI page also shows `USB MIDI` or `USB off`, which the 1.2.0 shot does not.
+The pictures below are screenshots of the MothDeck UI, shown at 2×. The Play, Instrument, FX, Loops, MIDI, and Settings shots are the 1.2.0 screen. The MIDI-mode notice is the 1.2.1 wording, which 1.2.12 still uses. On a 1.2.12 board the Settings version line says `v1.2.12`, and the row that said Free RAM says Radio (`off`, `adv`, or `conn`). Settings adds a Sync row under Bars. Settings does not print a counter line. The MIDI page also shows `USB MIDI` or `USB off`, which the 1.2.0 shot does not.
 
 ## Moving around
 
@@ -213,7 +214,7 @@ The air name is `Mothdeck`. A stored name longer than 8 characters is shortened 
 
 If the MPC still has a bond for the old name `MothDeck`, forget that device and pair `Mothdeck`. Pairing is Just Works, no passkey. The name and the MIDI service UUID are both in the primary advertising packet.
 
-Channels 1–4 play tracks 1–4. Any other channel plays the track already selected. Notes 36–83 are C2–B5. Note On with velocity 0 is Note Off.
+Channels 1, 5, 9, and 13 play track 1. Channels 2, 6, 10, and 14 play track 2. Channels 3, 7, 11, and 15 play track 3. Channels 4, 8, 12, and 16 play track 4. Channels 1–4 also select that track. A higher channel leaves the selection where it is. Each track has its own four voices. Notes 36–83 are C2–B5. Note On with velocity 0 is Note Off.
 
 | Message | What it does |
 | --- | --- |
@@ -221,7 +222,7 @@ Channels 1–4 play tracks 1–4. Any other channel plays the track already sele
 | CC 1 | Low pass |
 | CC 7 / CC 39 | Volume, mapped to 0–8 |
 | Pitch bend | Per channel |
-| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. In External, a timestamp gap is scaled to the nearest number of ticks at the current BPM, so a thinned MPC clock stays near that BPM. Several clocks that share one timestamp still count as themselves. They are counted rather than queued. Ticks before Start in that packet are not counted. With Rec on, a note lands on the step that just played, and three or more clocks round it to the next step. The pattern wraps to its own step 0. Tempo is smoothed over a beat and clamps at 200. Transport keeps the deck BPM. Internal ignores the clock |
+| Clock `0xF8` | 24 per quarter note. Six clocks advance one step. In External, tempo is the incoming tick count over the timestamps. One beat follows a change and two beats hold a steady tempo, so 80–138 stay on that integer and a jump up to 180 shows within about two beats. The deck BPM is used only when a gap is much longer than one tick. Several clocks that share one timestamp count separately when each slice is a real tick, and copies of one tick count once. A note-on older than 40 ms is dropped. Note-offs stay. Clocks are counted rather than queued. Ticks before Start in that packet are not counted. With Rec on, a note lands on the step that just played, and three or more clocks round it to the next step. The pattern wraps to its own step 0. Tempo clamps at 200. Transport keeps the deck BPM. Internal ignores the clock |
 | Note on | Up to four notes sound on the track. A fifth replaces the oldest. Note-off, including velocity 0, releases only that note and channel, on the track that sounded it. Stored in the pattern only while Rec is on, with a hold of 1 to 4 steps |
 | CC 120 / CC 123 | Release live notes on that channel. Pattern, loops, and sampler stay |
 | Start `0xFA` | External sync, current pattern, bar 1 step 1. Does not arm Rec |
@@ -239,7 +240,7 @@ Fn+`;` and Fn+`.` move the row. Fn+`,` and Fn+`/` change the selected row.
 
 ![Settings, BLE row](screenshots/screen-settings-ble-2x.png)
 
-Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars, Sync. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.11`. Sync is Internal, External, or Transport. There is no counter line under the rows. The dev build still uses the Radio row for a heap readout. The hidden MIDI status view is where the other counts live.
+Rows, top to bottom: Speaker, Brightness, BLE name, BLE, Unload BLE (or Load BLE after an unload), Battery, Radio, Card, Bars, Sync. The 1.2.0 shot above labels the Radio row Free RAM and prints a kilobyte line. 1.2.2 and later do not. That row says `off`, `adv`, or `conn`, and the version line says `v1.2.12`. Sync is Internal, External, or Transport. There is no counter line under the rows. The dev build still uses the Radio row for a heap readout. The hidden MIDI status view is where the other counts live.
 
 | Row | Keys |
 | --- | --- |

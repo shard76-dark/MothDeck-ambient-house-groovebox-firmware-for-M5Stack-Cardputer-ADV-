@@ -46,7 +46,7 @@
         "applicationCategory": "MusicApplication",
         "applicationSubCategory": "Groovebox firmware",
         "operatingSystem": "M5Stack Cardputer ADV (ESP32-S3)",
-        "softwareVersion": "1.2.11",
+        "softwareVersion": "1.2.12",
         "license": "https://opensource.org/licenses/MIT",
         "isAccessibleForFree": true,
         "offers": {
@@ -190,8 +190,16 @@
     </ol>
     <p>Unzip <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/raw/main/releases/mothdeck-sd-pack.zip">mothdeck-sd-pack.zip</a> onto the card root when you want the extra kits, loops, sample instruments, and patches. Checksums are in <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/SHA256SUMS">SHA256SUMS</a>.</p>
 
+    <h2>1.2.12</h2>
+    <p>Version 1.2.12 is the Cardputer image to flash. The application image is 1,235,872 bytes, SHA-256 <code>9b98e52296c0634d2577b3fa6f98c0125cec331b60e1f9f07e440d255c90aa24</code>. It has not been tried on a Cardputer. Use earphones. It includes 1.2.2 through 1.2.11. External tempo follows the incoming ticks. MothBoot stays 0.1.2. MothDiag 0.1.6 is in the same notes: the <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/CHANGELOG.md">changelog</a>, the <a href="USER-GUIDE.md">user guide</a>, and <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md">install notes</a>.</p>
+    <ul class="grid">
+      <li><strong>External sync</strong> Tempo is the tick count over the timestamps. 80–138 land on that integer, and a jump up to 180 shows within about two beats. The deck BPM is the fallback only when the clock is thinned.</li>
+      <li><strong>Live MIDI</strong> The event ring is 48 slots. A note-on older than 40 ms is dropped. Channels 1–16 play the four tracks, and each track keeps its own four voices. <code>status</code> answers with DTR and RTS low.</li>
+      <li><strong>MothDiag 0.1.6</strong> Stats add <code>clock_hz</code>, the raw clock bytes per second. The clock line shows the musical rate and the raw rate.</li>
+    </ul>
+
     <h2>1.2.11</h2>
-    <p>Version 1.2.11 is the Cardputer image to flash. The application image is 1,234,896 bytes, SHA-256 <code>41e11c020debcad6608a8251cd7e06e5834faf6fad3df9e0acde942a3b400cc5</code>. It has not been tried on a Cardputer. Use earphones. It includes 1.2.2 through 1.2.10. External sync locks to a full-rate clock and to a thinned one. MothBoot 0.1.2 and MothDiag 0.1.5 are in the same notes: the <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/CHANGELOG.md">changelog</a>, the <a href="USER-GUIDE.md">user guide</a>, and <a href="https://github.com/shard76-dark/MothDeck-ambient-house-groovebox-firmware-for-M5Stack-Cardputer-ADV-/blob/main/releases/INSTALL.md">install notes</a>.</p>
+    <p>1.2.11 is included in the 1.2.12 image. The application image was 1,234,896 bytes, SHA-256 <code>41e11c020debcad6608a8251cd7e06e5834faf6fad3df9e0acde942a3b400cc5</code>. It has not been tried on a Cardputer. Use earphones. It includes 1.2.2 through 1.2.10. External sync locks to a full-rate clock and to a thinned one.</p>
     <ul class="grid">
       <li><strong>External sync</strong> A smoothed tempo follows a full-rate clock or a thinned one. Duplicate clocks and a sub-tick burst do not race the playhead.</li>
       <li><strong>USB serial</strong> <code>status</code>, <code>help</code>, and <code>version</code> answer on MothDeck's port. Opening the port does not reboot the board. <code>diag.py --flash</code> sends <code>launcher</code> when an app is running.</li>
@@ -199,7 +207,7 @@
     </ul>
 
     <h2>1.2.10</h2>
-    <p>1.2.10 is included in the 1.2.11 image. Its application image was 1,234,096 bytes, SHA-256 <code>f7f72e51ec2c5ea37c947b32f52bfb5eb642bc148f2ed78afc8f813ac34b279d</code>. The hardware check of that image went well. Use earphones. It includes 1.2.2 through 1.2.9. Sending <code>launcher</code> returns to MothBoot.</p>
+    <p>1.2.10 is included in the 1.2.12 image. Its application image was 1,234,096 bytes, SHA-256 <code>f7f72e51ec2c5ea37c947b32f52bfb5eb642bc148f2ed78afc8f813ac34b279d</code>. The hardware check of that image went well. Use earphones. It includes 1.2.2 through 1.2.9. Sending <code>launcher</code> returns to MothBoot.</p>
     <ul class="grid">
       <li><strong>MothBoot</strong> <code>launcher</code> restarts into MothBoot on the USB-Serial-JTAG port. Uploads through MothBoot 0.1.1 ack each chunk, and <code>diag.py</code> draws a progress bar.</li>
       <li><strong>MothDiag 0.1.4</strong> Status, help, stats, and command replies are always sent. The capture banner shows the version from the log.</li>
@@ -259,7 +267,7 @@
       <li><strong>4×4 keypad</strong> A membrane keypad mounted with the connector on top. The top-left key is key 0. The menu is the original MothSynth function-key layout, and every MothDeck page is reachable from those 16 keys.</li>
       <li><strong>ST7789 and audio</strong> The stock image drives an ST7789 240×135. Sound is a PCM5102A over I2S, with a second image that uses the internal 8-bit DAC on GPIO25.</li>
     </ul>
-    <p class="note"><strong>Not tried on hardware.</strong> The TTGO 1.2.4 images have not been flashed, and the keys have not been pressed. The Cardputer 1.2.11, MothBoot 0.1.2, and MothDiag 0.1.5 images have not been tried on a Cardputer. The 1.2.10 hardware check went well.</p>
+    <p class="note"><strong>Not tried on hardware.</strong> The TTGO 1.2.4 images have not been flashed, and the keys have not been pressed. The Cardputer 1.2.12, MothBoot 0.1.2, and MothDiag 0.1.6 images have not been tried on a Cardputer. The 1.2.10 hardware check went well.</p>
 
     <h2>On the keyboard</h2>
     <p>Tab moves through Play, Instrument, FX, Mixer, Song, Loops, MIDI, Settings, and Exit. On the Instrument page, comma and slash load the previous and next drum kit from <code>/moth/drums</code>. Hold Esc (the grave key) or the front button for about 0.7 seconds to return to Launcher, and only when a real Launcher image is present.</p>

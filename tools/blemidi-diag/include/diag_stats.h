@@ -22,6 +22,7 @@ struct DiagWindow {
   uint32_t elapsedMs;
   uint32_t clocks;
   uint32_t clocksTotal;
+  uint32_t clockHz;
   uint32_t dup;
   uint32_t dupTotal;
   uint32_t burst;

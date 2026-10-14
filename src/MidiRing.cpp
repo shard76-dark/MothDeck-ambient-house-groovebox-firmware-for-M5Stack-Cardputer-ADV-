@@ -45,7 +45,10 @@ MidiRing::MidiRing() {
   memset(relQ, 0, sizeof(relQ));
   memset(mainClocks, 0, sizeof(mainClocks));
   memset(relClocks, 0, sizeof(relClocks));
+  memset(mainAt, 0, sizeof(mainAt));
+  memset(relAt, 0, sizeof(relAt));
   memset(groups, 0, sizeof(groups));
+  arrivalMs = 0;
   mainHead = 0;
   mainTail = 0;
   relHead = 0;
@@ -58,6 +61,12 @@ MidiRing::MidiRing() {
   dropNoteOff = 0;
   dropRing = 0;
   dropParser = 0;
+}
+
+void MidiRing::setArrival(uint16_t ms) {
+  RING_LOCK();
+  arrivalMs = ms;
+  RING_UNLOCK();
 }
 
 uint32_t MidiRing::mainUsed() const {
@@ -161,6 +170,7 @@ bool MidiRing::pushMain(const MidiEvent &event, uint32_t clocksBefore) {
   }
   mainQ[mainHead] = event;
   mainClocks[mainHead] = clocksBefore;
+  mainAt[mainHead] = arrivalMs;
   mainHead = next;
   return true;
 }
@@ -172,6 +182,7 @@ bool MidiRing::pushRelease(const MidiEvent &event, uint32_t clocksBefore) {
   }
   relQ[relHead] = event;
   relClocks[relHead] = clocksBefore;
+  relAt[relHead] = arrivalMs;
   relHead = next;
   return true;
 }
@@ -226,6 +237,7 @@ bool MidiRing::shedOne(uint32_t *orphan) {
   while (src != mainHead) {
     mainQ[dst] = mainQ[src];
     mainClocks[dst] = mainClocks[src];
+    mainAt[dst] = mainAt[src];
     dst = src;
     src = (src + 1) % (uint32_t)kLen;
   }
@@ -366,7 +378,14 @@ void MidiRing::PushParsed(const MidiEvent *events, int count) {
   RING_UNLOCK();
 }
 
-int MidiRing::Poll(MidiEvent *out, int maxOut) {
+static bool staleNote(const MidiEvent &event, uint16_t at, uint16_t nowMs) {
+  if (nowMs == 0 || at == 0 || event.type != MIDI_MSG_NOTE_ON) {
+    return false;
+  }
+  return (uint16_t)(nowMs - at) > (uint16_t)MidiRing::kStaleMs;
+}
+
+int MidiRing::Poll(MidiEvent *out, int maxOut, uint16_t nowMs) {
   if (!out || maxOut <= 0) {
     return 0;
   }
@@ -381,8 +400,14 @@ int MidiRing::Poll(MidiEvent *out, int maxOut) {
         n++;
         continue;
       }
-      out[n++] = mainQ[mainTail];
+      MidiEvent ev = mainQ[mainTail];
+      uint16_t at = mainAt[mainTail];
       mainTail = (mainTail + 1) % (uint32_t)kLen;
+      if (staleNote(ev, at, nowMs)) {
+        dropNoteOn++;
+        continue;
+      }
+      out[n++] = ev;
       continue;
     }
     if (relTail != relHead) {
@@ -393,8 +418,14 @@ int MidiRing::Poll(MidiEvent *out, int maxOut) {
         n++;
         continue;
       }
-      out[n++] = relQ[relTail];
+      MidiEvent ev = relQ[relTail];
+      uint16_t at = relAt[relTail];
       relTail = (relTail + 1) % (uint32_t)kRelease;
+      if (staleNote(ev, at, nowMs)) {
+        dropNoteOn++;
+        continue;
+      }
+      out[n++] = ev;
       continue;
     }
     if (pendingTicks > 0) {

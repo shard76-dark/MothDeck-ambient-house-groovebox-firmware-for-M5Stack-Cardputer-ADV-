@@ -109,6 +109,7 @@ class MidiCharCallbacks : public BLECharacteristicCallbacks {
     for (int i = 0; i < parsed.count; i++) {
       countParsed(parsed.events[i]);
     }
+    midiRing.setArrival((uint16_t)millis());
     midiRing.PushParsed(parsed.events, parsed.count);
   }
 };
@@ -797,13 +798,13 @@ const char *BleMidi::CounterLine() {
   return counterBuf;
 }
 
-int BleMidi::Poll(MidiEvent *out, int maxOut) {
+int BleMidi::Poll(MidiEvent *out, int maxOut, uint16_t nowMs) {
   if (!out || maxOut <= 0) {
     return 0;
   }
   // The ring also carries USB MIDI, including while the radio is off.
   // Turning the radio off flushes once in SetUserEnabled.
-  return midiRing.Poll(out, maxOut);
+  return midiRing.Poll(out, maxOut, nowMs);
 }
 
 void BleMidi::Ingest(const MidiEvent *events, int count) {
@@ -813,6 +814,7 @@ void BleMidi::Ingest(const MidiEvent *events, int count) {
   for (int i = 0; i < count; i++) {
     countParsed(events[i]);
   }
+  midiRing.setArrival((uint16_t)millis());
   midiRing.PushParsed(events, count);
 }
 

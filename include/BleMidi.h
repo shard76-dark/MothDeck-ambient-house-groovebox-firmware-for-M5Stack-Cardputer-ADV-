@@ -48,7 +48,7 @@ public:
   void CopyDrops(MidiDrops *out) const;
   // One screen line: packets, messages, clocks, notes.
   const char *CounterLine();
-  int Poll(MidiEvent *out, int maxOut);
+  int Poll(MidiEvent *out, int maxOut, uint16_t nowMs = 0);
   // USB MIDI uses the same queue. Order matches the bytes that were read.
   void Ingest(const MidiEvent *events, int count);
   // Drops anything still queued. Used when the link falls so a note-on

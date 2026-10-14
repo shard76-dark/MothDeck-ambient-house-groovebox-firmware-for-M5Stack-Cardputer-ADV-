@@ -28,15 +28,25 @@ inline int bleClockEstimate(uint16_t deltaMs, int bpm) {
   return estimate;
 }
 
-// Running picture of a clock. `smooth` is the tempo used to tell a real tick
-// from a burst. Seed it with the deck tempo; 0 means 120 until a real gap
-// arrives. Short runs of sub-tick clocks still count (a chord packet). A
-// longer run is folded into the smoothed tick so it cannot race the playhead.
+// One honest gap. The tempo is the sum of these over the last one or two
+// beats, not a guess scaled by the deck's current BPM.
+struct ClockSpan {
+  uint16_t ms;
+  uint8_t ticks;
+};
+
+// Running picture of a clock. `smooth` is the tempo the window last
+// measured. Seed it with the deck tempo; 0 means 120 until a real gap
+// arrives, and that seed is only the fallback for a thinned clock.
+// Short runs of sub-tick clocks still count (a chord packet). A longer
+// run is folded into the seeded tick so it cannot race the playhead or
+// teach the tempo.
 struct ClockFold {
   uint16_t lastTs;
   uint8_t have;
   uint16_t burstMs;
   uint8_t fragRun;
+  uint8_t openWire;
   int smooth;
   uint32_t raw;
   uint32_t dup;
@@ -48,8 +58,9 @@ struct ClockFold {
   uint64_t arrivalSpanUs;
   uint64_t lastUs;
   uint8_t haveUs;
-  uint32_t winSteps;
-  uint32_t winMs;
+  ClockSpan span[48];
+  uint8_t spanN;
+  uint8_t spanAt;
   uint8_t tuned;
 };
 
@@ -60,47 +71,98 @@ inline int clockFoldBpm(const ClockFold *fold) {
   return 120;
 }
 
-// One bar of honest gaps. The first bar snaps, later bars ease, and a source
-// faster than the cap lands on 200 in that bar.
-inline void clockFoldLearn(ClockFold *fold, int musical, uint16_t charged) {
-  if (!fold || musical < 1 || charged == 0) {
-    return;
+inline int clockBpmOf(uint32_t ticks, uint32_t ms) {
+  if (ticks == 0 || ms == 0) {
+    return 0;
   }
-  fold->winSteps += (uint32_t)musical;
-  fold->winMs += charged;
-  if (fold->winSteps < 24 || fold->winMs == 0) {
-    return;
-  }
-  uint32_t num = 60000u * fold->winSteps + 12u * fold->winMs;
-  int raw = (int)(num / (24u * fold->winMs));
+  uint32_t den = 24u * ms;
+  uint32_t num = 60000u * ticks + den / 2u;
+  int raw = (int)(num / den);
   if (raw < 40) {
     raw = 40;
   } else if (raw > 200) {
     raw = 200;
   }
-  if (!fold->tuned) {
-    fold->smooth = raw;
-    fold->tuned = 1;
-  } else if (raw >= 200 || fold->smooth >= 200) {
-    fold->smooth = raw >= 200 ? 200 : raw;
-  } else {
-    int next = (fold->smooth * 3 + raw + 2) / 4;
-    if (next == fold->smooth && raw != fold->smooth) {
-      next += raw > fold->smooth ? 1 : -1;
-    }
-    if (next < 40) {
-      next = 40;
-    } else if (next > 200) {
-      next = 200;
-    }
-    fold->smooth = next;
+  return raw;
+}
+
+// Newest spans that add up to `want` ticks. 0 until that many have arrived.
+inline int clockWindowBpm(const ClockFold *fold, int want) {
+  if (!fold || want < 1 || fold->spanN == 0) {
+    return 0;
   }
-  fold->winSteps = 0;
-  fold->winMs = 0;
+  uint32_t ticks = 0;
+  uint32_t ms = 0;
+  int n = fold->spanN;
+  for (int i = 0; i < n; i++) {
+    int idx = (fold->spanAt + 48 - 1 - i) % 48;
+    ticks += fold->span[idx].ticks;
+    ms += fold->span[idx].ms;
+    if ((int)ticks >= want) {
+      return clockBpmOf(ticks, ms);
+    }
+  }
+  return 0;
+}
+
+// One or two beats of tick count over elapsed time. A jump shows up in the
+// one-beat window; a steady clock uses two beats, which keeps 80–138 inside
+// half a BPM after rounding.
+inline void clockFoldLearn(ClockFold *fold, int musical, uint16_t charged) {
+  if (!fold || musical < 1 || charged == 0) {
+    return;
+  }
+  if (musical > 8) {
+    musical = 8;
+  }
+  fold->span[fold->spanAt].ms = charged;
+  fold->span[fold->spanAt].ticks = (uint8_t)musical;
+  fold->spanAt = (uint8_t)((fold->spanAt + 1) % 48);
+  if (fold->spanN < 48) {
+    fold->spanN++;
+  }
+  int fast = clockWindowBpm(fold, 24);
+  if (fast == 0) {
+    return;
+  }
+  int slow = clockWindowBpm(fold, 48);
+  int pick = fast;
+  if (slow > 0) {
+    int diff = fast > slow ? fast - slow : slow - fast;
+    if (diff < 2) {
+      pick = slow;
+    }
+  }
+  fold->smooth = pick;
+  fold->tuned = 1;
 }
 
 // One clock event. `wire` clocks share `ts`. `us` is the arrival time, or 0
 // when the caller has none. Returns how many musical ticks to advance.
+// How many musical ticks `count` clocks are worth across `delta` ms.
+// Several 0xF8 bytes on one timestamp are real ticks when the slice is a
+// tick long. A pile of copies is shorter than 8 ms and counts as one.
+// A gap much longer than one tick at `bpm` is a thinned clock.
+inline int clockGapTicks(int count, uint16_t delta, int bpm) {
+  int tickMs = 2500 / bpm;
+  if (tickMs < 8) {
+    tickMs = 8;
+  }
+  if (count < 1) {
+    count = 1;
+  }
+  int slice = (int)delta / count;
+  bool batched = count > 1 && slice >= 8 && slice <= 70;
+  bool oneTick = !batched && delta >= 8 && delta <= 70 && (int)delta * 2 <= tickMs * 5;
+  if (batched) {
+    return count > 8 ? 8 : count;
+  }
+  if (oneTick) {
+    return 1;
+  }
+  return bleClockEstimate(delta, bpm);
+}
+
 inline int clockFoldFeed(ClockFold *fold, uint16_t ts, int wire, uint64_t us) {
   if (!fold || wire < 1) {
     return 0;
@@ -111,20 +173,27 @@ inline int clockFoldFeed(ClockFold *fold, uint16_t ts, int wire, uint64_t us) {
   ts = (uint16_t)(ts & 0x1FFF);
   fold->raw += (uint32_t)wire;
   int musical = 0;
+  int tempoTicks = 0;
   uint16_t charged = 0;
   if (!fold->have) {
     fold->have = 1;
     fold->lastTs = ts;
     musical = wire > 8 ? 1 : wire;
+    if (wire > musical) {
+      fold->dup += (uint32_t)(wire - musical);
+    }
+    fold->openWire = (uint8_t)musical;
   } else if (ts == fold->lastTs) {
     fold->dup += (uint32_t)wire;
   } else {
     uint16_t delta = bleClockDelta(fold->lastTs, ts);
     fold->lastTs = ts;
     int bpm = clockFoldBpm(fold);
-    // Faster than a 240 BPM tick is a fragment. 240 itself (about 10 ms)
-    // still counts, and the tempo clamp brings it back to 200.
-    bool fragment = delta > 0 && delta < 2000 && (delta < 6 || (2500 / delta) > 280);
+    // A run of gaps under 4 ms is a copy flood. One gap of 4–8 ms is a
+    // timestamp nudged off 0xF8–0xFF, and it still belongs in the window
+    // so the longer gap after it averages back to the real tempo.
+    bool subTick = delta > 0 && delta < 2000 && delta <= 8;
+    bool fragment = subTick && (delta < 4 || fold->fragRun > 0);
     if (delta == 0 || delta >= 2000) {
       // The clock in hand still moves the playhead. The gap is not elapsed
       // time, so it does not teach the tempo.
@@ -134,6 +203,7 @@ inline int clockFoldFeed(ClockFold *fold, uint16_t ts, int wire, uint64_t us) {
       if (wire > 1) {
         fold->dup += (uint32_t)(wire - 1);
       }
+      fold->openWire = 1;
     } else if (fragment) {
       if (wire > 1) {
         fold->dup += (uint32_t)(wire - 1);
@@ -157,8 +227,9 @@ inline int clockFoldFeed(ClockFold *fold, uint16_t ts, int wire, uint64_t us) {
         }
         fold->burstMs = (uint16_t)acc;
       }
+      fold->openWire = 1;
     } else {
-      fold->fragRun = 0;
+      fold->fragRun = subTick ? 1 : 0;
       if (fold->burstMs > 0) {
         uint32_t sum = (uint32_t)delta + fold->burstMs;
         fold->burstMs = 0;
@@ -167,23 +238,23 @@ inline int clockFoldFeed(ClockFold *fold, uint16_t ts, int wire, uint64_t us) {
         }
         delta = (uint16_t)sum;
       }
-      int estimate = bleClockEstimate(delta, bpm);
-      musical = estimate;
-      // A group a tick or two past the estimate is the clock rounding, not a
-      // pile of copies. A count several times the gap is the pile.
-      if (wire > estimate && wire <= estimate + 2) {
-        musical = wire;
-      } else if (wire > musical) {
+      // The gap belongs to the clocks already seen. The clocks in hand
+      // move the playhead, and their own gap arrives with the next stamp.
+      int credit = fold->openWire > 0 ? fold->openWire : 1;
+      tempoTicks = clockGapTicks(credit, delta, bpm);
+      musical = clockGapTicks(wire, delta, bpm);
+      if (wire > musical) {
         fold->dup += (uint32_t)(wire - musical);
       }
       charged = delta;
-      clockFoldLearn(fold, musical, delta);
+      clockFoldLearn(fold, tempoTicks, delta);
+      fold->openWire = (uint8_t)(musical > 8 ? 8 : musical);
     }
   }
   if (musical > 0) {
     fold->playSteps += (uint32_t)musical;
     if (charged > 0) {
-      fold->tempoSteps += (uint32_t)musical;
+      fold->tempoSteps += (uint32_t)(tempoTicks > 0 ? tempoTicks : musical);
       fold->spanMs += charged;
     }
     if (us > 0) {
@@ -228,6 +299,9 @@ inline bool bleClockTakeTs(const uint8_t *data, int len, int *i, uint16_t *ts, b
   }
   bool nextIsStatus = *i + 1 >= len || (data[*i + 1] & 0x80) != 0;
   if (!nextIsStatus && !running) {
+    return false;
+  }
+  if (!nextIsStatus && running && b >= 0x90 && b < 0xF0) {
     return false;
   }
   *ts = bleClockLow(*ts, b);

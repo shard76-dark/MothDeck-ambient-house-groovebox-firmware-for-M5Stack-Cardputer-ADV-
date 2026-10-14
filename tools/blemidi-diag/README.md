@@ -1,4 +1,4 @@
-# MothDiag 0.1.5
+# MothDiag 0.1.6
 
 Standalone BLE MIDI diagnostics for the [M5Stack Cardputer ADV](https://docs.m5stack.com/en/core/Cardputer-Adv). It advertises as a BLE MIDI peripheral named **MothDiag**, using the same service, characteristic, advertising packet, and Just Works pairing as MothDeck. There is no synth, no audio, and no sequencer.
 
@@ -6,10 +6,11 @@ Plug the Cardputer into a Windows PC or a uConsole over USB. An assistant reads 
 
 The application image is [`releases/mothdiag-cardputer-adv.bin`](../../releases/mothdiag-cardputer-adv.bin).
 
-- Version 0.1.5
-- 823,376 bytes, magic `E9`, chip `0x0009`
-- SHA-256 `351e052a953e8b6192dfc1bb49eb3f99c6dedfbb42ca8282e9049111ce05fa4e`
-- Also at [`releases/mothdiag-0.1.5.bin`](../../releases/mothdiag-0.1.5.bin)
+- Version 0.1.6
+- 823,680 bytes, magic `E9`, chip `0x0009`
+- SHA-256 `07935549f946a37d2dbc08ac860ded1718a59bad4f6b1029c293eda00763bff4`
+- Also at [`releases/mothdiag-0.1.6.bin`](../../releases/mothdiag-0.1.6.bin)
+- 0.1.5 stays published as [`releases/mothdiag-0.1.5.bin`](../../releases/mothdiag-0.1.5.bin)
 - 0.1.4 stays published as [`releases/mothdiag-0.1.4.bin`](../../releases/mothdiag-0.1.4.bin)
 - Also listed in [`releases/SHA256SUMS`](../../releases/SHA256SUMS)
 
@@ -26,7 +27,7 @@ Launcher is [bmorcelli/Launcher](https://github.com/bmorcelli/Launcher). Use a C
 3. On the splash that says to press the button to enter Launcher, press Enter or the front button before the timeout.
 4. Open the SD browser, select `mothdiag-cardputer-adv.bin`, and choose Install.
 
-The screen then shows `MothDiag`, `0.1.5`, `Waiting` or `Connected`, the test name, MIDI BPM, arrival BPM, the clock rate, and the MTC rate. The clock rate is the musical rate, not the raw byte rate. Each line redraws only when its text changes. The words stay plain.
+The screen then shows `MothDiag`, `0.1.6`, `Waiting` or `Connected`, the test name, MIDI BPM, arrival BPM, the clock rate, and the MTC rate. The clock line shows the musical steps per second and the raw clock bytes per second. Each line redraws only when its text changes. The words stay plain.
 
 ### USB, from this repo
 
@@ -46,7 +47,7 @@ USB CDC, 115200, 8N1. Every line is one JSON object.
 
 | Line `t` | When |
 | --- | --- |
-| `hello` | Boot. `name` is `MothDiag`, `version` is `0.1.5`. |
+| `hello` | Boot. `name` is `MothDiag`, `version` is `0.1.6`. |
 | `test` | One step of `run`. `phase` is `wait`, `run`, or `done`. `go` starts the script when none is running. |
 | `interval` | A connection-parameter request. The negotiated interval is logged again when the central answers, including when it stays the same. |
 | `radio` | Advertising started, or the radio did not come up. |
@@ -55,7 +56,7 @@ USB CDC, 115200, 8N1. Every line is one JSON object.
 | `midi` | One parsed message. `msg` is the type (`note_on`, `note_off`, `cc`, `pitch`, `clock`, `start`, `continue`, `stop`, `song_pos`, `sysex`, and the other MIDI types). `ch` is 1–16 for channel voice. `d` is the data bytes. `running` is true when the status byte was omitted. `ble_ts` is that message's timestamp. Note On with velocity 0 is `note_off` and `vel0` is true. SysEx uses `hex` and `ended`. |
 | `stats` | Once per interval (default 1000 ms). |
 
-`stats` carries the clock count, `clock_dup`, `clock_burst`, `clock_step`, `bpm_midi` (from BLE MIDI timestamps) and `bpm_arrival` (from arrival time), note-on and note-off counts for the window and the session, `hanging` (note-ons with no note-off), `extra_offs`, `parse_errors`, `packets`, `pps`, `max_gap_us`, `jitter_us` (standard deviation of the gaps between packets), and `queue_drops`. A BPM is `null` until a charged span exists. Timestamps are 13-bit milliseconds and wrap every 8192 ms. A backwards step is ignored. Clocks that share one timestamp count once. `bpm_midi` uses those musical steps, not every clock byte. `clock_dup` is how many extra copies arrived on a timestamp that already moved. `clock_step` is the musical steps in the window. The report prints `clock fold` with the duplicate, burst, and step totals.
+`stats` carries the clock count, `clock_hz` (raw clock bytes per second in the window), `clock_dup`, `clock_burst`, `clock_step`, `bpm_midi` (from BLE MIDI timestamps) and `bpm_arrival` (from arrival time), note-on and note-off counts for the window and the session, `hanging` (note-ons with no note-off), `extra_offs`, `parse_errors`, `packets`, `pps`, `max_gap_us`, `jitter_us` (standard deviation of the gaps between packets), and `queue_drops`. A BPM is `null` until a charged span exists. Timestamps are 13-bit milliseconds and wrap every 8192 ms. A backwards step is ignored. Clocks that share one timestamp count once. `bpm_midi` uses those musical steps, not every clock byte. `clock_dup` is how many extra copies arrived on a timestamp that already moved. `clock_step` is the musical steps in the window. The report prints `clock fold` with the duplicate, burst, and step totals.
 
 Clock bytes are counted in the BLE callback. A packet that is only clocks is not queued, so a full-rate clock does not fill the packet queue. A packet that also carries a note, a controller, or transport is still queued.
 
