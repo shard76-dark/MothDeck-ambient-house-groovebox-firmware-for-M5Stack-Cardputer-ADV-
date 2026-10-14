@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "ClockTempo.h"
 
 // Windowed counters for the once-per-interval stats line, plus the session
 // figures the status, bpm, and notes commands print. BPM from MIDI timestamps
@@ -21,6 +22,10 @@ struct DiagWindow {
   uint32_t elapsedMs;
   uint32_t clocks;
   uint32_t clocksTotal;
+  uint32_t dup;
+  uint32_t dupTotal;
+  uint32_t burst;
+  uint32_t playSteps;
   bool hasBpmMidi;
   double bpmMidi;
   bool hasBpmArrival;
@@ -66,6 +71,9 @@ public:
   void noteOff(int ch, int note);
   void allOff(int ch);
   void clock(uint64_t us, uint16_t bleTs);
+  // Clocks already folded on the BLE callback. The counts are a delta.
+  void absorbClocks(uint32_t raw, uint32_t dup, uint32_t burst, uint32_t playSteps, uint32_t tempoSteps, uint32_t spanMs, uint32_t arrivalSteps, uint64_t arrivalSpanUs);
+  void absorbPackets(uint32_t n);
   void packet(uint64_t us);
   void parseError(int n);
   void noteParserMismatch();
@@ -116,8 +124,19 @@ private:
   uint64_t winClockFirstUs_;
   uint64_t winClockLastUs_;
   uint32_t winMidiSpanMs_;
-  uint16_t winPrevTs_;
-  bool winHaveTs_;
+  uint32_t winDup_;
+  uint32_t winBurst_;
+  uint32_t winPlaySteps_;
+  uint32_t winTempoSteps_;
+  uint32_t winArrivalSteps_;
+  uint64_t winArrivalSpanUs_;
+  uint32_t sessDup_;
+  uint32_t sessBurst_;
+  uint32_t sessPlaySteps_;
+  uint32_t sessTempoSteps_;
+  uint32_t sessArrivalSteps_;
+  uint64_t sessArrivalSpanUs_;
+  ClockFold fold_;
 
   uint32_t clocks_;
   uint32_t noteOn_;

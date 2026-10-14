@@ -1,4 +1,5 @@
 #include "BleAdvert.h"
+#include "ClockTempo.h"
 #include "MidiProtocol.h"
 #include "diag_parse.h"
 #include "diag_selftest.h"
@@ -106,6 +107,72 @@ static void testBpmAndJitter() {
   expect(window.parseErrors == 2 && window.clocks == 0 && window.hanging == 0, "next window sees the errors and no new clocks");
 }
 
+static int gScanClocks = 0;
+
+static void onScanClock(uint16_t ts, void *user) {
+  uint16_t *out = (uint16_t *)user;
+  if (gScanClocks < 32) {
+    out[gScanClocks] = ts;
+  }
+  (void)ts;
+  gScanClocks++;
+}
+
+static void testClockFold() {
+  DiagMeter meter;
+  meter.reset(0);
+  meter.setWindowMs(1000);
+  for (int i = 0; i < 24; i++) {
+    meter.clock((uint64_t)i * 20833ULL, (uint16_t)(8000 + i * 21));
+  }
+  meter.clock(24ULL * 20833ULL, (uint16_t)((8000 + 24 * 21) & 0x1FFF));
+  for (int i = 0; i < 8; i++) {
+    meter.clock(25ULL * 20833ULL, (uint16_t)((8000 + 24 * 21) & 0x1FFF));
+  }
+  meter.clock(26ULL * 20833ULL, 100);
+  DiagWindow window;
+  expect(meter.takeWindow(1000000, &window), "fold window fires");
+  expect(window.dup >= 8, "repeated timestamps are duplicates");
+  expect(window.hasBpmMidi && window.bpmMidi > 110.0 && window.bpmMidi < 130.0, "a wrapped timestamp still reads near 120");
+
+  DiagMeter burst;
+  burst.reset(0);
+  burst.setWindowMs(1000);
+  for (int i = 0; i < 40; i++) {
+    burst.clock((uint64_t)i * 2000ULL, (uint16_t)(i * 2));
+  }
+  DiagWindow flooded;
+  expect(burst.takeWindow(1000000, &flooded), "burst window fires");
+  expect(flooded.playSteps < 20, "a 2 ms run does not count every byte");
+  expect(!flooded.hasBpmMidi || (flooded.bpmMidi > 40.0 && flooded.bpmMidi < 220.0), "a 2 ms run does not publish a wild tempo");
+
+  const uint8_t shared[] = {0x80, 0x80, 0xF8, 0xF8, 0xF8, 0xF8, 0xF8, 0xF8, 0xF8};
+  const uint8_t notes[] = {0x80, 0x90, 60, 100, 0xF8};
+  uint16_t got[32];
+  gScanClocks = 0;
+  BleClockEar ear;
+  std::memset(&ear, 0, sizeof(ear));
+  int other = 0;
+  int n = bleClockScan(&ear, shared, (int)sizeof(shared), onScanClock, got, &other);
+  expect(n == 7 && other == 0 && gScanClocks == 7 && got[0] == got[6], "seven clocks on one timestamp stay in the callback");
+  gScanClocks = 0;
+  std::memset(&ear, 0, sizeof(ear));
+  n = bleClockScan(&ear, notes, (int)sizeof(notes), onScanClock, got, &other);
+  expect(n == 1 && other == 1, "a note keeps the packet queued");
+
+  MidiRunningState state;
+  std::memset(&state, 0, sizeof(state));
+  MidiParseResult parsed;
+  parseBleMidiPacket(shared, (int)sizeof(shared), &state, &parsed);
+  int ticks = 0;
+  for (int i = 0; i < parsed.count; i++) {
+    if (parsed.events[i].type == MIDI_MSG_CLOCK) {
+      ticks += parsed.events[i].value == 0 ? 1 : (int)parsed.events[i].value;
+    }
+  }
+  expect(ticks == 7, "the parser still counts every copy");
+}
+
 static void testReject() {
   DiagState state;
   diagStateClear(&state);
@@ -124,6 +191,7 @@ int main() {
   testSelf();
   testNotes();
   testBpmAndJitter();
+  testClockFold();
   testReject();
   if (failures) {
     std::printf("%d failed\n", failures);

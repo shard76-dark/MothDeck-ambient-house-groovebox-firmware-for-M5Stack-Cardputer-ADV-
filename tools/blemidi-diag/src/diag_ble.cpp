@@ -1,4 +1,5 @@
 #include "diag_ble.h"
+#include "ClockTempo.h"
 
 #include <Arduino.h>
 #include <Preferences.h>
@@ -61,6 +62,31 @@ static PktSlot pktSlots[kPktSlots];
 static volatile uint16_t pktHead = 0;
 static volatile uint16_t pktTail = 0;
 static uint32_t pktDrops = 0;
+static ClockFold clockFold;
+static BleClockEar clockEar;
+static DiagClockPub clockPub;
+
+struct ClockFeed {
+  uint64_t us;
+};
+
+static void onScannedClock(uint16_t ts, void *user) {
+  ClockFeed *feed = (ClockFeed *)user;
+  clockFoldFeed(&clockFold, ts, 1, feed ? feed->us : 0);
+}
+
+static void publishClocks() {
+  portENTER_CRITICAL(&mux);
+  clockPub.raw = clockFold.raw;
+  clockPub.dup = clockFold.dup;
+  clockPub.burst = clockFold.burst;
+  clockPub.playSteps = clockFold.playSteps;
+  clockPub.tempoSteps = clockFold.tempoSteps;
+  clockPub.spanMs = clockFold.spanMs;
+  clockPub.arrivalSteps = clockFold.arrivalSteps;
+  clockPub.arrivalSpanUs = clockFold.arrivalSpanUs;
+  portEXIT_CRITICAL(&mux);
+}
 
 static DiagLinkEvent linkSlots[kLinkSlots];
 static volatile uint16_t linkHead = 0;
@@ -287,6 +313,20 @@ class DiagCharCallbacks : public BLECharacteristicCallbacks {
       }
       return;
     }
+    uint64_t us = (uint64_t)esp_timer_get_time();
+    int other = 0;
+    ClockFeed feed;
+    feed.us = us;
+    bleClockScan(&clockEar, data, (int)len, onScannedClock, &feed, &other);
+    publishClocks();
+    // A clock-only packet is already counted. Queueing it as well fills the
+    // ring and the notes behind it never get a slot. The packet still counts.
+    if (!other) {
+      portENTER_CRITICAL(&mux);
+      clockPub.packets++;
+      portEXIT_CRITICAL(&mux);
+      return;
+    }
     portENTER_CRITICAL(&mux);
     uint16_t next = (uint16_t)((pktHead + 1) % kPktSlots);
     if (next == pktTail) {
@@ -294,7 +334,7 @@ class DiagCharCallbacks : public BLECharacteristicCallbacks {
       portEXIT_CRITICAL(&mux);
       return;
     }
-    pktSlots[pktHead].us = (uint64_t)esp_timer_get_time();
+    pktSlots[pktHead].us = us;
     pktSlots[pktHead].len = (uint16_t)len;
     memcpy(pktSlots[pktHead].data, data, len);
     pktHead = next;
@@ -458,6 +498,15 @@ int diagBlePopPacket(uint8_t *buf, int cap, uint64_t *us) {
   pktTail = (uint16_t)((pktTail + 1) % kPktSlots);
   portEXIT_CRITICAL(&mux);
   return (int)len;
+}
+
+void diagBleClockPub(DiagClockPub *out) {
+  if (!out) {
+    return;
+  }
+  portENTER_CRITICAL(&mux);
+  *out = clockPub;
+  portEXIT_CRITICAL(&mux);
 }
 
 uint32_t diagBleQueueDrops() {

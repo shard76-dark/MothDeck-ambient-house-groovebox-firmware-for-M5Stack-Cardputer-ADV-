@@ -162,13 +162,32 @@ static void logHeap(const char *tag) {
   DEV_LOGF("HEAP: %s free=%u largest=%u\n", tag, (unsigned)freeB, (unsigned)largest);
 }
 
+static void consoleLine(const char *kind) {
+  Serial.printf("{\"t\":\"%s\",\"name\":\"MothDeck\",\"version\":\"%s\"}\n", kind, MOTHDECK_VERSION);
+  Serial.flush();
+}
+
+static void consoleHelp() {
+  Serial.printf(
+    "{\"t\":\"help\",\"name\":\"MothDeck\",\"version\":\"%s\",\"commands\":[\"status\",\"help\",\"version\",\"launcher\"]}\n",
+    MOTHDECK_VERSION);
+  Serial.flush();
+}
+
 void setup() {
   mothBootGuard();
   // USB CDC is on from boot. Playback is first: the speaker DMA and the
   // audio task take their internal RAM before the sprite. NimBLE is next,
   // before the loop pool and before the card scan, which is the 1.1.0
   // order that paired. The stack stays resident. Off does not advertise.
+  Serial.setRxBufferSize(1024);
   Serial.begin(115200);
+  // Opening the port must not enter the ROM download mode. That sequence
+  // drops the CDC device and the host read fails with a permission error.
+#if !ARDUINO_USB_MODE
+  Serial.enableReboot(false);
+#endif
+  Serial.setTxTimeoutMs(20);
   Serial.printf("MothDeck %s\n", MOTHDECK_VERSION);
   static const char kMothImage[] = "MOTHIMG:" MOTHDECK_VERSION;
   Serial.println(kMothImage);
@@ -202,10 +221,24 @@ void setup() {
   uiMountStorage(!ble.UserEnabled());
   logHeap("after storage");
   mothMarkAppValid();
+  consoleLine("hello");
+}
+
+static bool sameWord(const char *cmd, const char *word) {
+  for (size_t i = 0; word[i]; i++) {
+    char c = cmd[i];
+    if (c >= 'A' && c <= 'Z') {
+      c = (char)(c - 'A' + 'a');
+    }
+    if (c != word[i]) {
+      return false;
+    }
+  }
+  return cmd[strlen(word)] == 0;
 }
 
 static void pollLauncherLine() {
-  static char cmd[24];
+  static char cmd[32];
   static size_t used = 0;
   while (Serial.available() > 0) {
     int ch = Serial.read();
@@ -213,12 +246,21 @@ static void pollLauncherLine() {
       return;
     }
     if (ch == '\n') {
+      while (used > 0 && (cmd[used - 1] == ' ' || cmd[used - 1] == '\r')) {
+        used--;
+      }
       cmd[used] = 0;
       used = 0;
-      if (strcmp(cmd, "launcher") == 0 || strcmp(cmd, "LAUNCHER") == 0) {
-        Serial.println("{\"t\":\"launcher\",\"ok\":true}");
+      if (sameWord(cmd, "launcher")) {
+        Serial.printf(
+          "{\"t\":\"launcher\",\"ok\":true,\"name\":\"MothDeck\",\"version\":\"%s\"}\n",
+          MOTHDECK_VERSION);
         Serial.flush();
         mothRebootToLauncher();
+      } else if (sameWord(cmd, "status") || sameWord(cmd, "version")) {
+        consoleLine(cmd[0] == 'v' || cmd[0] == 'V' ? "version" : "status");
+      } else if (sameWord(cmd, "help")) {
+        consoleHelp();
       }
       continue;
     }

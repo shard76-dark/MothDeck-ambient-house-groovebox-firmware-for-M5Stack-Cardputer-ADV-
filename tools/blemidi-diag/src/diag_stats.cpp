@@ -166,33 +166,58 @@ void DiagMeter::allOff(int ch) {
   clearHeldChannel(ch);
 }
 
-void DiagMeter::clock(uint64_t us, uint16_t bleTs) {
-  winClocks_++;
-  clocks_++;
-  if (!winHaveTs_) {
-    winClockFirstUs_ = us;
-    winHaveTs_ = true;
-    winPrevTs_ = bleTs;
-  } else {
-    winMidiSpanMs_ += (uint32_t)((uint16_t)(bleTs - winPrevTs_) & 0x1FFF);
-    winPrevTs_ = bleTs;
-  }
-  winClockLastUs_ = us;
+void DiagMeter::absorbClocks(uint32_t raw, uint32_t dup, uint32_t burst, uint32_t playSteps, uint32_t tempoSteps, uint32_t spanMs, uint32_t arrivalSteps, uint64_t arrivalSpanUs) {
+  winClocks_ += raw;
+  clocks_ += raw;
+  winDup_ += dup;
+  sessDup_ += dup;
+  winBurst_ += burst;
+  sessBurst_ += burst;
+  winPlaySteps_ += playSteps;
+  sessPlaySteps_ += playSteps;
+  winTempoSteps_ += tempoSteps;
+  sessTempoSteps_ += tempoSteps;
+  winMidiSpanMs_ += spanMs;
+  sessMidiSpanMs_ += spanMs;
+  winArrivalSteps_ += arrivalSteps;
+  sessArrivalSteps_ += arrivalSteps;
+  winArrivalSpanUs_ += arrivalSpanUs;
+  sessArrivalSpanUs_ += arrivalSpanUs;
+}
 
-  if (!sessHaveClock_) {
-    sessClockFirstUs_ = us;
-    sessHaveClock_ = true;
-    sessPrevTs_ = bleTs;
-    sessHaveTs_ = true;
-  } else {
-    uint32_t deltaMs = (uint32_t)((uint16_t)(bleTs - sessPrevTs_) & 0x1FFF);
-    sessMidiSpanMs_ += deltaMs;
-    sessPrevTs_ = bleTs;
-    addSessionGap((double)deltaMs, &sessMidiMean_, &sessMidiM2_, &sessMidiN_);
-    uint64_t deltaUs = us >= sessClockLastUs_ ? us - sessClockLastUs_ : 0;
-    addSessionGap((double)deltaUs, &sessArrivalMean_, &sessArrivalM2_, &sessArrivalN_);
+void DiagMeter::absorbPackets(uint32_t n) {
+  winPackets_ += n;
+}
+
+void DiagMeter::clock(uint64_t us, uint16_t bleTs) {
+  if (fold_.have) {
+    uint16_t delta = bleClockDelta(fold_.lastTs, bleTs);
+    if (delta > 0 && delta < 2000) {
+      addSessionGap((double)delta, &sessMidiMean_, &sessMidiM2_, &sessMidiN_);
+    }
   }
-  sessClockLastUs_ = us;
+  ClockFold before = fold_;
+  clockFoldFeed(&fold_, bleTs, 1, us);
+  uint32_t raw = fold_.raw - before.raw;
+  uint32_t dup = fold_.dup - before.dup;
+  uint32_t burst = fold_.burst - before.burst;
+  uint32_t play = fold_.playSteps - before.playSteps;
+  uint32_t tempo = fold_.tempoSteps - before.tempoSteps;
+  uint32_t span = fold_.spanMs - before.spanMs;
+  uint32_t arrN = fold_.arrivalSteps - before.arrivalSteps;
+  uint64_t arrUs = fold_.arrivalSpanUs - before.arrivalSpanUs;
+  absorbClocks(raw, dup, burst, play, tempo, span, arrN, arrUs);
+  if (us > 0) {
+    if (sessHaveClock_ && us >= sessClockLastUs_) {
+      uint64_t deltaUs = us - sessClockLastUs_;
+      addSessionGap((double)deltaUs, &sessArrivalMean_, &sessArrivalM2_, &sessArrivalN_);
+    }
+    sessClockLastUs_ = us;
+    if (!sessHaveClock_) {
+      sessClockFirstUs_ = us;
+      sessHaveClock_ = true;
+    }
+  }
 }
 
 void DiagMeter::packet(uint64_t us) {
@@ -262,14 +287,17 @@ bool DiagMeter::takeWindow(uint64_t nowUs, DiagWindow *out) {
   }
   out->jitterUs = (uint32_t)(jitter + 0.5);
 
-  if (winClocks_ >= 2 && winMidiSpanMs_ > 0) {
+  out->dup = winDup_;
+  out->dupTotal = sessDup_;
+  out->burst = winBurst_;
+  out->playSteps = winPlaySteps_;
+  if (winTempoSteps_ >= 1 && winMidiSpanMs_ > 0) {
     out->hasBpmMidi = true;
-    out->bpmMidi = 60000.0 * (double)(winClocks_ - 1) / (24.0 * (double)winMidiSpanMs_);
+    out->bpmMidi = 60000.0 * (double)winTempoSteps_ / (24.0 * (double)winMidiSpanMs_);
   }
-  if (winClocks_ >= 2 && winClockLastUs_ > winClockFirstUs_) {
+  if (winArrivalSteps_ >= 1 && winArrivalSpanUs_ > 0) {
     out->hasBpmArrival = true;
-    double span = (double)(winClockLastUs_ - winClockFirstUs_);
-    out->bpmArrival = 60000000.0 * (double)(winClocks_ - 1) / (24.0 * span);
+    out->bpmArrival = 60000000.0 * (double)winArrivalSteps_ / (24.0 * (double)winArrivalSpanUs_);
   }
 
   winPackets_ = 0;
@@ -282,8 +310,13 @@ bool DiagMeter::takeWindow(uint64_t nowUs, DiagWindow *out) {
   maxGapUs_ = 0;
   gapMean_ = 0;
   gapM2_ = 0;
-  winHaveTs_ = false;
   winMidiSpanMs_ = 0;
+  winDup_ = 0;
+  winBurst_ = 0;
+  winPlaySteps_ = 0;
+  winTempoSteps_ = 0;
+  winArrivalSteps_ = 0;
+  winArrivalSpanUs_ = 0;
   winClockFirstUs_ = 0;
   winClockLastUs_ = 0;
   windowStartUs_ = nowUs;
@@ -340,16 +373,14 @@ void DiagMeter::bpmSummary(DiagBpm *out) const {
   memset(out, 0, sizeof(*out));
   out->clocks = clocks_;
   out->midiSpanMs = sessMidiSpanMs_;
-  if (sessHaveClock_ && sessClockLastUs_ >= sessClockFirstUs_) {
-    out->arrivalSpanUs = sessClockLastUs_ - sessClockFirstUs_;
-  }
-  if (clocks_ >= 2 && sessMidiSpanMs_ > 0) {
+  out->arrivalSpanUs = sessArrivalSpanUs_;
+  if (sessTempoSteps_ >= 1 && sessMidiSpanMs_ > 0) {
     out->hasBpmMidi = true;
-    out->bpmMidi = 60000.0 * (double)(clocks_ - 1) / (24.0 * (double)sessMidiSpanMs_);
+    out->bpmMidi = 60000.0 * (double)sessTempoSteps_ / (24.0 * (double)sessMidiSpanMs_);
   }
-  if (clocks_ >= 2 && out->arrivalSpanUs > 0) {
+  if (sessArrivalSteps_ >= 1 && sessArrivalSpanUs_ > 0) {
     out->hasBpmArrival = true;
-    out->bpmArrival = 60000000.0 * (double)(clocks_ - 1) / (24.0 * (double)out->arrivalSpanUs);
+    out->bpmArrival = 60000000.0 * (double)sessArrivalSteps_ / (24.0 * (double)sessArrivalSpanUs_);
   }
   if (sessArrivalN_ >= 2) {
     out->hasArrivalJitter = true;

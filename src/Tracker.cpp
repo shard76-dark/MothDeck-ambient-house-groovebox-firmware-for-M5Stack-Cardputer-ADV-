@@ -1,4 +1,5 @@
 #include "Tracker.h"
+#include "ClockTempo.h"
 #include "AudioEngine.h"
 #include "DspHot.h"
 #include "PcmHold.h"
@@ -71,6 +72,8 @@ Tracker::Tracker() {
   bpms[3] = 180;
   ClearAll(0);
   SetBPM(0);
+  memset(&clockFold, 0, sizeof(clockFold));
+  clockFold.smooth = Bpm();
 }
 
 uint16_t Tracker::PackStep(uint8_t note, int8_t oct, uint8_t inst, uint8_t lenCode) {
@@ -354,28 +357,6 @@ void Tracker::SetSync(int mode) {
   }
 }
 
-static int spanClocks(uint16_t deltaMs, int bpm, int wire) {
-  if (wire < 1) {
-    wire = 1;
-  }
-  if (bpm < 1) {
-    bpm = 1;
-  }
-  // Nearest number of ticks at the current BPM. A thinned MPC clock is one
-  // 0xF8 about every four ticks, so the span is that multiple, not one tick.
-  uint32_t num = (uint32_t)deltaMs * (uint32_t)bpm + 1250u;
-  int estimate = (int)(num / 2500u);
-  if (estimate < 1) {
-    estimate = 1;
-  } else if (estimate > 8) {
-    estimate = 8;
-  }
-  if (wire > estimate) {
-    return wire;
-  }
-  return estimate;
-}
-
 void Tracker::ApplyExternalBpm(int bpm) {
   if (bpm < 40) {
     bpm = 40;
@@ -453,6 +434,9 @@ void Tracker::ResetTempoWindow() {
   tempoClocks = 0;
   clocksInStamp = 0;
   bpmSmooth = 0;
+  int keep = Bpm();
+  memset(&clockFold, 0, sizeof(clockFold));
+  clockFold.smooth = keep;
 }
 
 void Tracker::SilenceLive() {
@@ -671,43 +655,21 @@ void Tracker::MidiClocks(uint16_t timestamp13, int ticks) {
     ticks = 255;
   }
   uint16_t ts = (uint16_t)(timestamp13 & 0x1FFF);
-  int catchup = 0;
-  if (haveClockTs) {
-    uint16_t delta = (uint16_t)((ts - lastClockTs) & 0x1FFF);
-    if (delta > 0 && delta < 2000) {
-      int wire = clocksInStamp > 0 ? clocksInStamp : 1;
-      int musical = spanClocks(delta, Bpm(), wire);
-      tempoMs += delta;
-      tempoClocks += musical;
-      if (musical > wire) {
-        catchup = musical - wire;
-      }
-      clocksInStamp = 0;
-      if (tempoClocks >= 24 && tempoMs > 0) {
-        int raw = (int)((60000.0f * (float)tempoClocks) / (24.0f * (float)tempoMs) + 0.5f);
-        if (bpmSmooth <= 0) {
-          bpmSmooth = raw;
-        } else {
-          bpmSmooth = (bpmSmooth * 3 + raw + 2) / 4;
-        }
-        ApplyExternalBpm(bpmSmooth);
-        tempoMs = 0;
-        tempoClocks = 0;
-      }
-    } else if (delta >= 2000) {
-      tempoMs = 0;
-      tempoClocks = 0;
-      clocksInStamp = 0;
-    }
+  int before = clockFold.smooth;
+  int advance = clockFoldFeed(&clockFold, ts, ticks, 0);
+  lastClockTs = clockFold.lastTs;
+  haveClockTs = clockFold.have;
+  if (clockFold.smooth >= 40 && clockFold.smooth != before) {
+    bpmSmooth = clockFold.smooth;
+    ApplyExternalBpm(clockFold.smooth);
   }
-  lastClockTs = ts;
-  haveClockTs = 1;
-  clocksInStamp += ticks;
   if (isPlaying && !extSync) {
     extSync = true;
     mtcRun = 0;
   }
-  int advance = ticks + catchup;
+  if (advance < 1) {
+    return;
+  }
   transportTick += (uint32_t)advance;
   if (!extSync || !isPlaying) {
     return;

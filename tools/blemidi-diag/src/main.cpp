@@ -390,6 +390,10 @@ static void emitStats(const DiagWindow &w, uint64_t us) {
   jsI32(&j, "elapsed_ms", (int32_t)w.elapsedMs);
   jsI32(&j, "clocks", (int32_t)w.clocks);
   jsI32(&j, "clocks_total", (int32_t)w.clocksTotal);
+  jsI32(&j, "clock_dup", (int32_t)w.dup);
+  jsI32(&j, "clock_dup_total", (int32_t)w.dupTotal);
+  jsI32(&j, "clock_burst", (int32_t)w.burst);
+  jsI32(&j, "clock_step", (int32_t)w.playSteps);
   jsFixed(&j, "bpm_midi", w.hasBpmMidi, w.bpmMidi, 2);
   jsFixed(&j, "bpm_arrival", w.hasBpmArrival, w.bpmArrival, 2);
   jsI32(&j, "note_on", (int32_t)w.noteOn);
@@ -489,7 +493,9 @@ static void applyMessage(const DiagPacket &pkt, const DiagMsg &msg, uint64_t us)
   } else if (strcmp(msg.type, "cc") == 0 && msg.dataLen == 2 && (msg.data[0] == 120 || msg.data[0] == 123)) {
     meter.allOff(msg.channel);
   } else if (strcmp(msg.type, "clock") == 0) {
-    meter.clock(us, msg.bleTs);
+    // Counted in the BLE callback, including clock-only packets that are
+    // not queued. Counting them again here would double the tempo.
+    (void)us;
   }
 }
 
@@ -979,9 +985,32 @@ void setup() {
   mothMarkAppValid();
 }
 
+static void drainClocks() {
+  static DiagClockPub seen;
+  DiagClockPub now;
+  diagBleClockPub(&now);
+  uint32_t raw = now.raw - seen.raw;
+  uint32_t dup = now.dup - seen.dup;
+  uint32_t burst = now.burst - seen.burst;
+  uint32_t play = now.playSteps - seen.playSteps;
+  uint32_t tempo = now.tempoSteps - seen.tempoSteps;
+  uint32_t span = now.spanMs - seen.spanMs;
+  uint32_t arrN = now.arrivalSteps - seen.arrivalSteps;
+  uint64_t arrUs = now.arrivalSpanUs - seen.arrivalSpanUs;
+  uint32_t pk = now.packets - seen.packets;
+  if (raw || dup || burst || play || tempo || span || arrN || arrUs) {
+    meter.absorbClocks(raw, dup, burst, play, tempo, span, arrN, arrUs);
+  }
+  if (pk) {
+    meter.absorbPackets(pk);
+  }
+  seen = now;
+}
+
 void loop() {
   uint32_t nowMs = millis();
   uint64_t nowUs = (uint64_t)esp_timer_get_time();
+  drainClocks();
   diagBleMaintain(nowMs);
   diagBleRefreshRssi();
 
@@ -1012,7 +1041,8 @@ void loop() {
     if (span == 0) {
       span = 1;
     }
-    snprintf(clkText, sizeof(clkText), "%u/s", (unsigned)((uint32_t)window.clocks * 1000u / span));
+    uint32_t shown = window.playSteps ? window.playSteps : window.clocks;
+    snprintf(clkText, sizeof(clkText), "%u/s", (unsigned)(shown * 1000u / span));
     snprintf(mtcText, sizeof(mtcText), "%u/s", (unsigned)(mtc.qfWindow * 1000u / span));
     emitStats(window, nowUs);
   }

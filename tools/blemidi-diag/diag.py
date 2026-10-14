@@ -128,6 +128,9 @@ def summarize(lines: Iterable[str]) -> dict[str, Any]:
         "queue_drops": int(queue_drops or 0),
         "parser_mismatch": int(mismatch or 0),
         "extra_offs": int(last_stats.get("extra_offs") or 0),
+        "clock_dup": int(last_stats.get("clock_dup_total") or sum(int(row.get("clock_dup") or 0) for row in stats)),
+        "clock_burst": int(sum(int(row.get("clock_burst") or 0) for row in stats)),
+        "clock_step": int(sum(int(row.get("clock_step") or 0) for row in stats)),
         "version": _firmware_version(rows),
     }
 
@@ -153,6 +156,11 @@ def render_report(summary: dict[str, Any], port: str, seconds: float, log_path: 
         f"link: connect {summary['connects']}, disconnect {summary['disconnects']}",
         f"packets: {summary['packets']}",
         f"clocks: {summary['clocks']}",
+        (
+            f"clock fold: dup {summary.get('clock_dup', 0)}  "
+            f"burst {summary.get('clock_burst', 0)}  "
+            f"steps {summary.get('clock_step', 0)}"
+        ),
         _fmt_spread("BPM arrival", arrival, ""),
         _fmt_spread("BPM midi", midi, ""),
         _fmt_spread("jitter", summary["jitter_us"], " us"),
@@ -224,6 +232,10 @@ def self_check() -> int:
         problems.append("stability line")
     if summary.get("version") != "0.1.1" or "MothDiag 0.1.1 capture" not in report:
         problems.append("banner version")
+    if _device_name({"t": "status", "name": "MothDeck", "version": "1.2.11"}) == "MothBoot":
+        problems.append("deck accepted as boot")
+    if _device_name({"t": "status", "name": "MothBoot", "version": "0.1.2"}) != "MothBoot":
+        problems.append("boot name")
     if problems:
         sys.stderr.write("diag.py self-check failed: " + ", ".join(problems) + "\n")
         sys.stderr.write(report + "\n")
@@ -297,9 +309,12 @@ def find_port(explicit: Optional[str], baud: int):
             handle.dtr = False
             handle.rts = False
             handle.open()
-            handle.dtr = False
+            # DTR lets the CDC console transmit. RTS stays clear. MothDeck
+            # ignores the download-mode line sequence, so opening the port
+            # does not reset the board.
+            handle.dtr = True
             handle.rts = False
-        except serial.SerialException as exc:
+        except (serial.SerialException, OSError) as exc:
             errors.append(f"{device}: {exc}")
             continue
         prefix: list[str] = []
@@ -311,7 +326,11 @@ def find_port(explicit: Optional[str], baud: int):
             buf = b""
             matched = False
             while time.time() < deadline:
-                chunk = handle.read(handle.in_waiting or 1)
+                try:
+                    chunk = handle.read(handle.in_waiting or 1)
+                except OSError as exc:
+                    errors.append(f"{device}: {exc}")
+                    break
                 if not chunk:
                     continue
                 buf += chunk
@@ -334,7 +353,7 @@ def find_port(explicit: Optional[str], baud: int):
                 prefix.append(buf.decode("utf-8", "replace").strip())
             if matched or explicit:
                 return handle, device, prefix
-        except serial.SerialException as exc:
+        except (serial.SerialException, OSError) as exc:
             errors.append(f"{device}: {exc}")
         handle.close()
     detail = "; ".join(errors) if errors else "no port answered as MothDiag"
@@ -351,8 +370,11 @@ def capture(handle, seconds: float, log_path: str, prefix: Optional[list[str]] =
                 log.write(text + "\n")
                 lines.append(text)
         while time.time() < deadline:
-            waiting = handle.in_waiting
-            chunk = handle.read(waiting or 1)
+            try:
+                waiting = handle.in_waiting
+                chunk = handle.read(waiting or 1)
+            except OSError:
+                break
             if not chunk:
                 continue
             buf += chunk
@@ -394,7 +416,10 @@ def _read_objects(handle, timeout: float, predicate) -> tuple[list[str], Optiona
     buf = b""
     lines: list[str] = []
     while time.time() < deadline:
-        chunk = handle.read(handle.in_waiting or 1)
+        try:
+            chunk = handle.read(handle.in_waiting or 1)
+        except OSError:
+            return lines, None
         if not chunk:
             continue
         buf += chunk
@@ -417,6 +442,78 @@ def _read_objects(handle, timeout: float, predicate) -> tuple[list[str], Optiona
 def _send_line(handle, line: str) -> None:
     handle.write((line + "\n").encode("utf-8"))
     handle.flush()
+
+
+def _device_name(item: Optional[dict]) -> str:
+    if not isinstance(item, dict):
+        return ""
+    name = item.get("name")
+    return str(name) if name else ""
+
+
+def _read_quiet(handle, timeout: float, predicate):
+    try:
+        return _read_objects(handle, timeout, predicate)
+    except OSError:
+        return [], None
+
+
+def ensure_mothboot(handle, baud: int):
+    """Return an open handle on MothBoot. An app is asked to reboot first."""
+    import serial
+
+    try:
+        _send_line(handle, "status")
+    except OSError:
+        pass
+    _lines, item = _read_quiet(
+        handle,
+        2.5,
+        lambda row: row.get("t") in ("status", "hello") and bool(row.get("name")),
+    )
+    if _device_name(item) == "MothBoot":
+        return handle
+    try:
+        _send_line(handle, "launcher")
+    except OSError:
+        pass
+    _read_quiet(
+        handle,
+        1.5,
+        lambda row: row.get("t") == "launcher" or row.get("name") == "MothBoot",
+    )
+    try:
+        handle.close()
+    except OSError:
+        pass
+    deadline = time.time() + 25.0
+    while time.time() < deadline:
+        time.sleep(0.5)
+        try:
+            new_handle, _device, prefix = find_port(None, baud)
+        except (OSError, serial.SerialException):
+            continue
+        if new_handle is None:
+            continue
+        if any("MothBoot" in text for text in prefix):
+            return new_handle
+        try:
+            _send_line(new_handle, "status")
+        except OSError:
+            try:
+                new_handle.close()
+            except OSError:
+                pass
+            continue
+        _again, item = _read_quiet(new_handle, 2.0, lambda row: row.get("name") == "MothBoot")
+        if _device_name(item) == "MothBoot":
+            return new_handle
+        try:
+            new_handle.close()
+        except OSError:
+            pass
+    sys.stderr.write("MothBoot did not appear after launcher\n")
+    return None
 
 
 def _show_progress(sent: int, total: int) -> None:
@@ -523,6 +620,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(text)
     try:
         if args.flash:
+            handle = ensure_mothboot(handle, args.baud)
+            if handle is None:
+                return 1
             blob = open(args.flash, "rb").read()
             ver = image_version(blob)
             crc = zlib.crc32(blob) & 0xFFFFFFFF
