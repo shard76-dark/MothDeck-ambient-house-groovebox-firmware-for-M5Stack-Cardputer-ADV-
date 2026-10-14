@@ -8,21 +8,31 @@ MothDeck is ambient-house groovebox firmware for the [M5Stack Cardputer ADV](htt
 
 **Latest Cardputer ADV image (flash this):** [`releases/mothdeck-cardputer-adv.bin`](releases/mothdeck-cardputer-adv.bin)
 
-- Version 1.2.10
-- SHA-256: `f7f72e51ec2c5ea37c947b32f52bfb5eb642bc148f2ed78afc8f813ac34b279d`
-- Size: 1,234,096 bytes (app image, magic `E9`)
-- 1.2.10 returns to MothBoot when you send `launcher`. Details are in [What 1.2.10 includes](#what-1210-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
+- Version 1.2.11
+- SHA-256: `41e11c020debcad6608a8251cd7e06e5834faf6fad3df9e0acde942a3b400cc5`
+- Size: 1,234,896 bytes (app image, magic `E9`)
+- 1.2.11 answers `status`, `help`, and `version` on the USB serial port. Details are in [What 1.2.11 includes](#what-1211-includes). The air name is `Mothdeck`. Patterns are 1–8 bars and Play opens on a piano roll. Notes are in [`releases/CHANGELOG.md`](releases/CHANGELOG.md).
 - Install notes: [`releases/INSTALL.md`](releases/INSTALL.md) — copy the `.bin` to a FAT32 card, install from [Launcher](https://github.com/bmorcelli/Launcher)
 - Optional SD kits/loops: [`releases/mothdeck-sd-pack.zip`](releases/mothdeck-sd-pack.zip) · checksums: [`releases/SHA256SUMS`](releases/SHA256SUMS)
 
 
 The public source and releases live in this repository. Flash the application image with [releases/INSTALL.md](releases/INSTALL.md). The same overview, with HTML meta tags for search and link previews, is [docs/index.html](docs/index.html).
 
+## What 1.2.11 includes
+
+1.2.11 is the Cardputer image to flash. It includes the 1.2.2 through 1.2.10 behavior. This image has not been tried on a Cardputer. Use earphones.
+
+- **Slot versions.** MothBoot 0.1.2 reads the version from the whole application image, so slot B shows the installed MothDeck version. MothBoot 0.1.2 is [`releases/mothboot-0.1.2.bin`](releases/mothboot-0.1.2.bin). Write it at `0x10000` from the ROM bootloader. A board already on 0.1.1 can keep that launcher for uploads.
+- **USB serial.** `status`, `help`, and `version` answer on MothDeck's CDC port. Opening the port does not reboot the board into download mode.
+- **Install from an app.** `diag.py --flash` sends `launcher` when an app is running, waits for MothBoot, and then copies the image. The port number can change on that reboot.
+- **External sync.** A smoothed tempo locks to 180 from a full-rate clock or a thinned one. Duplicate clocks and a sub-tick burst do not race the playhead. The deck still needs to be near the source tempo for a thinned clock.
+- **MothDiag 0.1.5.** Clocks are counted in the BLE callback, so a full-rate MPC does not fill the packet queue. MIDI BPM handles the 13-bit timestamp wrap and repeated timestamps. The image is [`releases/mothdiag-0.1.5.bin`](releases/mothdiag-0.1.5.bin).
+
 ## What 1.2.10 includes
 
-1.2.10 is the Cardputer image to flash. It includes the 1.2.2 through 1.2.9 behavior. This image has not been tried on a Cardputer. Use earphones.
+1.2.10 is included in the 1.2.11 image. It includes the 1.2.2 through 1.2.9 behavior. Use earphones.
 
-- **MothBoot.** Sending `launcher` restarts into MothBoot on the USB-Serial-JTAG port. MothBoot 0.1.1 is [`releases/mothboot-0.1.1.bin`](releases/mothboot-0.1.1.bin). A board still running MothBoot 0.1.0 needs that factory image from the ROM bootloader before `--flash` can run at full speed.
+- **MothBoot.** Sending `launcher` restarts into MothBoot on the USB-Serial-JTAG port. MothBoot 0.1.1 is [`releases/mothboot-0.1.1.bin`](releases/mothboot-0.1.1.bin). A board still running MothBoot 0.1.0 needs a later factory image from the ROM bootloader before `--flash` can run at full speed.
 - **Uploads.** `diag.py --flash` and `--sd-put` wait for an ack after each chunk and draw a progress bar.
 - **MothDiag 0.1.4.** `status`, `help`, `stats`, and command replies are always sent. The image is [`releases/mothdiag-0.1.4.bin`](releases/mothdiag-0.1.4.bin).
 

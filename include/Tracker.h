@@ -1,5 +1,6 @@
 #ifndef Tracker_h
 #define Tracker_h
+#include "ClockTempo.h"
 #include "Voice.h"
 #include "MidiProtocol.h"
 #include "SongFile.h"
@@ -140,6 +141,8 @@ private:
   // arrive in one packet with one timestamp, and the span covers all of them.
   int clocksInStamp;
   int bpmSmooth;
+  // Smoothed external tempo. Duplicates and a sustained burst do not move it.
+  ClockFold clockFold;
   uint8_t mtcNib[8];
   uint8_t mtcGot;
   uint8_t mtcRun;

@@ -1152,6 +1152,50 @@ static void testDenseNotes() {
   expect(wideTicks == 100 && wideOns == 4 && wideParsed.overflow == 0, "a long clock run does not push the notes out");
 }
 
+static void testClockBurstLock() {
+  Tracker deck;
+  nearBpm(deck, 180);
+  transport(deck, MIDI_MSG_START, 0);
+  int head = deck.trackIndex;
+  for (int i = 0; i < 48; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value14 = clockMillis(i, 180);
+    deck.HandleMidi(clk);
+  }
+  expect(deck.Bpm() >= 176 && deck.Bpm() <= 184, "a full-rate 180 clock locks");
+  int mid = deck.trackIndex;
+  expect(mid == head + 8, "48 full-rate clocks are eight steps");
+
+  for (int i = 48; i < 54; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value = 7;
+    clk.value14 = clockMillis(i, 180);
+    deck.HandleMidi(clk);
+  }
+  expect(deck.Bpm() >= 176 && deck.Bpm() <= 184, "duplicate clocks stay on 180");
+  int movedDup = deck.trackIndex - mid;
+  if (movedDup < 0) {
+    movedDup += deck.patternLength;
+  }
+  expect(movedDup == 1, "duplicate clocks do not race the playhead");
+
+  Tracker flood;
+  nearBpm(flood, 180);
+  transport(flood, MIDI_MSG_START, 0);
+  int fhead = flood.trackIndex;
+  for (int i = 0; i < 48 * 7; i++) {
+    MidiEvent clk = {};
+    clk.type = MIDI_MSG_CLOCK;
+    clk.value14 = (uint16_t)((i * 2) & 0x1FFF);
+    flood.HandleMidi(clk);
+  }
+  expect(flood.Bpm() >= 170 && flood.Bpm() <= 190, "a 2 ms burst stays near 180");
+  int moved = flood.trackIndex - fhead;
+  expect(moved >= 4 && moved <= 12, "a 2 ms burst moves with the tempo, not the raw count");
+}
+
 static void testThinnedClockAndSync() {
   Tracker deck;
   nearBpm(deck, 180);
@@ -1317,6 +1361,7 @@ int main() {
   testExternalBpmClamp();
   testTempoSweep();
   testDenseNotes();
+  testClockBurstLock();
   testThinnedClockAndSync();
   testUsbClockAndNotes();
   if (failures) {

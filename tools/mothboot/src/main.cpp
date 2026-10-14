@@ -10,6 +10,7 @@
 #include "MothBootJump.h"
 #include "MothCrc.h"
 #include "SdLimit.h"
+#include "ImageTag.h"
 #include "screen.h"
 #include "sd_ops.h"
 #include "version.h"
@@ -78,6 +79,37 @@ static const esp_partition_t *slotPart(int slot) {
   return esp_partition_find_first(ESP_PARTITION_TYPE_APP, sub, nullptr);
 }
 
+static uint32_t imageStoredBytes(const esp_partition_t *part) {
+  uint8_t hdr[24];
+  if (!part || esp_partition_read(part, 0, hdr, sizeof(hdr)) != ESP_OK || hdr[0] != 0xE9) {
+    return 0;
+  }
+  uint8_t segs = hdr[1];
+  if (segs == 0 || segs > 16) {
+    return part->size;
+  }
+  uint32_t off = 24;
+  for (uint8_t s = 0; s < segs; s++) {
+    uint8_t sh[8];
+    if (off + 8 > part->size || esp_partition_read(part, off, sh, 8) != ESP_OK) {
+      return part->size;
+    }
+    uint32_t len = (uint32_t)sh[4] | ((uint32_t)sh[5] << 8) | ((uint32_t)sh[6] << 16) | ((uint32_t)sh[7] << 24);
+    if (len > part->size - off - 8) {
+      return part->size;
+    }
+    off += 8 + len;
+  }
+  uint32_t padded = (off + 1u + 15u) & ~15u;
+  if (hdr[23] == 1) {
+    padded += 32;
+  }
+  if (padded > part->size) {
+    padded = part->size;
+  }
+  return padded;
+}
+
 static void readImageTag(const esp_partition_t *part, char *dst, int n) {
   if (dst && n > 0) {
     snprintf(dst, n, "empty");
@@ -85,29 +117,26 @@ static void readImageTag(const esp_partition_t *part, char *dst, int n) {
   if (!part || !dst || n < 2) {
     return;
   }
-  uint8_t buf[160];
-  const char *key = "MOTHIMG:";
-  for (uint32_t off = 0; off + sizeof(buf) < part->size && off < 262144u; off += 96) {
-    if (esp_partition_read(part, off, buf, sizeof(buf)) != ESP_OK) {
+  uint32_t limit = imageStoredBytes(part);
+  if (limit < 16) {
+    return;
+  }
+  uint8_t buf[kMothImageWindow];
+  for (uint32_t off = 0; off < limit;) {
+    uint32_t nread = limit - off;
+    if (nread > sizeof(buf)) {
+      nread = sizeof(buf);
+    }
+    if (esp_partition_read(part, off, buf, nread) != ESP_OK) {
       return;
     }
-    for (int i = 0; i + 12 < (int)sizeof(buf); i++) {
-      if (memcmp(buf + i, key, 8) != 0) {
-        continue;
-      }
-      int k = 0;
-      for (int j = i + 8; j < (int)sizeof(buf) && k + 1 < n; j++) {
-        char c = (char)buf[j];
-        if (c <= 32 || c > 126) {
-          break;
-        }
-        dst[k++] = c;
-      }
-      dst[k] = 0;
-      if (k > 0) {
-        return;
-      }
+    if (mothImageVersion(buf, nread, dst, (size_t)n)) {
+      return;
     }
+    if (off + nread >= limit) {
+      break;
+    }
+    off += (uint32_t)kMothImageStep;
   }
 }
 

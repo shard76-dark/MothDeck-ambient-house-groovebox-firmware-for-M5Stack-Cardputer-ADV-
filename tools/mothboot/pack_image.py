@@ -12,7 +12,7 @@ BOOT = BUILD / "bootloader.bin"
 PARTS = BUILD / "partitions.bin"
 FACTORY = BUILD / "firmware.bin"
 DIAG = ROOT / "tools" / "blemidi-diag" / ".pio" / "build" / "mothdiag" / "firmware.bin"
-OUT = ROOT / "releases" / "mothboot-0.1.1-full.bin"
+OUT = ROOT / "releases" / "mothboot-0.1.2-full.bin"
 
 
 def ota_select(seq: int, state: int) -> bytes:
