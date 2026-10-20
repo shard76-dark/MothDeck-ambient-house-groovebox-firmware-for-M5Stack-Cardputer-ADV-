@@ -7,7 +7,9 @@
 #include "LoopFormat.h"
 #include "BleMidi.h"
 #include <Arduino.h>
+#if !MOTHDECK_BOARD_HANDHELD
 #include <M5Unified.h>
+#endif
 #include <atomic>
 #include <esp_heap_caps.h>
 #include <stdio.h>
@@ -40,6 +42,11 @@ static uint32_t statRetry = 0;
 static uint32_t statDrainUs = 0;
 static bool speakerPrimed = false;
 static uint32_t lastQueueUs = 0;
+#if MOTHDECK_BOARD_HANDHELD
+#include "driver/i2s_std.h"
+static i2s_chan_handle_t i2sTx = nullptr;
+static std::atomic<int> i2sGain{160};
+#endif
 
 enum CmdType : uint8_t { CMD_KEY = 1, CMD_MIDI = 2, CMD_STOP_LOOP = 3, CMD_STOP_AUD = 4 };
 
@@ -169,6 +176,65 @@ static void renderBlock(int16_t *dst, int count) {
   publishSnap(peak);
 }
 
+#if MOTHDECK_BOARD_HANDHELD
+static void audioTask(void *arg) {
+  (void)arg;
+  static int16_t stereo[kBlock * 2];
+  for (;;) {
+    int count = renderCount();
+    renderBlock(blocks[0], count);
+    int gain = i2sGain.load(std::memory_order_relaxed);
+    for (int i = 0; i < count; i++) {
+      int s = ((int)blocks[0][i] * gain) >> 8;
+      if (s > 32767) {
+        s = 32767;
+      } else if (s < -32768) {
+        s = -32768;
+      }
+      stereo[i * 2] = (int16_t)s;
+      stereo[i * 2 + 1] = (int16_t)s;
+    }
+    if (!i2sTx) {
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
+    size_t written = 0;
+    esp_err_t err = i2s_channel_write(i2sTx, stereo, (size_t)count * 4, &written, pdMS_TO_TICKS(50));
+    if (err != ESP_OK || written == 0) {
+      __atomic_fetch_add(&statRetry, 1, __ATOMIC_RELAXED);
+    }
+  }
+}
+
+static bool i2sBegin() {
+  i2s_chan_config_t chanCfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+  chanCfg.dma_desc_num = 6;
+  chanCfg.dma_frame_num = 256;
+  chanCfg.auto_clear = true;
+  if (i2s_new_channel(&chanCfg, &i2sTx, nullptr) != ESP_OK) {
+    i2sTx = nullptr;
+    return false;
+  }
+  i2s_std_config_t stdCfg = {};
+  stdCfg.clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG((uint32_t)kSampleRate);
+  stdCfg.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
+  stdCfg.gpio_cfg.mclk = I2S_GPIO_UNUSED;
+  stdCfg.gpio_cfg.bclk = (gpio_num_t)PIN_I2S_BCLK;
+  stdCfg.gpio_cfg.ws = (gpio_num_t)PIN_I2S_WS;
+  stdCfg.gpio_cfg.dout = (gpio_num_t)PIN_I2S_DOUT;
+  stdCfg.gpio_cfg.din = I2S_GPIO_UNUSED;
+  stdCfg.gpio_cfg.invert_flags.mclk_inv = false;
+  stdCfg.gpio_cfg.invert_flags.bclk_inv = false;
+  stdCfg.gpio_cfg.invert_flags.ws_inv = false;
+  if (i2s_channel_init_std_mode(i2sTx, &stdCfg) != ESP_OK) {
+    return false;
+  }
+  if (i2s_channel_enable(i2sTx) != ESP_OK) {
+    return false;
+  }
+  return true;
+}
+#else
 // Same sequence M5Unified uses for board_M5CardputerADV. Without it the
 // codec stays in reset and the speaker task has nothing to clock.
 static void es8311PowerUp() {
@@ -227,6 +293,7 @@ static void audioTask(void *arg) {
     fill = (fill + 1) % 3;
   }
 }
+#endif
 
 static void logAudioHeap(const char *tag) {
   uint32_t freeB = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -252,6 +319,14 @@ void audioStart() {
     logAudioHeap("after audio");
     return;
   }
+#if MOTHDECK_BOARD_HANDHELD
+  speakerOk = i2sBegin();
+  if (!speakerOk) {
+    Serial.println("AUDIO: I2S begin failed");
+  } else {
+    DEV_LOG("AUDIO: PCM5102A I2S");
+  }
+#else
   M5.Speaker.end();
   auto cfg = M5.Speaker.config();
   // Pins and port are what _begin_audio installs for the ADV. Setting them
@@ -281,6 +356,7 @@ void audioStart() {
     DEV_LOG("Speaker: 44100 Hz");
   }
   M5.Speaker.setVolume(160);
+#endif
   BaseType_t created = xTaskCreatePinnedToCore(audioTask, "mothdeck-audio", 8192, nullptr, 5, &audioTaskHandle, 1);
   if (created != pdPASS || !audioTaskHandle) {
     audioTaskHandle = nullptr;
@@ -437,7 +513,11 @@ void audioReadSnap(Snap *out) {
 }
 
 void audioSetSpeakerVolume(uint8_t volume) {
+#if MOTHDECK_BOARD_HANDHELD
+  i2sGain.store((int)volume, std::memory_order_relaxed);
+#else
   M5.Speaker.setVolume(volume);
+#endif
 }
 
 void audioCopyDiag(AudioDiag *out) {

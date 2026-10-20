@@ -3,7 +3,9 @@
 
 #if defined(ARDUINO)
 #include <Arduino.h>
-#if !ARDUINO_USB_MODE
+// Native USB MIDI exists on the ESP32-S3 Cardputer. The classic ESP32
+// DevKit's USB port is a UART bridge, so this file stays a stub there.
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && !ARDUINO_USB_MODE
 #include "USB.h"
 #include "USBMIDI.h"
 

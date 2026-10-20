@@ -1,0 +1,10 @@
+** Drc report for /workspace/hardware/mothdeck-handheld/mothdeck-handheld.kicad_pcb **
+** Created on 2026-10-20 07:06:01 **
+
+** Found 0 DRC violations **
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** End of Report **

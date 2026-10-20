@@ -1,0 +1,14 @@
+(footprint "J6" (version 20221018) (generator mothdeck)
+    (layer "F.Cu")
+    (at 0 0)
+    (fp_text reference "J6" (at 0 -1.6) (layer "F.SilkS") hide
+        (effects (font (size 0.7 0.7) (thickness 0.12)))
+    )
+    (fp_text value "7SEG" (at 0 0) (layer "F.SilkS") hide
+        (effects (font (size 1.27 1.27) (thickness 0.15)))
+    )
+    (pad "1" thru_hole circle (at 0 0) (size 1.7 1.7) (drill 1) (layers "*.Cu" "*.Mask"))
+    (pad "2" thru_hole circle (at 0 2.54) (size 1.7 1.7) (drill 1) (layers "*.Cu" "*.Mask"))
+    (pad "3" thru_hole circle (at 0 5.08) (size 1.7 1.7) (drill 1) (layers "*.Cu" "*.Mask"))
+    (pad "4" thru_hole circle (at 0 7.62) (size 1.7 1.7) (drill 1) (layers "*.Cu" "*.Mask"))
+  )
