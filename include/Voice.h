@@ -61,9 +61,15 @@ public:
 private:
   // Full-rate delay line. 8192 samples is about 186 ms at 44100 Hz.
   // The previous line stepped two samples per write, which aliased every
-  // delay, chorus, and reverb tap.
+  // delay, chorus, and reverb tap. The classic ESP32 handheld keeps a
+  // 4096-sample line (about 93 ms) so four voices still fit beside BLE.
+#if MOTHDECK_BOARD_HANDHELD
+  // 2048 samples is about 46 ms. 4096 still left too little DRAM for BLE.
+  static const int kHistoryLen = 2048;
+#else
   static const int kHistoryLen = 8192;
-  static const int kHistoryMask = 8191;
+#endif
+  static const int kHistoryMask = kHistoryLen - 1;
   static_assert((kHistoryLen & (kHistoryLen - 1)) == 0, "history length is a power of two");
 
   int16_t sampleHistory[kHistoryLen];

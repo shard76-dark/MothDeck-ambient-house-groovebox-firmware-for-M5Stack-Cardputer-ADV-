@@ -1,0 +1,6 @@
+# 4MB factory image for the ESP32-WROOM-32 DevKit handheld.
+# There is no MothBoot slot on this board. The app is the factory image.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+factory,  app,  factory, 0x10000, 0x3F0000,

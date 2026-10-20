@@ -11,3 +11,8 @@ agent-tools/
 sdkconfig.*
 .cache/
 build/
+*-backups/
+fp-info-cache
+*.kicad_prl
+~*.lck
+hardware/mothdeck-handheld/fab/

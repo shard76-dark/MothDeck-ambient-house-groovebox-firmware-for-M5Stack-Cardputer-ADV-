@@ -7,6 +7,8 @@ struct Snap {
   uint32_t seq;
   uint8_t playing;
   uint8_t armed;
+  // Record arm. The handheld LEDs read this. The Cardputer page does not.
+  uint8_t rec;
   uint8_t track;
   uint8_t pattern;
   uint8_t songMode;

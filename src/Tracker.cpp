@@ -2403,6 +2403,7 @@ void Tracker::FillSnap(Snap *snap) const {
   }
   snap->playing = isPlaying ? 1 : 0;
   snap->armed = pressedOnce ? 1 : 0;
+  snap->rec = recOn ? 1 : 0;
   snap->track = (uint8_t)selectedTrack;
   snap->pattern = (uint8_t)currentPattern;
   snap->songMode = allPatternPlay ? 1 : 0;

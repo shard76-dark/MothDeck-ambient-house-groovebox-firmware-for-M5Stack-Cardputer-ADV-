@@ -1,0 +1,11 @@
+(footprint "H2" (version 20221018) (generator mothdeck)
+    (layer "F.Cu")
+    (at 0 0)
+    (fp_text reference "H2" (at 0 -1.6) (layer "F.SilkS") hide
+        (effects (font (size 0.7 0.7) (thickness 0.12)))
+    )
+    (fp_text value "M2" (at 0 0) (layer "F.SilkS") hide
+        (effects (font (size 1.27 1.27) (thickness 0.15)))
+    )
+    (pad "" np_thru_hole circle (at 0 0) (size 2.2 2.2) (drill 2.2) (layers "F&B.Cu" "*.Mask"))
+  )

@@ -18,6 +18,8 @@ jobs:
         run: bash tools/run_tests.sh
       - name: Firmware
         run: pio run -e cardputer-adv
+      - name: Handheld firmware
+        run: pio run -e esp32devkit_handheld
       - name: MothDiag host checks
         run: bash tools/blemidi-diag/test_host.sh
       - name: MothDiag firmware

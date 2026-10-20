@@ -106,6 +106,97 @@ The pre-release is [ttgo-t8-v1.2.4](https://github.com/shard76-dark/MothDeck-amb
 
 These TTGO images have not been flashed, and the keys have not been pressed on hardware.
 
+## ESP32 DevKit handheld
+
+A second target on this branch is a small handheld on a classic ESP32-WROOM-32 board, the 30-pin DOIT ESP32 DevKit V1 (ESP32-D0WD). Build it with `pio run -e esp32devkit_handheld`. The Cardputer envs are unchanged. The LilyGO T8 port stays on `ttgo-t8`; this carrier reuses that port's PCM5102A audio path and its 4×4 menu, and it does not merge the 1.2.4 tree.
+
+The DevKit's own AMS1117 cannot run from one Li-ion cell (dropout is about 1.1 V). The carrier feeds 3.3 V into the DevKit 3V3 pin from an AP2112K-3.3 and leaves VIN open. Turn the slide switch off while flashing so the AP2112 and the DevKit regulator are not both on the 3.3 V rail.
+
+### Pin table
+
+Silkscreen on clone DevKits varies. Match the labels on the board you have. GPIO0, GPIO2, GPIO12, and GPIO15 are left open (strapping). GPIO6–11 are the flash bus and are not on the header. GPIO1 and GPIO3 stay on the USB UART. GPIO34, GPIO35, GPIO36, and GPIO39 are input-only, so the column pull-ups are on the carrier.
+
+| Function | GPIO | Notes |
+| --- | --- | --- |
+| I2C SDA | 21 | SSD1306 0x3C and HT16K33 0x70, 4.7 kΩ to 3.3 V |
+| I2C SCL | 22 | same bus |
+| I2S BCLK | 26 | PCM5102A BCK |
+| I2S WS | 25 | PCM5102A LCK |
+| I2S DOUT | 27 | PCM5102A DIN |
+| PCM5102A SCK | GND | PLL mode, not a GPIO |
+| Keypad R1–R4 | 16, 17, 18, 19 | outputs, membrane order |
+| Keypad C1–C4 | 34, 35, 36, 39 | inputs, 10 kΩ to 3.3 V |
+| LED step | 4 | GPIO → 470 Ω → LED → GND |
+| LED beat | 5 | same, active high |
+| LED play | 13 | same |
+| LED record | 14 | same. GPIO14 can twitch during boot |
+| Battery sense | 33 | ADC1, 100 kΩ / 100 kΩ from the cell, 100 nF to GND |
+
+### Keypad
+
+Mount the membrane on the left of the case, rotated 90° clockwise, so the ribbon that sat at the bottom of an upright legend now leaves to the left. Straight wiring, membrane order R1 R2 R3 R4 C1 C2 C3 C4. The printed legend is sideways after the turn:
+
+```
+*  7  4  1
+0  8  5  2
+#  9  6  3
+D  C  B  A
+```
+
+The firmware numbers keys in reading order on the upright device. Key 0 is the top-left key. `handheldPadKey(membraneRow, membraneCol) = membraneCol * 4 + (3 - membraneRow)`. The menu is the MothSynth 4×4 layout used on the T8: F1–F4 on the top row latch, then the next key runs that function. The note rows underneath are C at the bottom left. Holding F1 for about half a second arms BPM nudge (C −1, C# +1, D −5, D# +5).
+
+### Power
+
+Cell: a 603450 1200 mAh LiPo with a JST-PH 2.0 plug (about 6 × 34 × 50 mm). It fits the left bay under the keypad. An 18650 is cheaper per mAh and too thick for this case.
+
+Charger: a TP4056 USB-C module that already includes the DW01 protection cell. The slide switch (SS-12D00 or similar) sits between the charger OUT+ and the AP2112 input. The AP2112K-3.3 (SOT-23-5, 600 mA) makes 3.3 V. EN is tied to VIN. 10 µF on the input, 10 µF on the output, 22 nF on BP.
+
+Playing with BLE is budgeted at about 170 mA. Usable capacity is about 1200 × 0.85 mAh, so runtime is about six hours. Without the radio, about 110 mA and about nine hours.
+
+### What is on the carrier
+
+The board is 66 × 78 mm, two layers. Headers for the DevKit, the PCM5102A (jack toward the right edge), the SSD1306, the HT16K33 backpack, the keypad ribbon, and the TP4056. The four LEDs and the battery sense divider are on the board. Ground is a tracked mesh. KiCad 7's zone filler crashes in the environment this board was generated in, so there is no copper pour. Power tracks are 0.25 mm because a 0.5 mm track cannot pass between the 1.7 mm header pads.
+
+The case is 154 × 96 × 22 mm. The membrane is on the left, the carrier on the right, the headphone socket on the right wall, USB-C and the DevKit USB socket on the bottom wall, and the 603450 in a tray under the keypad. Source is `hardware/mothdeck-handheld/case/mothdeck-handheld-case.scad`.
+
+### BOM, approximate AUD
+
+| Qty | Part | AUD |
+| --- | --- | --- |
+| 1 | ESP32 DevKit V1 30-pin | 9 |
+| 1 | PCM5102A purple DAC board | 6 |
+| 1 | SSD1306 128×64 I2C OLED | 6 |
+| 1 | HT16K33 4-digit backpack | 8 |
+| 1 | 4×4 membrane keypad | 3 |
+| 1 | TP4056 USB-C module with protection | 3 |
+| 1 | 603450 1200 mAh LiPo, JST-PH | 12 |
+| 1 | AP2112K-3.3 | 0.50 |
+| 1 | SS-12D00 slide switch | 0.80 |
+| 4 | 3 mm LEDs | 0.40 |
+| 1 | passives, headers, JST | 5 |
+| 1 | PCB, five from JLCPCB, this board's share | 2 |
+| 1 | PETG for the case | 2 |
+
+About 58 AUD before shipping. Prices move; treat them as a shopping list, not a quote.
+
+### Assembly
+
+1. Confirm the DevKit silkscreen against the pin table before soldering the headers.
+2. Solder the AP2112, the passives, and the LED resistors first. The LED anode is the resistor side, not the GPIO.
+3. Add the headers. The PCM5102A SCK pin on the module is the one tied to ground on the carrier.
+4. Flash with the slide switch off and USB plugged into the DevKit, not the charger.
+5. Switch on from the battery only after 3.3 V measures about 3.3 V at the DevKit 3V3 pin.
+6. The OLED and the 7-segment are wired to their headers and sit in the lid. While a pattern is running the 7-segment shows bar and beat. Stopped, it shows BPM.
+
+### Trade-offs
+
+- Both the 7-segment and the four LEDs fit.
+- No microSD. Kits and loops that need the card are absent. The built-in drums and synths play.
+- No USB MIDI. The DevKit USB port is a UART bridge. BLE MIDI is the transport. The image links with about 40 KB of DRAM left, and the BLE start check asks for a 36 KB contiguous block, so the radio can still refuse until a reboot frees enough. That is untested on hardware.
+- The delay history is 2048 samples, about 46 ms, instead of the Cardputer's 8192.
+- GPIO5 and GPIO14 can glitch high for a moment at boot. The beat and record LEDs may flash then.
+- Ground is tracked, not poured, and the power tracks are 0.25 mm.
+
 ## Features
 
 - Ambient house drums on the M5Stack Cardputer ADV: twelve distinct hits at the recorded pitch (kick, rim, snare, clap, hats, toms, shaker, ride, snap, crash)
